@@ -172,14 +172,91 @@ enum Stmt {
 
 ---
 
+## Project Structure
+
+```
+nqcc2/           # OCaml reference implementation (Nora Sandler's)
+  lib/
+    lex.ml         # Lexer
+    tokens.ml      # Token types
+    parse.ml      # Parser
+    ast.ml         # AST definitions
+    tacky*.ml      # Tacky IR (intermediate representation)
+    semantic_analysis/
+      resolve.ml     # Identifier resolution
+      typecheck.ml  # Type checking
+      label_loops.ml # Loop/break/continue annotation
+    backend/
+      codegen.ml    # x86-64 code generation
+      regalloc.ml   # Register allocation
+    optimizations/  # Optimization passes
+    assembly.ml     # Assembly AST
+    emit.ml        # Assembly emission
+  bin/
+    main.ml        # Entry point
+  test/            # Unit tests
+
+tests/           # Official test suite (nlsandler/writing-a-c-compiler-tests)
+  test_compiler   # Python test runner
+  tests/chapter_X/# Test cases by chapter
+```
+
+## Compilation Pipeline (from nqcc2)
+
+```rustcc
+Source (.c)
+    │
+    ▼
+1. Lexer (lex.ml)
+    │ Token stream
+    ▼
+2. Parser (parse.ml) → AST (ast.ml)
+    │ Untyped AST
+    ▼
+3. Semantic Analysis
+    ├─ Resolve (resolve.ml)       → Resolved AST
+    ├─ Label Loops (label_loops)  → Annotated AST  
+    └─ Typecheck (typecheck.ml)   → Typed AST
+    │
+    ▼
+4. Tacky Gen (tacky_gen.ml) → TACKY IR
+    │
+    ▼
+5. Optimizations (optimizations/)
+    ├─ Constant Folding
+    ├─ Copy Propagation
+    ├─ Dead Store Elimination
+    └─ Unreachable Code Elimination
+    │
+    ▼
+6. Backend (backend/)
+    ├─ Codegen (codegen.ml)        → Assembly AST
+    ├─ Address Taken Analysis
+    ├─ Register Allocation
+    ├─ Replace Pseudos
+    └─ Instruction Fixup
+    │
+    ▼
+7. Emit (emit.ml) → Assembly (.s)
+```
+
+## Our Rust Implementation
+
+We'll mirror the OCaml structure:
+
+| OCaml Module | Rust Module | Purpose |
+|---|---|---|
+| `lex.ml` | `lexer.rs` | Tokenize input |
+| `tokens.ml` | `tokens.rs` | Token type definitions |
+| `parse.ml` | `parser.rs` | Build AST |
+| `ast.ml` | `ast.rs` | AST node types |
+| `semantic_analysis/` | `semantic.rs` | Type checking, resolution |
+| `tacky*.ml` | (embedded) | IR (we may skip or simplify) |
+| `backend/` | `codegen.rs` | x86-64 code generation |
+| `emit.ml` | `emission.rs` | Write assembly output |
+
 ## References
 
-- Nora Sandler's original blog series: https://norasandler.com/2017/11/29/Write-a-Compiler.html
-- The book implements a subset of C11, starting with:
-  - `int` only (no floats, no chars initially)
-  - No structs, unions, arrays
-  - Basic control flow: `if/else`, `while`
-  - Functions (no recursion initially)
-  - Gradually adds more features
-
-We'll follow the same progression.
+- [Nora Sandler's Blog](https://norasandler.com/2017/11/29/Write-a-Compiler.html): Original blog series
+- [nqcc2](https://github.com/nlsandler/nqcc2): OCaml reference implementation (in `nqcc2/` folder)
+- [Writing a C Compiler Tests](https://github.com/nlsandler/writing-a-c-compiler-tests): Official test suite (in `tests/` folder)
