@@ -49,3 +49,4 @@ Then run tests (requires Python 3.8+ and `gcc` on PATH):
 
 - [Nora Sandler's Blog](https://norasandler.com/2017/11/29/Write-a-Compiler.html): A blog post that explains parts of the compiler in detail.
 - [Writing a C Compiler](https://github.com/nlsandler/nqcc2): A repository containing the code for the blog post in OCaml.
+- [rlox](https://github.com/Meillaya/rlox): A complete implementation of the lox programming language interpreter in Rust.
