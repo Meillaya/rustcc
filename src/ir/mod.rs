@@ -1,9 +1,13 @@
-//! Intermediate-representation skeleton.
+//! Early native intermediate representation.
+//!
+//! The current native path lowers the parsed/validated AST into a small linear
+//! control-flow envelope and evaluates it to a constant return value.  Later
+//! chapters can replace this with full TACKY while preserving the facade entry
+//! point used today.
 
-#![allow(dead_code)]
+pub(crate) mod control_flow;
+pub(crate) mod lower;
+pub(crate) mod opt;
+pub(crate) mod tacky;
 
-pub mod control_flow;
-pub mod lower;
-pub mod opt;
-pub mod tacky;
-pub mod temp;
+pub(crate) use control_flow::evaluate_program;

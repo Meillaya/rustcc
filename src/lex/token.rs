@@ -1,26 +1,88 @@
-//! Token definitions reserved for the growing C subset.
+//! Token records shared by the lexer and parser.
+//!
+//! Rust note: `TokenKind` is an enum because the lexer produces one value from
+//! a closed grammar vocabulary.  Keeping spelling-specific payloads on variants
+//! like `Identifier(String)` lets later phases pattern-match without reparsing
+//! token text, while `Token.lexeme` preserves the original source spelling for
+//! diagnostics and `--stage lex` output.
 
-#![allow(dead_code)]
-
-use crate::lex::keyword::Keyword;
-
-/// Placeholder token kind surface.
-#[derive(Debug, Clone, PartialEq)]
-pub enum TokenKind {
-    Keyword(Keyword),
-    Identifier,
-    IntegerLiteral,
-    FloatLiteral,
-    CharLiteral,
-    StringLiteral,
-    Punctuation,
-    Operator,
-    EndOfFile,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum TokenKind {
+    Int,
+    Void,
+    Return,
+    If,
+    Else,
+    Goto,
+    Long,
+    Unsigned,
+    Signed,
+    Char,
+    Double,
+    Struct,
+    Union,
+    While,
+    Do,
+    For,
+    Break,
+    Continue,
+    Switch,
+    Case,
+    Default,
+    Identifier(String),
+    Constant(i32),
+    CharLiteral(i32),
+    StringLiteral(String),
+    Minus,
+    Tilde,
+    Bang,
+    Plus,
+    Star,
+    Slash,
+    Percent,
+    ShiftLeft,
+    ShiftRight,
+    Arrow,
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+    Equal,
+    EqualEqual,
+    NotEqual,
+    Ampersand,
+    Caret,
+    Pipe,
+    LogicalAnd,
+    LogicalOr,
+    PlusEqual,
+    MinusEqual,
+    StarEqual,
+    SlashEqual,
+    PercentEqual,
+    AmpersandEqual,
+    CaretEqual,
+    PipeEqual,
+    ShiftLeftEqual,
+    ShiftRightEqual,
+    PlusPlus,
+    MinusMinus,
+    OpenParen,
+    CloseParen,
+    OpenBrace,
+    CloseBrace,
+    OpenBracket,
+    CloseBracket,
+    Dot,
+    Question,
+    Colon,
+    Comma,
+    Semicolon,
+    Eof,
 }
 
-/// Placeholder token record.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Token {
-    pub kind: TokenKind,
-    pub lexeme: String,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Token {
+    pub(crate) kind: TokenKind,
+    pub(crate) lexeme: String,
 }

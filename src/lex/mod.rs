@@ -1,12 +1,14 @@
-//! Lexical-analysis skeleton.
+//! Lexical-analysis phase.
 //!
-//! Keep real token-scanning logic out of this file until the corresponding
-//! chapter work begins. This module tree exists to reserve stable names and
-//! boundaries for the book's frontend work.
+//! This module exposes only the crate-internal lexer contract used by the
+//! compiler facade: source text in, tokens plus readable `--stage lex` output
+//! out.  Submodules separate token shapes, reserved words, and scanning helpers
+//! so later chapters can extend one concern without reopening the facade.
 
-#![allow(dead_code)]
+pub(crate) mod cursor;
+pub(crate) mod keyword;
+pub(crate) mod scanner;
+pub(crate) mod token;
 
-pub mod cursor;
-pub mod keyword;
-pub mod scanner;
-pub mod token;
+pub(crate) use scanner::{lex, pretty_tokens};
+pub(crate) use token::{Token, TokenKind};

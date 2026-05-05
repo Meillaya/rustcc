@@ -1,16 +1,11 @@
-//! Register-allocation placeholders for the final backend chapters.
+//! Register-allocation ownership surface for the final backend chapters.
+//!
+//! The current implementation still relies on the system C bridge for Chapter
+//! 20 register-allocation behavior.  This module intentionally reserves the
+//! native allocator boundary without pretending to perform allocation yet.
 
 #![allow(dead_code)]
-
-use anyhow::{bail, Result};
 
 /// Future register-allocation façade.
 #[derive(Debug, Default)]
 pub struct RegisterAllocator;
-
-impl RegisterAllocator {
-    /// Allocate physical registers or spills for backend temporaries.
-    pub fn allocate(&self) -> Result<()> {
-        bail!("TODO: implement register allocation")
-    }
-}
