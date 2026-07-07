@@ -1,0 +1,13 @@
+=== QA Scenario 2: Chapter 1 official test gate ===
+--- Step 1: cargo build --release ---
+    Finished `release` profile [optimized] target(s) in 0.01s
+
+--- Step 2: ./tests/test_compiler (with --chapter 1 --latest-only --expected-error-codes 1 2) ---
+........................
+----------------------------------------------------------------------
+Ran 24 tests in 0.274s
+
+OK
+
+test_compiler exit code: 0
+PASS: every test passing

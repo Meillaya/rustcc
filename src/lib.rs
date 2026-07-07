@@ -1,9 +1,11 @@
-//! rustcc library crate.
+//! rustcc library crate (intentionally minimal).
 //!
-//! Exposes the public backend surface so other binaries in `src/bin/`
-//! (smoke tests, alternative front-ends) can `use rustcc::codegen::*`.
-//! The main binary in `src/main.rs` keeps its own internal `mod`
-//! declarations — this library is a parallel compile unit, not the
-//! primary crate root.
-
-pub mod codegen;
+//! The backend types (`AsmProgram`, `Reg`, `Operand`, `Instr`, ...) live
+//! in `src/codegen/assembly.rs` and are reachable via the binary's
+//! internal `mod codegen;` declaration in `src/main.rs`. The codegen
+//! pass that consumes `TackyProgram` lives there too, because
+//! `TackyProgram` is a binary-internal type, not a library-public one.
+//!
+//! Alternative front-ends that want to use the assembly AST and emitter
+//! can depend on `rustcc` and `use rustcc::assembly::*` etc.; the codegen
+//! driver remains an internal pipeline concern.

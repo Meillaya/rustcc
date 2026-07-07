@@ -1,0 +1,69 @@
+W2-T3 chapter-1 native codegen + assembly emission — end-to-end verification
+================================================================================
+
+Phase 1: build hygiene
+----------------------
+$ cargo clean
+$ cargo build --release
+
+warning/error count: see grep below
+0
+
+Phase 2: cargo test --release
+-----------------------------
+$ cargo test --release
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 9 tests
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test driver::tests::derives_all_output_paths ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test driver::tests::parses_default_run_stage ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+Phase 3: QA Scenario 1 — chapter 1 end-to-end compile+run
+--------------------------------------------------------
+$ echo 'int main(void) { return 2; }' > /tmp/ch1.c
+$ target/release/rustcc /tmp/ch1.c   # produces /tmp/ch1
+$ /tmp/ch1
+  runtime exit code: 2
+
+Phase 4: QA Scenario 3 — --codegen outputs valid assembly
+--------------------------------------------------------
+$ target/release/rustcc --codegen /tmp/ch1.c
+.globl main
+main:
+    movl $2, %eax
+    ret
+
+
+Phase 5: QA Scenario 2 — chapter 1 official test gate
+-----------------------------------------------------
+$ ./tests/test_compiler ./target/release/rustcc --chapter 1 --latest-only --expected-error-codes 1 2 -v
+........................
+----------------------------------------------------------------------
+Ran 24 tests in 0.269s
+
+OK
+----------------------------------------------------------------------
+Ran 24 tests in 0.272s
+
+OK
+
+TASK COMPLETE

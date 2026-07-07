@@ -552,7 +552,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-8-lexer-port.txt
   ```
 
-- [ ] 9. W2-T1: Chapter 1 - AST node + parser + single-function Program
+- [x] 9. W2-T1: Chapter 1 - AST node + parser + single-function Program
 
   **What to do**:
   - In `src/ast/`, define the AST node set for chapter 1: `pub enum Expr { Constant(i64) }`, `pub enum Stmt { Return(Expr) }`, `pub struct Function { pub name: String, pub body: Vec<Stmt> }`, `pub struct Program { pub function: Function }`. Mirror `nqcc2/lib/ast.ml` (chapter 1's subset of variants). Place each enum/struct in its own file: `src/ast/{expr,stmt,item,decl,operator,ty}.rs`. The existing `src/ast/` skeleton mostly fits; extend the enums.
@@ -599,7 +599,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-9-ch1-parser.txt
   ```
 
-- [ ] 10. W2-T2: Chapter 1 - TACKY IR (full enum surface as defined in W0-T6) + AST->TACKY for ch.1
+- [x] 10. W2-T2: Chapter 1 - TACKY IR (full enum surface as defined in W0-T6) + AST->TACKY for ch.1
 
   **What to do**:
   - Confirm TACKY enums from W0-T6 are sufficient for chapter 1: `TackyProgram { functions: Vec<TackyFunction> }`, `TackyFunction { name: String, body: Vec<Instruction> }`, `Instruction::Return(Val::Constant(2))`. No new TACKY variants needed for chapter 1.
@@ -634,7 +634,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-10-ch1-tacky.txt
   ```
 
-- [ ] 11. W2-T3: Chapter 1 - assembly emission (`generate` + `fixup_noop` + `replace_pseudos_noop` + `emit`) for ch.1
+- [x] 11. W2-T3: Chapter 1 - assembly emission (`generate` + `fixup_noop` + `replace_pseudos_noop` + `emit`) for ch.1
 
   **What to do**:
   - Implement `src/codegen/codegen.rs::generate(...)` for chapter 1: takes `&TackyProgram` and produces an `AsmProgram` with one `TopLevel::Fn { name: "main", global: true, instructions: [Mov { src: Operand::Imm(2), dst: Operand::Reg(Reg::AX) }, Ret] }`.

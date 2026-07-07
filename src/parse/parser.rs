@@ -7,9 +7,11 @@
 //! propagated with `?` so phase-specific parse failures retain the same driver
 //! behavior as before extraction.
 
+// Mirrors nqcc2/lib/parse.ml chapter 1 grammar (~lines 1-80). Recursive-descent, Result-returning.
+
 use anyhow::{Result, bail};
 
-use crate::ast::{AssignOp, BinaryOp, BlockItem, Expr, ForInit, Program, Statement};
+use crate::ast::{AssignOp, BinaryOp, BlockItem, Expr, ForInit, Function, Program, Statement};
 use crate::lex::{Token, TokenKind};
 
 pub(crate) fn parse_program(tokens: Vec<Token>) -> Result<Program> {
@@ -33,18 +35,22 @@ impl Parser {
         self.expect_exact(&TokenKind::Void, "parameter list 'void'")?;
         self.expect_exact(&TokenKind::CloseParen, "')'")?;
         self.expect_exact(&TokenKind::OpenBrace, "'{'")?;
-        let mut body = Vec::new();
+        let mut body: Vec<Statement> = Vec::new();
         while !self.check(&TokenKind::CloseBrace) {
             if self.check(&TokenKind::Eof) {
                 bail!("parse error: expected '}}'");
             }
-            body.push(self.parse_block_item()?);
+            if let BlockItem::Statement(stmt) = self.parse_block_item()? {
+                body.push(stmt);
+            }
         }
         self.expect_exact(&TokenKind::CloseBrace, "'}'")?;
         self.expect_exact(&TokenKind::Eof, "end of file")?;
         Ok(Program {
-            function_name,
-            body,
+            function: Function {
+                name: function_name,
+                body,
+            },
         })
     }
 

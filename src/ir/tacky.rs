@@ -178,11 +178,14 @@ pub struct TackyProgram {
 
 /// Lower the typed AST into a TACKY program.
 ///
-/// Mirrors `nqcc2/lib/tacky_gen.ml` (593 LOC).  The real implementation walks
-/// each top-level declaration, allocates temporaries via `TempIdGenerator`,
-/// and emits a flat `Vec<Instruction>` per function.  This stub keeps the
-/// pipeline wired to chapter 1's `int main(void) { return N; }` shape; the
-/// general lowering lands in W2-T2.
-pub fn ast_to_tacky(_ast: &TypedProgram) -> Result<TackyProgram> {
-    unimplemented!()
+/// Thin wrapper over [`crate::ir::lower::lower_program`] so
+/// `src/ir/tacky.rs` remains the public entry point of the TACKY IR
+/// surface (per the W0-T6 plan).  The real lowering walks each top-level
+/// declaration, allocates temporaries via `TempIdGenerator`, and emits a
+/// flat `Vec<Instruction>` per function.  This delegation keeps the
+/// `&TypedProgram` parameter consistent with the rest of the pipeline
+/// (`&semantics::typecheck::TypedProgram`) while the lowering itself
+/// consumes the inner AST shape via `ast.program`.
+pub fn ast_to_tacky(ast: &TypedProgram) -> Result<TackyProgram> {
+    crate::ir::lower::lower_program(&ast.program)
 }

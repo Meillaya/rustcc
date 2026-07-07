@@ -111,10 +111,10 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompilerArtifact
         });
     }
 
-    let assembly_text = convert_tacky_to_asm(&optimized_tacky, &typed_program)?;
-    let assembly_text = fixup_asm(assembly_text)?;
-    let assembly_text = replace_pseudos(assembly_text)?;
-    let assembly_text = emit(assembly_text)?;
+    let asm_program = convert_tacky_to_asm(&optimized_tacky, &typed_program)?;
+    let asm_program = fixup_asm(asm_program)?;
+    let asm_program = replace_pseudos(asm_program)?;
+    let assembly_text = emit(&asm_program)?;
     if options.stage == Stage::Codegen {
         return Ok(CompilerArtifacts {
             tokens_pretty: Some(tokens_pretty),

@@ -1,0 +1,14 @@
+TackyProgram {
+    functions: [
+        TackyFunction {
+            name: "main",
+            body: [
+                Return(
+                    Constant(
+                        2,
+                    ),
+                ),
+            ],
+        },
+    ],
+}

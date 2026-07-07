@@ -8,20 +8,24 @@
       "plan_name": "c-compiler-rust",
       "status": "active",
       "started_at": "2026-07-07T19:15:31.671Z",
-      "updated_at": "2026-07-07T20:04:34.633Z",
+      "updated_at": "2026-07-07T20:21:15.424Z",
       "session_ids": [
         "opencode:ses_0c241b468ffeuCkDS36rF8DZEG",
         "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2",
         "opencode:ses_0c1eae4a0ffeZB0ZIlWOZu4OKb",
         "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ",
-        "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ"
+        "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ",
+        "opencode:ses_0c1cc6b55ffee42n5g5Jw2hHhT",
+        "opencode:ses_0c1c99a89ffeV8uZrL0cV4uwu0"
       ],
       "session_origins": {
         "opencode:ses_0c241b468ffeuCkDS36rF8DZEG": "direct",
         "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2": "appended",
         "opencode:ses_0c1eae4a0ffeZB0ZIlWOZu4OKb": "appended",
         "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ": "appended",
-        "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ": "appended"
+        "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ": "appended",
+        "opencode:ses_0c1cc6b55ffee42n5g5Jw2hHhT": "appended",
+        "opencode:ses_0c1c99a89ffeV8uZrL0cV4uwu0": "appended"
       },
       "agent": "atlas",
       "task_sessions": {
@@ -95,7 +99,31 @@
           "session_id": "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ",
           "agent": "Sisyphus-Junior",
           "category": "unspecified-high",
-          "updated_at": "2026-07-07T20:04:34.633Z"
+          "updated_at": "2026-07-07T20:04:56.436Z",
+          "ended_at": "2026-07-07T20:04:56.436Z",
+          "status": "completed"
+        },
+        "todo:9": {
+          "task_key": "todo:9",
+          "task_label": "9",
+          "task_title": "W2-T1: Chapter 1 - AST node + parser + single-function Program",
+          "session_id": "opencode:ses_0c1cc6b55ffee42n5g5Jw2hHhT",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "started_at": "2026-07-07T20:09:35.261Z",
+          "ended_at": "2026-07-07T20:09:55.802Z",
+          "elapsed_ms": 20541,
+          "status": "completed",
+          "updated_at": "2026-07-07T20:12:39.327Z"
+        },
+        "todo:10": {
+          "task_key": "todo:10",
+          "task_label": "10",
+          "task_title": "W2-T2: Chapter 1 - TACKY IR (full enum surface as defined in W0-T6) + AST->TACKY for ch.1",
+          "session_id": "opencode:ses_0c1c99a89ffeV8uZrL0cV4uwu0",
+          "agent": "Sisyphus-Junior",
+          "category": "deep",
+          "updated_at": "2026-07-07T20:21:15.424Z"
         }
       }
     }
@@ -103,20 +131,24 @@
   "active_plan": "/home/mei/projects/rustcc/.omo/plans/c-compiler-rust.md",
   "started_at": "2026-07-07T19:15:31.671Z",
   "status": "active",
-  "updated_at": "2026-07-07T20:04:34.633Z",
+  "updated_at": "2026-07-07T20:21:15.424Z",
   "session_ids": [
     "opencode:ses_0c241b468ffeuCkDS36rF8DZEG",
     "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2",
     "opencode:ses_0c1eae4a0ffeZB0ZIlWOZu4OKb",
     "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ",
-    "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ"
+    "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ",
+    "opencode:ses_0c1cc6b55ffee42n5g5Jw2hHhT",
+    "opencode:ses_0c1c99a89ffeV8uZrL0cV4uwu0"
   ],
   "session_origins": {
     "opencode:ses_0c241b468ffeuCkDS36rF8DZEG": "direct",
     "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2": "appended",
     "opencode:ses_0c1eae4a0ffeZB0ZIlWOZu4OKb": "appended",
     "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ": "appended",
-    "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ": "appended"
+    "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ": "appended",
+    "opencode:ses_0c1cc6b55ffee42n5g5Jw2hHhT": "appended",
+    "opencode:ses_0c1c99a89ffeV8uZrL0cV4uwu0": "appended"
   },
   "plan_name": "c-compiler-rust",
   "task_sessions": {
@@ -190,7 +222,31 @@
       "session_id": "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ",
       "agent": "Sisyphus-Junior",
       "category": "unspecified-high",
-      "updated_at": "2026-07-07T20:04:34.633Z"
+      "updated_at": "2026-07-07T20:04:56.436Z",
+      "ended_at": "2026-07-07T20:04:56.436Z",
+      "status": "completed"
+    },
+    "todo:9": {
+      "task_key": "todo:9",
+      "task_label": "9",
+      "task_title": "W2-T1: Chapter 1 - AST node + parser + single-function Program",
+      "session_id": "opencode:ses_0c1cc6b55ffee42n5g5Jw2hHhT",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "started_at": "2026-07-07T20:09:35.261Z",
+      "ended_at": "2026-07-07T20:09:55.802Z",
+      "elapsed_ms": 20541,
+      "status": "completed",
+      "updated_at": "2026-07-07T20:12:39.327Z"
+    },
+    "todo:10": {
+      "task_key": "todo:10",
+      "task_label": "10",
+      "task_title": "W2-T2: Chapter 1 - TACKY IR (full enum surface as defined in W0-T6) + AST->TACKY for ch.1",
+      "session_id": "opencode:ses_0c1c99a89ffeV8uZrL0cV4uwu0",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-07-07T20:21:15.424Z"
     }
   },
   "agent": "atlas"

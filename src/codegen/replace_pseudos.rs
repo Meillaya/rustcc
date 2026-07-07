@@ -6,7 +6,7 @@
 // relative to `%rbp`. The pass depends on the per-function frame layouts
 // produced by `codegen`. The real implementation lands in wave 21
 // (chapter 20).
-#![allow(dead_code)]
+// ch.1 has no pseudoregisters; real replace_pseudos lands in W21 (ch.20).
 
 use anyhow::Result;
 
@@ -15,6 +15,11 @@ use crate::codegen::frame::Frame;
 
 /// Replace every `Pseudo` operand with either a physical register or a
 /// frame-relative stack slot.
-pub fn replace_pseudos(_asm: AsmProgram, _frames: &[Frame]) -> Result<AsmProgram> {
-    unimplemented!("ch.20 replace wired in wave 21")
+///
+/// Chapter 1 input never carries `Pseudo` operands (the only operand
+/// shape produced by the chapter-1 codegen is `Operand::Imm` and
+/// `Operand::Reg`). Returning the input unchanged is therefore correct
+/// for chapter 1 and remains correct until wave 21 introduces temporaries.
+pub fn replace_pseudos(asm: AsmProgram, _frames: &[Frame]) -> Result<AsmProgram> {
+    Ok(asm)
 }

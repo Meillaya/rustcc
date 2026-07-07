@@ -1,0 +1,9 @@
+=== QA Scenario 3: --codegen outputs valid assembly ===
+--- Step 1: target/release/rustcc --codegen /tmp/ch1.c ---
+.globl main
+main:
+    movl $2, %eax
+    ret
+
+--- Validation: contains '.globl main', 'movl $2, %eax', 'ret' ---
+PASS: all expected assembly directives found

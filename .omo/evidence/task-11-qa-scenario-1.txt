@@ -1,0 +1,15 @@
+=== QA Scenario 1: Chapter 1 end-to-end compile+run ===
+--- Step 1: cargo build --release ---
+    Finished `release` profile [optimized] target(s) in 0.01s
+
+--- Step 2: Create /tmp/ch1.c with 'return 2' ---
+int main(void) { return 2; }
+
+--- Step 3: target/release/rustcc /tmp/ch1.c ---
+compile exit code: 0
+
+--- Step 4: /tmp/ch1 ---
+exit code: 2
+
+--- Step 5: confirm exit code matches return value ---
+PASS: exit code 2 == return value 2

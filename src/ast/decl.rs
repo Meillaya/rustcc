@@ -5,6 +5,13 @@
 
 use super::{expr::Expr, stmt::Statement};
 
+/// Mirrors `nqcc2/lib/ast.ml` chapter-1 subset (`function_declaration` body).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Function {
+    pub(crate) name: String,
+    pub(crate) body: Vec<Statement>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum BlockItem {
     Declaration { name: String, init: Option<Expr> },
