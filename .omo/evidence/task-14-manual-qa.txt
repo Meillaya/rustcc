@@ -1,0 +1,28 @@
+Manual QA scenarios for chapter 3 binary operators + bitwise extras.
+
+Scenario 1: 1 + 2 * 3 -> 7 (multiplicative binds tighter than additive)
+  Source: int main(void) { return 1 + 2 * 3; }
+  Compiled: /tmp/qa1.s (17 instructions, subq $8 stack frame)
+  Exit: 7 (expected 7) ✓
+
+Scenario 2: 12 % 5 -> 2 (RemSigned lowers to idivl + edx read)
+  Source: int main(void) { return 12 % 5; }
+  Compiled: /tmp/qa2.s (15 instructions, subq $4 stack frame)
+  Pattern: movl $12, -4(%rbp); movl -4(%rbp), %eax; movl $5, %r10d;
+           cdq; idivl %r10d; movl %edx, -4(%rbp); movl -4(%rbp), %eax
+  Exit: 2 (expected 2) ✓
+
+Scenario 3: (1 << 3) | (2 & 0xf0) -> 8 (shift, and, or all combine correctly)
+  Source: int main(void) { return (1 << 3) | (2 & 0xf0); }
+  Compiled: /tmp/qa3.s (18 instructions, subq $12 stack frame)
+  Shift pattern: movl $3, %ecx; sall %cl, -4(%rbp)
+  AND pattern:   andl $240, -8(%rbp)
+  OR pattern:    orl %r10d, -12(%rbp)
+  Computation:   (1 << 3) = 8; (2 & 0xf0) = 0; 8 | 0 = 8
+  Exit: 8 (expected 8) ✓
+
+Precedence sanity:
+  - 2 + 3 * 4 -> 14 (not 20) [correct: * binds tighter]
+  - 3 / 2 * 4 -> 4 (not 0)  [correct: left-assoc for same-precedence]
+  - 80 >> 2 | 1 ^ 5 & 7 << 1 -> 21 (C precedence: << > & > ^ > | > >>)
+  - 40 << 4 + 12 >> 1 -> 70 (<< / >> bind tighter than +)

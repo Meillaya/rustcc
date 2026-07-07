@@ -13,6 +13,7 @@ use anyhow::{Result, bail};
 
 use crate::ast::{AssignOp, BinaryOp, BlockItem, Expr, ForInit, Function, Program, Statement, UnaryOp};
 use crate::lex::{Token, TokenKind};
+use crate::parse::precedence::{Precedence, precedence_of};
 
 pub(crate) fn parse_program(tokens: Vec<Token>) -> Result<Program> {
     Parser::new(tokens).parse_program()
@@ -229,7 +230,7 @@ impl Parser {
     }
 
     fn parse_conditional_expr(&mut self) -> Result<Expr> {
-        let condition = self.parse_binary_expr(0)?;
+        let condition = self.parse_binary_expr(Precedence::Lowest)?;
         if self.match_exact(&TokenKind::Question) {
             // The middle operand is a full expression in C, so assignment is
             // legal here (`flag ? a = 1 : ...`).  The right operand is another
@@ -249,15 +250,15 @@ impl Parser {
         }
     }
 
-    fn parse_binary_expr(&mut self, min_precedence: u8) -> Result<Expr> {
+    fn parse_binary_expr(&mut self, min_precedence: Precedence) -> Result<Expr> {
         let mut left = self.parse_unary_expr()?;
-        while let Some(op) = self.peek_binary_op() {
-            let precedence = op.precedence();
-            if precedence < min_precedence {
+        while let Some((op, op_prec)) = self.peek_binary_op() {
+            if op_prec < min_precedence {
                 break;
             }
             self.current += 1;
-            let right = self.parse_binary_expr(precedence + 1)?;
+            let next_min = op_prec.next_higher().unwrap_or(Precedence::Highest);
+            let right = self.parse_binary_expr(next_min)?;
             left = Expr::Binary {
                 op,
                 left: Box::new(left),
@@ -372,28 +373,25 @@ impl Parser {
         }
     }
 
-    fn peek_binary_op(&self) -> Option<BinaryOp> {
-        match self.peek().kind {
-            TokenKind::Plus => Some(BinaryOp::Add),
-            TokenKind::Minus => Some(BinaryOp::Subtract),
-            TokenKind::Star => Some(BinaryOp::Multiply),
-            TokenKind::Slash => Some(BinaryOp::Divide),
-            TokenKind::Percent => Some(BinaryOp::Remainder),
-            TokenKind::ShiftLeft => Some(BinaryOp::ShiftLeft),
-            TokenKind::ShiftRight => Some(BinaryOp::ShiftRight),
-            TokenKind::Less => Some(BinaryOp::Less),
-            TokenKind::LessEqual => Some(BinaryOp::LessEqual),
-            TokenKind::Greater => Some(BinaryOp::Greater),
-            TokenKind::GreaterEqual => Some(BinaryOp::GreaterEqual),
-            TokenKind::EqualEqual => Some(BinaryOp::Equal),
-            TokenKind::NotEqual => Some(BinaryOp::NotEqual),
-            TokenKind::Ampersand => Some(BinaryOp::BitwiseAnd),
-            TokenKind::Caret => Some(BinaryOp::BitwiseXor),
-            TokenKind::Pipe => Some(BinaryOp::BitwiseOr),
-            TokenKind::LogicalAnd => Some(BinaryOp::LogicalAnd),
-            TokenKind::LogicalOr => Some(BinaryOp::LogicalOr),
-            _ => None,
-        }
+    fn peek_binary_op(&self) -> Option<(BinaryOp, Precedence)> {
+        let kind = &self.peek().kind;
+        let precedence = precedence_of(kind)?;
+        let op = match kind {
+            TokenKind::Plus => BinaryOp::Add,
+            TokenKind::Minus => BinaryOp::Subtract,
+            TokenKind::Star => BinaryOp::Multiply,
+            TokenKind::Slash => BinaryOp::Divide,
+            TokenKind::Percent => BinaryOp::Remainder,
+            TokenKind::ShiftLeft => BinaryOp::ShiftLeft,
+            TokenKind::ShiftRight => BinaryOp::ShiftRight,
+            TokenKind::Ampersand => BinaryOp::BitwiseAnd,
+            TokenKind::Caret => BinaryOp::BitwiseXor,
+            TokenKind::Pipe => BinaryOp::BitwiseOr,
+            // Chapter-4 operators have a precedence slot but are rejected
+            // here so chapter-4 programs fail to parse in chapter-3 builds.
+            _ => return None,
+        };
+        Some((op, precedence))
     }
 
     fn expect_exact(&mut self, expected: &TokenKind, label: &str) -> Result<()> {

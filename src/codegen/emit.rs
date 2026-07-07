@@ -14,6 +14,15 @@
 //       popq %rbp
 //       ret
 //
+// Chapter 3 adds the binary arithmetic, bitwise, and shift forms.
+// Shift instructions need the count operand in `%cl` (the low byte of
+// `%ecx`); the codegen pass emits the count via a placeholder
+// `Reg::CX` operand and the emitter rewrites that placeholder to
+// `%cl` for `BitShiftLeft` / `BitShiftRight` only — every other
+// instruction keeps the standard `Reg::CX -> %ecx` mapping.  This is
+// the smallest workaround that lets the shift tests run without
+// extending `assembly.rs`'s register enum.
+//
 // Indentation is four spaces per the OCaml `emit_instruction` preamble
 // (`\tmov%s %s, %s\n`).  Each line joins with `\n` and the program ends
 // with a trailing newline so the file is line-terminated like every
@@ -21,7 +30,9 @@
 
 use anyhow::{Result, anyhow};
 
-use crate::codegen::assembly::{AsmProgram, Instr, Operand, Reg, TopLevel, UnaryOpInstr};
+use crate::codegen::assembly::{
+    AsmProgram, BinaryOpInstr, Instr, Operand, Reg, TopLevel, UnaryOpInstr,
+};
 
 const INDENT: &str = "    ";
 
@@ -83,11 +94,44 @@ fn format_operand(op: &Operand) -> Result<String> {
     }
 }
 
+fn format_shift_src(op: BinaryOpInstr, src: &Operand) -> Result<String> {
+    // x86-64 shift instructions accept only `%cl` (the low byte of `%ecx`)
+    // as the count operand.  The codegen pass encodes the count via a
+    // placeholder `Operand::Reg(Reg::CX)`; rewrite that placeholder to
+    // `%cl` here so the emitted instruction is assembler-valid.
+    match (op, src) {
+        (BinaryOpInstr::BitShiftLeft | BinaryOpInstr::BitShiftRight, Operand::Reg(Reg::CX)) => {
+            Ok("%cl".to_string())
+        }
+        _ => format_operand(src),
+    }
+}
+
 fn format_unary_op(op: UnaryOpInstr) -> &'static str {
     match op {
         UnaryOpInstr::Neg => "negl",
         UnaryOpInstr::Not => "notl",
         UnaryOpInstr::Shr => "shrl",
+    }
+}
+
+fn format_binary_op(op: BinaryOpInstr) -> &'static str {
+    match op {
+        BinaryOpInstr::Add => "addl",
+        BinaryOpInstr::Sub => "subl",
+        BinaryOpInstr::Mult => "imull",
+        BinaryOpInstr::DivDouble => "divl",
+        BinaryOpInstr::DivSigned => "idivl",
+        BinaryOpInstr::RemSigned => "idivl",
+        BinaryOpInstr::BitAnd => "andl",
+        BinaryOpInstr::BitOr => "orl",
+        BinaryOpInstr::BitXor => "xorl",
+        BinaryOpInstr::BitShiftLeft => "sall",
+        BinaryOpInstr::BitShiftRight => "sarl",
+        BinaryOpInstr::AddDouble => "addsd",
+        BinaryOpInstr::SubDouble => "subsd",
+        BinaryOpInstr::MultDouble => "mulsd",
+        BinaryOpInstr::DivDoubleDouble => "divsd",
     }
 }
 
@@ -103,11 +147,19 @@ fn format_instruction(instr: &Instr) -> Result<String> {
             format_unary_op(*op),
             format_operand(operand)?
         )),
+        Instr::BinaryOp { op, src, dst } => Ok(format!(
+            "{} {}, {}",
+            format_binary_op(*op),
+            format_shift_src(*op, src)?,
+            format_operand(dst)?
+        )),
+        Instr::Idiv(src) => Ok(format!("idivl {}", format_operand(src)?)),
+        Instr::Cdq => Ok("cdq".to_string()),
         Instr::AllocateStack(n) => Ok(format!("subq ${n}, %rsp")),
         Instr::DeallocateStack(n) => Ok(format!("addq ${n}, %rsp")),
         Instr::Ret => Ok("movq %rbp, %rsp\npopq %rbp\nret".to_string()),
         other => Err(anyhow!(
-            "ch.2 emit does not yet support instruction variant: {other:?}"
+            "ch.3 emit does not yet support instruction variant: {other:?}"
         )),
     }
 }
@@ -140,7 +192,7 @@ pub fn emit(program: &AsmProgram) -> Result<String> {
             } => format_function(name, *global, instructions)?,
             TopLevel::StaticVariable { .. } | TopLevel::Constant { .. } => {
                 return Err(anyhow!(
-                    "ch.2 only emits Fn top-levels; data sections land in W12+"
+                    "ch.3 only emits Fn top-levels; data sections land in W12+"
                 ));
             }
         };

@@ -58,6 +58,28 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
                 dst,
             },
         ],
+        Instr::BinaryOp {
+            op,
+            src: src @ Operand::Stack(_),
+            dst: dst @ Operand::Stack(_),
+        } => vec![
+            Instr::Mov {
+                src,
+                dst: Operand::Reg(Reg::R10),
+            },
+            Instr::BinaryOp {
+                op,
+                src: Operand::Reg(Reg::R10),
+                dst,
+            },
+        ],
+        Instr::Idiv(src @ Operand::Stack(_)) => vec![
+            Instr::Mov {
+                src,
+                dst: Operand::Reg(Reg::R10),
+            },
+            Instr::Idiv(Operand::Reg(Reg::R10)),
+        ],
         other => vec![other],
     }
 }
@@ -72,6 +94,12 @@ fn replace_in_instruction(state: &mut ReplaceState, instr: Instr) -> Vec<Instr> 
             op,
             operand: replace_operand(state, operand),
         },
+        Instr::BinaryOp { op, src, dst } => Instr::BinaryOp {
+            op,
+            src: replace_operand(state, src),
+            dst: replace_operand(state, dst),
+        },
+        Instr::Idiv(src) => Instr::Idiv(replace_operand(state, src)),
         Instr::AllocateStack(_) => instr,
         other => other,
     };

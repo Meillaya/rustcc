@@ -188,3 +188,98 @@ Planning placeholder directories created only for plan artifact targeting; no im
 - `assemble_only()` / `assemble_and_link()` for final gcc invocation
 
 **Evidence**: `/home/mei/projects/rustcc/.omo/evidence/task-7-wave0-gate.txt`
+
+## Wave 4 Verification — Chapter 3 Binary Operators + Bitwise Extras
+
+**Date**: 2026-07-07
+
+**Scope**: Add arithmetic binary operators (`+ - * / %`) plus bitwise extras
+(`& | ^ << >>`) with parser precedence, TACKY lowering, and x86 codegen.
+
+### Implementation
+
+**AST** (`src/ast/operator.rs`):
+- Trimmed `BinaryOp` to the chapter-3 set:
+  `Add, Subtract, Multiply, Divide, Remainder, ShiftLeft, ShiftRight,
+  BitwiseAnd, BitwiseXor, BitwiseOr`.
+- Removed chapter-4 variants (`Less, LessEqual, Greater, GreaterEqual,
+  Equal, NotEqual, LogicalAnd, LogicalOr`) so chapter-4 programs fail
+  at parse time in the chapter-3 build.
+
+**Precedence** (`src/parse/precedence.rs`):
+- Defined `Precedence` enum with 11 variants ordered low-to-high:
+  `Lowest, LogicalOr, LogicalAnd, BitOr, BitXor, BitAnd, Equality,
+  Relational, BitShift, AddSub, MulDiv, Highest`.
+  `Lowest` / `Highest` are sentinels; the nine real operator levels
+  mirror C precedence (`* / %` > `+ -` > `<< >>` > relational >
+  equality > `&` > `^` > `|` > `&&` > `||`).
+- Added `precedence_of(kind: &TokenKind) -> Option<Precedence>` and a
+  `next_higher()` method that walks the table strictly upward.
+
+**Parser** (`src/parse/parser.rs`):
+- `parse_binary_expr(min_precedence: Precedence)` implements
+  precedence climbing; the loop accepts `op_prec < min_precedence`
+  breaking and recurses with `op_prec.next_higher()` so left
+  associativity holds at every level (including same-precedence
+  chains like `3 / 2 * 4`).
+- `peek_binary_op` returns `(BinaryOp, Precedence)` for chapter-3 +
+  bitwise tokens only. Chapter-4 tokens (`< <= > >= == != && ||`)
+  match `precedence_of` but are filtered out so they fail at parse.
+
+**TACKY lowering** (`src/ir/lower.rs`):
+- `lower_expr` handles `Expr::Binary { op, left, right }` by
+  recursively lowering both sides, allocating a fresh `tmp.N`, then
+  emitting `Copy left, tmp; BinaryOp { op, right, tmp }`.
+- `binary_to_tacky` maps each `BinaryOp` to its two-address TACKY
+  variant (`Add, Sub, Mul, DivSigned, RemSigned, BitShiftLeft,
+  BitShiftRight, BitAnd, BitOr, BitXor`).
+
+**Codegen** (`src/codegen/codegen.rs`):
+- Standard arithmetic / bitwise ops collapse to a single
+  `<op> src, dst` instruction because the lowering already moved the
+  left operand into `dst` via `Copy`.
+- `Mul` lowers through the reg-to-reg form
+  `movl dst, %eax; movl src, %r10d; imull %r10d, %eax; movl %eax, dst`
+  because the GNU assembler rejects the two-operand `imull` with
+  immediate or memory operands.
+- `DivSigned` / `RemSigned` use `cdq; idivl` with the divisor
+  materialized via `%r10d` for the same reason.
+- `BitShiftLeft` / `BitShiftRight` move the count into `%ecx` and
+  emit the shift with the count in `%cl`.
+
+**Emitter** (`src/codegen/emit.rs`):
+- Added `format_binary_op` for `addl, subl, imull, idivl, andl, orl,
+  xorl, sall, sarl` (plus the double-precision forms reserved for
+  chapter 13).
+- Added `format_shift_src` so the shift count operand formats as
+  `%cl` instead of the default `%ecx` (x86-64 requires the count in
+  the byte register).
+- Wired `Instr::Idiv` and `Instr::Cdq` into `format_instruction`.
+
+**Pseudo replacement** (`src/codegen/replace_pseudos.rs`):
+- Extended `replace_in_instruction` to walk `BinaryOp` operands and
+  `Idiv`.
+- Extended `split_memory_to_memory` to also split memory-to-memory
+  `BinaryOp` and `Idiv` via the `%r10` scratch register.
+
+### Gate commands
+
+- `cargo build --release` → exit 0, zero warnings
+- `cargo test --release` → 9 passed, 0 failed
+- `./tests/test_compiler ./target/release/rustcc --chapter 3
+   --latest-only --bitwise` → 35 tests pass (all green)
+
+### Manual QA (3 scenarios from the chapter 3 task)
+
+| Source                                          | Expected | Actual |
+|-------------------------------------------------|---------:|-------:|
+| `int main(void){return 1+2*3;}`                 |        7 |      7 |
+| `int main(void){return 12%5;}`                  |        2 |      2 |
+| `int main(void){return (1<<3)|(2&0xf0);}`       |        8 |      8 |
+
+### Evidence
+
+- `cargo build`: `.omo/evidence/task-14-cargo-build.txt`
+- `cargo test`: `.omo/evidence/task-14-cargo-test.txt`
+- chapter 3 + bitwise gate: `.omo/evidence/task-14-chapter-gate.txt`
+- manual QA writeup: `.omo/evidence/task-14-manual-qa.txt`
