@@ -1,0 +1,149 @@
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+warning: function `emit_native_constant_function` is never used
+ --> src/codegen/lower.rs:9:15
+  |
+9 | pub(crate) fn emit_native_constant_function(function_name: &str, return_value: i32) -> String {
+  |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `rustcc` (lib) generated 1 warning
+warning: unused imports: `AsmProgram`, `BinaryOpInstr`, `ConditionCode`, `Instr`, `Operand`, `Reg`, `StaticInit`, and `TopLevel`
+  --> src/codegen/mod.rs:17:5
+   |
+17 |     AsmProgram, BinaryOpInstr, ConditionCode, Instr, Operand, Reg, StaticInit, TopLevel,
+   |     ^^^^^^^^^^  ^^^^^^^^^^^^^  ^^^^^^^^^^^^^  ^^^^^  ^^^^^^^  ^^^  ^^^^^^^^^^  ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `name` and `init` are never read
+  --> src/ir/tacky.rs:14:9
+   |
+13 |     Declare {
+   |     ------- fields in this variant
+14 |         name: String,
+   |         ^^^^
+15 |         init: Option<Expr>,
+   |         ^^^^
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `0` is never read
+  --> src/ir/tacky.rs:17:10
+   |
+17 |     Expr(Option<Expr>),
+   |     ---- ^^^^^^^^^^^^
+   |     |
+   |     field in this variant
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+17 -     Expr(Option<Expr>),
+17 +     Expr(()),
+   |
+
+warning: field `0` is never read
+  --> src/ir/tacky.rs:18:12
+   |
+18 |     Return(Expr),
+   |     ------ ^^^^
+   |     |
+   |     field in this variant
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+18 -     Return(Expr),
+18 +     Return(()),
+   |
+
+warning: fields `condition` and `target` are never read
+  --> src/ir/tacky.rs:20:9
+   |
+19 |     JumpIfZero {
+   |     ---------- fields in this variant
+20 |         condition: Expr,
+   |         ^^^^^^^^^
+21 |         target: String,
+   |         ^^^^^^
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `expr`, `cases`, `default`, and `end` are never read
+  --> src/ir/tacky.rs:24:9
+   |
+23 |     Switch {
+   |     ------ fields in this variant
+24 |         expr: Expr,
+   |         ^^^^
+25 |         cases: Vec<(i32, String)>,
+   |         ^^^^^
+26 |         default: Option<String>,
+   |         ^^^^^^^
+27 |         end: String,
+   |         ^^^
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `0` is never read
+  --> src/ir/tacky.rs:29:10
+   |
+29 |     Jump(String),
+   |     ---- ^^^^^^
+   |     |
+   |     field in this variant
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+29 -     Jump(String),
+29 +     Jump(()),
+   |
+
+warning: field `0` is never read
+  --> src/ir/tacky.rs:30:11
+   |
+30 |     Label(String),
+   |     ----- ^^^^^^
+   |     |
+   |     field in this variant
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+30 -     Label(String),
+30 +     Label(()),
+   |
+
+warning: `rustcc` (bin "rustcc") generated 9 warnings (1 duplicate) (run `cargo fix --bin "rustcc" -p rustcc` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 0.96s
+
+=== W0-T4 Verification Summary ===
+File: src/codegen/assembly.rs (207 LOC, >= 80 required)
+Doc comment at line 1: references nqcc2/lib/assembly.ml, locks to x86-64 AT&T / System V AMD64
+Types defined (8 total, 6 required):
+  line  18: pub enum Reg             (AX, CX, DX, DI, SI, R8, R9, R10, R11, SP, BP, BX, R12, R13, R14, R15, XMM(u8))
+  line  50: pub enum Operand         (Imm, Reg, Memory, MemoryIndexed, Pseudo, Stack)
+  line  64: pub enum BinaryOpInstr   (Add, Sub, Mult, DivDouble, DivSigned, RemSigned, BitAnd, BitOr, BitXor, BitShiftLeft, BitShiftRight, AddDouble, SubDouble, MultDouble, DivDoubleDouble)
+  line  85: pub enum ConditionCode   (E, NE, L, LE, G, GE, A, AE, B, BE, P)
+  line 104: pub enum Instr           (Mov, Movsx, MovZeroExtend, Lea, Cmp, BinaryOp, Idiv, Cdq, Call, Ret, Push, Pop, Jmp, JmpCC, SetCC, Label, AllocateStack, DeallocateStack, Comment)
+  line 163: pub enum StaticInit      (Int, Long, UInt, ULong, Double, Zero, Char, StringBytes, Pointer)
+  line 186: pub enum TopLevel        (Fn, StaticVariable, Constant)
+  line 206: pub struct AsmProgram    { top_level: Vec<TopLevel> }
+
+Smoke test: src/bin/check_asm.rs created, `cargo check --bin check_asm` exit 0, then removed.
+cargo build --release: exit 0
+LSP diagnostics: assembly.rs clean, mod.rs clean
+
+New warnings introduced (acceptable, resolve at W0-T5):
+  - unused_imports on src/codegen/mod.rs:17 (pub use exposed for W0-T5 to consume)
+  - dead_code on src/codegen/lower.rs:9 (pre-existing, lib target now compiles lower.rs)
+
+Spec-forbidden items NOT done:
+  - no codegen logic (type system only) ✓
+  - no platform abstractions ✓
+  - no i128/f32/f80/SSE4+ variants ✓
+  - no #[derive(Hash)] on f64-containing enums ✓
+  - no #[allow(dead_code)] on assembly enums (used #![allow(dead_code)] module-level only) ✓
+  - did not touch emit/fixup/replace_pseudos/regalloc/assembly_symbols/abi/frame/lower.rs ✓

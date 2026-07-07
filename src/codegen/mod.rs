@@ -1,16 +1,46 @@
 //! Backend and assembly text utilities.
 //!
-//! `lower` contains the small native constant-return emitter used for early
-//! chapters.  `emit` contains bridge assembly sanitation for advanced chapters
-//! that still rely on the host C backend.  ABI/frame/register-allocation files
-//! remain named placeholders for future native backend ownership.
+//! The codegen module mirrors `nqcc2/lib/backend/` plus `nqcc2/lib/emit.ml`:
+//!
+//! - [`assembly`] is the x86-64 AST introduced by W0-T4 (the type system
+//!   only — no printing or codegen logic).
+//! - [`assembly_symbols`] tracks the global / extern / constant symbol
+//!   sets the emitter needs.
+//! - [`abi`] classifies function parameters for the System V AMD64
+//!   calling convention.
+//! - [`frame`] defines the per-function stack-frame layout.
+//! - [`codegen`] walks TACKY and produces an `AsmProgram` (wave 2+).
+//! - [`fixup`] rewrites two-operand assembly into explicit move + op
+//!   pairs and adds the `cqo` / `cdq` setup division needs (wave 10).
+//! - [`replace_pseudos`] resolves `Pseudo` operands into physical
+//!   registers or `Stack` slots (wave 21).
+//! - [`regalloc`] assigns physical registers via Briggs/George coloring
+//!   (wave 21).
+//! - [`emit`] pretty-prints an `AsmProgram` to x86-64 AT&T text (wave 2).
+//!
+//! All of the pass entry points (`generate`, `fixup`, `replace_pseudos`,
+//! `allocate`, `emit`) are intentionally unimplemented stubs today; the
+//! real implementations land in future waves.
 
-pub(crate) mod abi;
-pub(crate) mod asm;
-pub(crate) mod emit;
-pub(crate) mod frame;
-pub(crate) mod lower;
-pub(crate) mod register_allocator;
+// Re-exports below are the scaffolded public API surface; silence the
+// "unused import" diagnostic until downstream wiring lands.
+#![allow(unused_imports)]
 
-pub(crate) use emit::{SystemAssemblySanitizerOptions, sanitize_system_assembly};
-pub(crate) use lower::emit_native_constant_function;
+pub mod abi;
+pub mod assembly;
+pub mod assembly_symbols;
+pub mod codegen;
+pub mod emit;
+pub mod fixup;
+pub mod frame;
+pub mod regalloc;
+pub mod replace_pseudos;
+
+pub use assembly::{
+    AsmProgram, BinaryOpInstr, ConditionCode, Instr, Operand, Reg, StaticInit, TopLevel,
+};
+pub use codegen::generate;
+pub use emit::emit;
+pub use fixup::fixup;
+pub use regalloc::allocate;
+pub use replace_pseudos::replace_pseudos;

@@ -1,0 +1,171 @@
+{
+  "schema_version": 2,
+  "active_work_id": "c-compiler-rust-9002f6ab",
+  "works": {
+    "c-compiler-rust-9002f6ab": {
+      "work_id": "c-compiler-rust-9002f6ab",
+      "active_plan": "/home/mei/projects/rustcc/.omo/plans/c-compiler-rust.md",
+      "plan_name": "c-compiler-rust",
+      "status": "active",
+      "started_at": "2026-07-07T19:15:31.671Z",
+      "updated_at": "2026-07-07T19:48:57.671Z",
+      "session_ids": [
+        "opencode:ses_0c241b468ffeuCkDS36rF8DZEG",
+        "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2",
+        "opencode:ses_0c1eae4a0ffeZB0ZIlWOZu4OKb",
+        "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ"
+      ],
+      "session_origins": {
+        "opencode:ses_0c241b468ffeuCkDS36rF8DZEG": "direct",
+        "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2": "appended",
+        "opencode:ses_0c1eae4a0ffeZB0ZIlWOZu4OKb": "appended",
+        "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ": "appended"
+      },
+      "agent": "atlas",
+      "task_sessions": {
+        "todo:1": {
+          "task_key": "todo:1",
+          "task_label": "1",
+          "task_title": "W0-T1: Fix compiler.rs broken syntax and strip interpreter/bridge call sites",
+          "session_id": "opencode:ses_0c1fb6d1dffe1smZbU0GDHeJ9T",
+          "agent": "Sisyphus-Junior",
+          "category": "quick",
+          "updated_at": "2026-07-07T19:26:14.449Z",
+          "started_at": "2026-07-07T19:25:35.095Z",
+          "status": "completed",
+          "ended_at": "2026-07-07T19:26:14.449Z",
+          "elapsed_ms": 39354
+        },
+        "todo:2": {
+          "task_key": "todo:2",
+          "task_label": "2",
+          "task_title": "W0-T2: Delete the runtime interpreter (`src/ir/control_flow.rs`)",
+          "session_id": "opencode:ses_0c1f3ad83ffe11KeNqCJly1SqL",
+          "agent": "Sisyphus-Junior",
+          "category": "quick",
+          "updated_at": "2026-07-07T19:30:34.767Z",
+          "started_at": "2026-07-07T19:30:19.938Z",
+          "status": "completed",
+          "ended_at": "2026-07-07T19:30:34.767Z",
+          "elapsed_ms": 14829
+        },
+        "todo:3": {
+          "task_key": "todo:3",
+          "task_label": "3",
+          "task_title": "W0-T3: Delete the system-C bridge (emit.rs, source.rs, system helpers in toolchain.rs)",
+          "session_id": "opencode:ses_0c1efd7ccffeInZPgrQiyPeLda",
+          "agent": "Sisyphus-Junior",
+          "category": "quick",
+          "updated_at": "2026-07-07T19:35:45.276Z",
+          "started_at": "2026-07-07T19:32:49.842Z",
+          "status": "completed",
+          "ended_at": "2026-07-07T19:35:45.275Z",
+          "elapsed_ms": 175433
+        },
+        "todo:5": {
+          "task_key": "todo:5",
+          "task_label": "5",
+          "task_title": "W0-T5: Restructure `src/codegen/` to mirror `nqcc2/lib/backend/` (stub module skeletons)",
+          "session_id": "opencode:ses_0c1eae4a0ffeZB0ZIlWOZu4OKb",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "updated_at": "2026-07-07T19:46:35.649Z",
+          "ended_at": "2026-07-07T19:46:35.649Z",
+          "status": "completed"
+        },
+        "todo:7": {
+          "task_key": "todo:7",
+          "task_label": "7",
+          "task_title": "W0-T7: Verify the foundation rewrite is clean (zero warnings, no stale fingerprints, all unit tests pass)",
+          "session_id": "opencode:ses_0c1e174d0ffeWNYpliACg0LHnn",
+          "agent": "Sisyphus-Junior",
+          "category": "quick",
+          "updated_at": "2026-07-07T19:48:57.671Z",
+          "started_at": "2026-07-07T19:48:57.671Z",
+          "status": "running"
+        }
+      }
+    }
+  },
+  "active_plan": "/home/mei/projects/rustcc/.omo/plans/c-compiler-rust.md",
+  "started_at": "2026-07-07T19:15:31.671Z",
+  "status": "active",
+  "updated_at": "2026-07-07T19:48:57.671Z",
+  "session_ids": [
+    "opencode:ses_0c241b468ffeuCkDS36rF8DZEG",
+    "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2",
+    "opencode:ses_0c1eae4a0ffeZB0ZIlWOZu4OKb",
+    "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ"
+  ],
+  "session_origins": {
+    "opencode:ses_0c241b468ffeuCkDS36rF8DZEG": "direct",
+    "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2": "appended",
+    "opencode:ses_0c1eae4a0ffeZB0ZIlWOZu4OKb": "appended",
+    "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ": "appended"
+  },
+  "plan_name": "c-compiler-rust",
+  "task_sessions": {
+    "todo:1": {
+      "task_key": "todo:1",
+      "task_label": "1",
+      "task_title": "W0-T1: Fix compiler.rs broken syntax and strip interpreter/bridge call sites",
+      "session_id": "opencode:ses_0c1fb6d1dffe1smZbU0GDHeJ9T",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-07-07T19:26:14.449Z",
+      "started_at": "2026-07-07T19:25:35.095Z",
+      "status": "completed",
+      "ended_at": "2026-07-07T19:26:14.449Z",
+      "elapsed_ms": 39354
+    },
+    "todo:2": {
+      "task_key": "todo:2",
+      "task_label": "2",
+      "task_title": "W0-T2: Delete the runtime interpreter (`src/ir/control_flow.rs`)",
+      "session_id": "opencode:ses_0c1f3ad83ffe11KeNqCJly1SqL",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-07-07T19:30:34.767Z",
+      "started_at": "2026-07-07T19:30:19.938Z",
+      "status": "completed",
+      "ended_at": "2026-07-07T19:30:34.767Z",
+      "elapsed_ms": 14829
+    },
+    "todo:3": {
+      "task_key": "todo:3",
+      "task_label": "3",
+      "task_title": "W0-T3: Delete the system-C bridge (emit.rs, source.rs, system helpers in toolchain.rs)",
+      "session_id": "opencode:ses_0c1efd7ccffeInZPgrQiyPeLda",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-07-07T19:35:45.276Z",
+      "started_at": "2026-07-07T19:32:49.842Z",
+      "status": "completed",
+      "ended_at": "2026-07-07T19:35:45.275Z",
+      "elapsed_ms": 175433
+    },
+    "todo:5": {
+      "task_key": "todo:5",
+      "task_label": "5",
+      "task_title": "W0-T5: Restructure `src/codegen/` to mirror `nqcc2/lib/backend/` (stub module skeletons)",
+      "session_id": "opencode:ses_0c1eae4a0ffeZB0ZIlWOZu4OKb",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-07-07T19:46:35.649Z",
+      "ended_at": "2026-07-07T19:46:35.649Z",
+      "status": "completed"
+    },
+    "todo:7": {
+      "task_key": "todo:7",
+      "task_label": "7",
+      "task_title": "W0-T7: Verify the foundation rewrite is clean (zero warnings, no stale fingerprints, all unit tests pass)",
+      "session_id": "opencode:ses_0c1e174d0ffeWNYpliACg0LHnn",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-07-07T19:48:57.671Z",
+      "started_at": "2026-07-07T19:48:57.671Z",
+      "status": "running"
+    }
+  },
+  "agent": "atlas"
+}

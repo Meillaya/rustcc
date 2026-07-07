@@ -153,9 +153,38 @@ Planning placeholder directories created only for plan artifact targeting; no im
 - Wrote .omx/plans/prd-rustcc-book-package.md.
 - Wrote .omx/plans/test-spec-rustcc-book-package.md.
 - Tightened docs naming and scaffold banlist policy in the consensus plan.
-\n## Session update: 2026-04-16 ralph execution complete
+
+## Session update: 2026-04-16 ralph execution complete
 - Authored full docs/book package (20 chapter guides + backbone + maps + appendices + templates).
 - Authored docs/specs SRS package.
 - Authored docs/research resource package, including blogs-and-papers.
 - Moved the placeholder scaffold into `src/` at the user's request.
 - Wrote verification and deslop reports under .omx/plans/.
+
+## Wave 0 Verification — Foundation Rewrite
+
+**Date**: 2026-07-07T19:48:15Z
+
+**Gate commands**:
+- `cargo build --release` → exit 0, zero warnings
+- `cargo test --release` → 9 passed, 0 failed
+- Fingerprint greps (all zero matches in `src/`):
+  - `evaluate_program`, `compile_with_system_cc_frontend`, `source_has_*`, `should_defer_parse_to_system_frontend`, `semantic_error_that_should_parse`, `likely_parse_error`, `likely_struct_or_union_parse_error`
+  - `evaluate_with_system_cc`, `system_c_syntax_check`, `system_c_to_assembly`, `write_temp_c_source` in `src/toolchain.rs`
+  - `sanitize_system_assembly`, `SystemAssemblySanitizerOptions`
+
+**Deleted files**:
+- `src/ir/control_flow.rs` → `No such file or directory` (interpreter removed)
+- `src/support/source.rs` → `No such file or directory` (heuristic gate removed)
+- `src/codegen/emit.rs` → path now holds the new OCaml-mirror codegen emitter (`emit()` pretty-prints `AsmProgram` to x86-64 AT&T text). The old system-C sanitizer content is gone; verified by zero matches for `sanitize_system_assembly` / `SystemAssemblySanitizerOptions`.
+
+**OCaml-mirror layout**:
+- `src/semantics/{resolve,label_loops,typecheck}.rs`
+- `src/ir/{tacky,lower,opt,cfg,temp}.rs`
+- `src/codegen/{assembly,assembly_symbols,abi,codegen,emit,fixup,frame,regalloc,replace_pseudos}.rs`
+
+**Kept gcc helpers** in `src/toolchain.rs`:
+- `preprocess()` for `gcc -E -P`
+- `assemble_only()` / `assemble_and_link()` for final gcc invocation
+
+**Evidence**: `/home/mei/projects/rustcc/.omo/evidence/task-7-wave0-gate.txt`

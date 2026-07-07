@@ -1,13 +1,34 @@
-//! Early native intermediate representation.
+//! Native intermediate representation.
 //!
-//! The current native path lowers the parsed/validated AST into a small linear
-//! control-flow envelope and evaluates it to a constant return value.  Later
-//! chapters can replace this with full TACKY while preserving the facade entry
-//! point used today.
+//! The IR is consumed by the codegen and optimization passes.  The book-faithful
+//! surface mirrors `nqcc2/lib/tacky.ml` (99 LOC) plus the surrounding scaffolding
+//! that the Rust port needs for ergonomics:
+//!
+//! - `tacky` — TACKY program / function / instruction definitions and the
+//!   `ast_to_tacky` lowering entry point.
+//! - `lower` — AST-to-TACKY lowering helper.  Wave 0 ships a placeholder that
+//!   the chapter-1 implementation will replace in W2-T2.
+//! - `opt` — optimization-pass selector and runner.
+//! - `cfg` — control-flow graph functor scaffold.
+//! - `temp` — typed temporary-identifier generator used by lowering and regalloc.
 
-pub(crate) mod control_flow;
-pub(crate) mod lower;
-pub(crate) mod opt;
-pub(crate) mod tacky;
+// No runtime interpreter; the IR is consumed only by codegen and optimization.
+//
+// Re-exports below are part of the public IR surface and will be pulled in by
+// codegen and optimization passes during waves 9-20.  The compiler pipeline
+// currently imports types directly from each sub-module, so allow the unused
+// public-use until downstream callers land.
+#![allow(unused_imports)]
 
-pub(crate) use control_flow::evaluate_program;
+pub mod cfg;
+pub mod lower;
+pub mod opt;
+pub mod tacky;
+pub mod temp;
+
+pub use opt::{OptPass, run_opt};
+pub use tacky::{
+    Instruction, TackyFunction, TackyProgram, Val, Var, ast_to_tacky,
+};
+pub use temp::{TempId, TempIdGenerator};
+

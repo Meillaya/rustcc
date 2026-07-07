@@ -1,0 +1,237 @@
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+warning: function `emit_native_constant_function` is never used
+ --> src/codegen/lower.rs:9:15
+  |
+9 | pub(crate) fn emit_native_constant_function(function_name: &str, return_value: i32) -> String {
+  |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `name` and `init` are never read
+  --> src/ir/tacky.rs:14:9
+   |
+13 |     Declare {
+   |     ------- fields in this variant
+14 |         name: String,
+   |         ^^^^
+15 |         init: Option<Expr>,
+   |         ^^^^
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `0` is never read
+  --> src/ir/tacky.rs:17:10
+   |
+17 |     Expr(Option<Expr>),
+   |     ---- ^^^^^^^^^^^^
+   |     |
+   |     field in this variant
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+17 -     Expr(Option<Expr>),
+17 +     Expr(()),
+   |
+
+warning: field `0` is never read
+  --> src/ir/tacky.rs:18:12
+   |
+18 |     Return(Expr),
+   |     ------ ^^^^
+   |     |
+   |     field in this variant
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+18 -     Return(Expr),
+18 +     Return(()),
+   |
+
+warning: fields `condition` and `target` are never read
+  --> src/ir/tacky.rs:20:9
+   |
+19 |     JumpIfZero {
+   |     ---------- fields in this variant
+20 |         condition: Expr,
+   |         ^^^^^^^^^
+21 |         target: String,
+   |         ^^^^^^
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `expr`, `cases`, `default`, and `end` are never read
+  --> src/ir/tacky.rs:24:9
+   |
+23 |     Switch {
+   |     ------ fields in this variant
+24 |         expr: Expr,
+   |         ^^^^
+25 |         cases: Vec<(i32, String)>,
+   |         ^^^^^
+26 |         default: Option<String>,
+   |         ^^^^^^^
+27 |         end: String,
+   |         ^^^
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `0` is never read
+  --> src/ir/tacky.rs:29:10
+   |
+29 |     Jump(String),
+   |     ---- ^^^^^^
+   |     |
+   |     field in this variant
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+29 -     Jump(String),
+29 +     Jump(()),
+   |
+
+warning: field `0` is never read
+  --> src/ir/tacky.rs:30:11
+   |
+30 |     Label(String),
+   |     ----- ^^^^^^
+   |     |
+   |     field in this variant
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+30 -     Label(String),
+30 +     Label(()),
+   |
+
+warning: `rustcc` (bin "rustcc") generated 8 warnings
+    Finished `release` profile [optimized] target(s) in 0.95s
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+warning: function `emit_native_constant_function` is never used
+ --> src/codegen/lower.rs:9:15
+  |
+9 | pub(crate) fn emit_native_constant_function(function_name: &str, return_value: i32) -> String {
+  |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `name` and `init` are never read
+  --> src/ir/tacky.rs:14:9
+   |
+13 |     Declare {
+   |     ------- fields in this variant
+14 |         name: String,
+   |         ^^^^
+15 |         init: Option<Expr>,
+   |         ^^^^
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `0` is never read
+  --> src/ir/tacky.rs:17:10
+   |
+17 |     Expr(Option<Expr>),
+   |     ---- ^^^^^^^^^^^^
+   |     |
+   |     field in this variant
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+17 -     Expr(Option<Expr>),
+17 +     Expr(()),
+   |
+
+warning: field `0` is never read
+  --> src/ir/tacky.rs:18:12
+   |
+18 |     Return(Expr),
+   |     ------ ^^^^
+   |     |
+   |     field in this variant
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+18 -     Return(Expr),
+18 +     Return(()),
+   |
+
+warning: fields `condition` and `target` are never read
+  --> src/ir/tacky.rs:20:9
+   |
+19 |     JumpIfZero {
+   |     ---------- fields in this variant
+20 |         condition: Expr,
+   |         ^^^^^^^^^
+21 |         target: String,
+   |         ^^^^^^
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `expr`, `cases`, `default`, and `end` are never read
+  --> src/ir/tacky.rs:24:9
+   |
+23 |     Switch {
+   |     ------ fields in this variant
+24 |         expr: Expr,
+   |         ^^^^
+25 |         cases: Vec<(i32, String)>,
+   |         ^^^^^
+26 |         default: Option<String>,
+   |         ^^^^^^^
+27 |         end: String,
+   |         ^^^
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `0` is never read
+  --> src/ir/tacky.rs:29:10
+   |
+29 |     Jump(String),
+   |     ---- ^^^^^^
+   |     |
+   |     field in this variant
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+29 -     Jump(String),
+29 +     Jump(()),
+   |
+
+warning: field `0` is never read
+  --> src/ir/tacky.rs:30:11
+   |
+30 |     Label(String),
+   |     ----- ^^^^^^
+   |     |
+   |     field in this variant
+   |
+   = note: `Instr` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+30 -     Label(String),
+30 +     Label(()),
+   |
+
+warning: `rustcc` (bin "rustcc" test) generated 8 warnings
+    Finished `release` profile [optimized] target(s) in 0.79s
+     Running unittests src/main.rs (target/release/deps/rustcc-45fda60621eb7a6b)
+
+running 9 tests
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test driver::tests::derives_all_output_paths ... ok
+test compiler::tests::rejects_undeclared_variable ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test driver::tests::parses_default_run_stage ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

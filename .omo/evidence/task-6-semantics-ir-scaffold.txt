@@ -1,0 +1,67 @@
+=== W0-T6 evidence: semantics 3-pass + book-faithful TACKY IR scaffold ===
+=== Date: Tue 07 Jul 2026 03:45:43 PM EDT ===
+
+=== Step 1: ls src/semantics/ (expect mod.rs resolve.rs label_loops.rs typecheck.rs; NO validate/names/symbols/types/layout) ===
+total 16
+drwxr-xr-x 1 mei mei   84 Jul  7 15:42 .
+drwxr-xr-x 1 mei mei  192 Jul  7 15:42 ..
+-rw-r--r-- 1 mei mei  835 Jul  7 15:44 label_loops.rs
+-rw-r--r-- 1 mei mei  905 Jul  7 15:42 mod.rs
+-rw-r--r-- 1 mei mei 1258 Jul  7 15:43 resolve.rs
+-rw-r--r-- 1 mei mei 1323 Jul  7 15:43 typecheck.rs
+
+=== Step 2: ls src/ir/ (expect mod.rs tacky.rs lower.rs opt.rs cfg.rs temp.rs; NO control_flow) ===
+total 28
+drwxr-xr-x 1 mei mei   82 Jul  7 15:42 .
+drwxr-xr-x 1 mei mei  192 Jul  7 15:42 ..
+-rw-r--r-- 1 mei mei 1359 Jul  7 15:42 cfg.rs
+-rw-r--r-- 1 mei mei 1129 Jul  7 15:42 lower.rs
+-rw-r--r-- 1 mei mei 1336 Jul  7 15:44 mod.rs
+-rw-r--r-- 1 mei mei 1309 Jul  7 15:44 opt.rs
+-rw-r--r-- 1 mei mei 4550 Jul  7 15:42 tacky.rs
+-rw-r--r-- 1 mei mei 1302 Jul  7 15:44 temp.rs
+
+=== Step 3: grep -rn 'control_flow' src/ (expect zero matches) ===
+(no matches — expected)
+
+=== Step 4: cargo build --release ===
+    Finished `release` profile [optimized] target(s) in 0.01s
+build exit: 0
+
+=== Step 5: cargo test --release ===
+    Finished `release` profile [optimized] target(s) in 0.01s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 9 tests
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test driver::tests::derives_all_output_paths ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test driver::tests::parses_default_run_stage ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+test exit: 0
+
+=== Step 6: LSP / diagnostics sanity (cargo check --release) ===
+    Checking bytes v1.11.1
+    Checking anyhow v1.0.102
+    Checking thiserror v1.0.69
+    Checking rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 0.51s

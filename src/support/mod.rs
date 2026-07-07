@@ -5,5 +5,5 @@
 
 pub(crate) mod diagnostics;
 pub(crate) mod error;
-pub(crate) mod source;
+// source heuristics removed; the IR is consumed only by codegen.
 pub(crate) mod span;
