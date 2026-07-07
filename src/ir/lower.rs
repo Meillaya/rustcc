@@ -43,6 +43,19 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
     })
 }
 
+/// Namespace-prefix user-defined labels so they cannot collide with
+/// function names (`main:`) or with the auto-generated labels
+/// (`if_end.0`, `while_cond.3`, ...).  The chapter-6 `--goto` extra
+/// makes the conflict observable: the assembly emitter writes a
+/// top-level `<name>:` for every TACKY `Label(name)`, so leaving a
+/// user `main:` label unmangled would shadow the function entry
+/// symbol.  Using a fixed prefix keeps the jump / label sides
+/// symmetric (both call this helper) and keeps C identifier
+/// characters — letters, digits, underscores — valid as the suffix.
+fn mangle_user_label(name: &str) -> String {
+    format!("user_label.{name}")
+}
+
 /// Append `Return(Constant(0))` when the function body does not already
 /// end with one.  Mirrors `emit_fun_declaration` in
 /// `nqcc2/lib/tacky_gen.ml` which unconditionally appends the same
@@ -227,13 +240,19 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
             out.push(Instruction::Label(end_label));
             Ok(out)
         }
-        Statement::Break
-        | Statement::Continue
-        | Statement::Goto(_)
-        | Statement::Labeled { .. }
-        | Statement::Switch { .. }
-        | Statement::Case { .. }
-        | Statement::Default { .. } => Ok(Vec::new()),
+        Statement::Goto(target) => Ok(vec![Instruction::Jump {
+            target: mangle_user_label(target),
+        }]),
+        Statement::Labeled { label, statement } => {
+            let mut out = Vec::new();
+            out.push(Instruction::Label(mangle_user_label(label)));
+            out.extend(lower_statement(statement, ctx)?);
+            Ok(out)
+        }
+        Statement::Break | Statement::Continue => Ok(Vec::new()),
+        Statement::Switch { .. } | Statement::Case { .. } | Statement::Default { .. } => {
+            Ok(Vec::new())
+        }
     }
 }
 

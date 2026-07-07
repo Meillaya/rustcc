@@ -542,3 +542,110 @@ returns the old value, then x becomes 6).  The chapter-5 gate
   passed, 0 failed.
 - chapter 5 gate (latest-only + bitwise + compound + increment):
   `.omo/evidence/task-18-ch5-gate.txt` — `Ran 82 tests … OK`.
+
+
+## Wave 7 — Chapter 6 (if/else, ternary, --goto)
+
+### Scope
+
+Land the chapter-6 subset plus its `--goto` extra:
+
+- `if (cond) stmt` and `if (cond) stmt else stmt`
+  (statement-level branching, with optional `else`).
+- Right-associative ternary `cond ? then : else`
+  (expression-level branching).
+- Labeled statements `label:` (a statement prefix; can attach
+  to any statement including another label) and `goto label;`
+  (the `--goto` extra).
+
+### Outcome
+
+- `cargo build --release` → exit 0, zero warnings.
+- `cargo test --release` → 9 passed, 0 failed.
+- `./tests/test_compiler ./target/release/rustcc --chapter 6
+   --latest-only --bitwise --compound --increment --goto`
+  → 68 / 68 tests pass (all green).
+- Full chapter-1..6 regression: chapters 1–6 with the same
+  flags → 467 / 467 tests pass (no regressions).
+
+### Pipeline changes
+
+The AST, parser, and `If` / `Conditional` / loop lowering
+were already in place from earlier waves (W7-T1 surfaced them
+during exploration); the new work was:
+
+- `src/semantics/label_loops.rs` — promoted the W0-T6 stub
+  to a real validation pass.  Walks the function body once to
+  collect every label name into a `HashSet<String>` (rejecting
+  duplicates), then walks again to verify every
+  `Statement::Goto(target)` resolves to a label in the same
+  function.  Because labels and variables live in different
+  namespaces, the same pass naturally rejects
+  `goto <variable>;` (the target is missing from the labels
+  set) without needing a separate variable scan.  Function
+  scoping (rule: no `goto` across function boundaries) is
+  enforced because the walker only sees the current function's
+  body.
+- `src/ir/lower.rs::lower_statement` — wired the chapter-6
+  extras.  `If { c, then, else_branch }` and the
+  right-associative `Conditional` were already lowered; the new
+  arms add:
+  - `Statement::Goto(target)` → `Instruction::Jump { target }`
+  - `Statement::Labeled { label, statement }` →
+    `Instruction::Label(label)` followed by the lowered
+    statement.
+  Both arms route through a `mangle_user_label` helper that
+  prefixes the user's name with `user_label.`, so a program
+  containing `goto main; … main: return 0;` doesn't shadow
+  the function-entry symbol in the emitted assembly.  The
+  mangling is invisible to the validation pass (labels are
+  tracked by their source name) but visible to codegen
+  (which emits `user_label.main:` rather than `main:`).
+- `src/codegen/codegen.rs` and `src/codegen/emit.rs` —
+  verified existing arms for `Jump`, `Label`, `JumpIfZero`,
+  `JumpIfNotZero`, and the matching assembly forms (`jmp`,
+  `name:`, `jCC`) already covered chapter 6; no changes
+  needed.
+- `src/parse/parser.rs` — verified `parse_statement` already
+  handles `if` / `else`, `goto label;`, and `Identifier Colon`
+  label prefixes (with recursive descent so labels can stack).
+  `parse_conditional_expr` already implements the right-
+  associative `cond ? expr : cond_expr` shape required by the
+  OCaml reference and the book.
+
+### Manual QA (chapter 6 task + goto edges)
+
+| Source                                                                                  | Expected | Actual |
+|-----------------------------------------------------------------------------------------|---------:|-------:|
+| `int main(void) { int x = 5; if (x > 0) return 10; else return 20; }`                   |       10 |     10 |
+| `int main(void) { int a = 1; a = a > 0 ? 7 : 8; return a; }`                             |        7 |      7 |
+| `int main(void) { int x = 0; goto end; x = 5; end: return x; }`                         |        0 |      0 |
+
+The third row exercises the `--goto` extra; the
+`mangle_user_label` helper translates the user-visible
+`end` label into an assembly-safe `user_label.end` so the
+generated jump / label pair stays scoped to the function.
+
+### Invalid_semantics gates for --goto
+
+Three `--goto` extra invalid_semantics tests now reject
+correctly at the new validation pass (and would not have
+before W7-T1):
+
+- `duplicate_labels` — two `label:` statements with the same
+  name in one function → bail at label collection.
+- `goto_missing_label` — `goto label;` with no `label:`
+  defined → bail at goto check.
+- `goto_variable` — `goto a;` where `a` is a local variable,
+  not a label → bail at goto check (because `a` is not in the
+  labels set).
+
+### Evidence
+
+- `cargo build`: `.omo/evidence/task-20-cargo-build.txt`
+  (release profile, zero warnings, exit 0).
+- `cargo test`: `.omo/evidence/task-20-cargo-test.txt` — 9
+  passed, 0 failed.
+- chapter 6 gate (latest-only + bitwise + compound +
+  increment + goto):
+  `.omo/evidence/task-20-ch6-gate.txt` — `Ran 68 tests … OK`.
