@@ -304,9 +304,16 @@ impl Parser {
                     expr: Box::new(self.parse_unary_expr()?),
                 })
             }
+            // Chapter-4 logical not (`!e`).  Distinct from `~e` (bitwise
+            // complement, handled by the `Tilde` arm above): `!0 == 1` while
+            // `~0 == -1`.  The parser folds both into the same `Expr::Unary`
+            // shape and lets the lowerer dispatch on `UnaryOp`.
             TokenKind::Bang => {
                 self.current += 1;
-                Ok(Expr::LogicalNot(Box::new(self.parse_unary_expr()?)))
+                Ok(Expr::Unary {
+                    op: UnaryOp::Not,
+                    expr: Box::new(self.parse_unary_expr()?),
+                })
             }
             TokenKind::PlusPlus => {
                 self.current += 1;
@@ -387,9 +394,19 @@ impl Parser {
             TokenKind::Ampersand => BinaryOp::BitwiseAnd,
             TokenKind::Caret => BinaryOp::BitwiseXor,
             TokenKind::Pipe => BinaryOp::BitwiseOr,
-            // Chapter-4 operators have a precedence slot but are rejected
-            // here so chapter-4 programs fail to parse in chapter-3 builds.
-            _ => return None,
+            // Chapter 4 — equality, relational, logical operators.
+            TokenKind::EqualEqual => BinaryOp::Equal,
+            TokenKind::NotEqual => BinaryOp::NotEqual,
+            TokenKind::Less => BinaryOp::LessThan,
+            TokenKind::LessEqual => BinaryOp::LessOrEqual,
+            TokenKind::Greater => BinaryOp::GreaterThan,
+            TokenKind::GreaterEqual => BinaryOp::GreaterOrEqual,
+            TokenKind::LogicalAnd => BinaryOp::LogicalAnd,
+            TokenKind::LogicalOr => BinaryOp::LogicalOr,
+            // `precedence_of` returned `Some` so the token must be one of
+            // the variants above; any other variant here is a bug in the
+            // precedence table.
+            _ => unreachable!("precedence_of returned Some for an unhandled TokenKind"),
         };
         Some((op, precedence))
     }

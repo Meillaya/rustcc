@@ -283,3 +283,165 @@ Planning placeholder directories created only for plan artifact targeting; no im
 - `cargo test`: `.omo/evidence/task-14-cargo-test.txt`
 - chapter 3 + bitwise gate: `.omo/evidence/task-14-chapter-gate.txt`
 - manual QA writeup: `.omo/evidence/task-14-manual-qa.txt`
+
+## Wave 5 Verification — Chapter 4 Logical & Relational Operators
+
+**Date**: 2026-07-07
+
+**Scope**: Add logical operators (`!`, `&&`, `||`) and relational operators
+(`==`, `!=`, `<`, `<=`, `>`, `>=`) through the AST, parser, TACKY
+lowering (with short-circuit evaluation), and x86 codegen. Mirrors
+`nqcc2/lib/parse.ml` chapter-4 portion (lines ~150-280),
+`nqcc2/lib/tacky_gen.ml` chapter-4 short-circuit lowering
+(`emit_and_expression` / `emit_or_expression` ~lines 230-269), and
+`nqcc2/lib/backend/codegen.ml` chapter-4 cmpl + setCC codegen.
+
+### Implementation
+
+**AST** (`src/ast/operator.rs`, `src/ast/expr.rs`):
+- Added chapter-4 variants to `BinaryOp`:
+  `Equal, NotEqual, LessThan, LessOrEqual, GreaterThan, GreaterOrEqual,
+  LogicalAnd, LogicalOr`. The relational / equality operators lower
+  to a single TACKY `Cmp` instruction; `LogicalAnd` / `LogicalOr` use
+  short-circuit control flow.
+- Added `Not` to `UnaryOp` for the chapter-4 logical-not operator
+  (`!e`). Distinct from the chapter-2 `Complement` (`~e`, bitwise
+  NOT): `!0 == 1` while `~0 == -1`.
+- Removed the redundant `Expr::LogicalNot` variant; the parser now
+  folds `!` into the existing `Expr::Unary { op: UnaryOp::Not, ... }`
+  shape so a single match arm handles all unary forms in the
+  lowerer.
+
+**Precedence** (`src/parse/precedence.rs`):
+- Chapter-4 precedence slots (`Relational`, `Equality`, `LogicalAnd`,
+  `LogicalOr`) were already reserved in wave 4 so chapter-4 programs
+  failed at parse time with chapter-3 binaries. Verified the
+  precedence levels are still wired through `precedence_of` for
+  `< <= > >= == != && ||`.
+
+**Parser** (`src/parse/parser.rs`):
+- `parse_unary_expr` now emits `Expr::Unary { op: UnaryOp::Not, ... }`
+  on `TokenKind::Bang`.
+- `peek_binary_op` covers the chapter-4 tokens: `EqualEqual`,
+  `NotEqual`, `Less`, `LessEqual`, `Greater`, `GreaterEqual`,
+  `LogicalAnd`, `LogicalOr`. The match is exhaustive over the
+  precedence-yielding tokens; a `_ => unreachable!(...)` arm
+  documents the invariant.
+
+**Label generator** (`src/util/labels.rs`):
+- Implemented `LabelGenerator` (mirrors `nqcc2/lib/util/unique_ids.ml
+  ::make_label`). Distinct from `TempIdGenerator` so the two name
+  spaces stay syntactically separate (`tmp.N` vs `prefix.M`).
+
+**TACKY IR** (`src/ir/tacky.rs`):
+- Added `pub enum ConditionCode` with all 11 variants (signed
+  `E/NE/L/LE/G/GE`, unsigned `A/AE/B/BE`, parity `P`) so the
+  chapter-4 work only flips the signed subset; the unsigned +
+  parity codes are reserved for chapter 12.
+- Added `Instruction::Cmp { left, right, dst, cc }` — comparison
+  with explicit operands and boolean result destination. Distinct
+  from the two-address shape used by arithmetic / bitwise binops.
+
+**TACKY lowering** (`src/ir/lower.rs`):
+- `UnaryOp::Not` lowers to a single `Cmp { left: inner_val,
+  right: 0, cc: E, dst: tmp }`. The `Copy + Negate|Complement` shape
+  is preserved for `Negate` / `Complement`.
+- Arithmetic / bitwise / shift binops continue to use the
+  two-address `Copy left, tmp; BinaryOp { src: right, dst: tmp }`
+  shape (now with `dst` pre-loaded via Copy).
+- Equality / relational binops emit a single `Cmp { left, right,
+  dst, cc }`. The pre-emitted `Copy left, tmp` is harmless here:
+  `Cmp` carries both operands explicitly so it does not require the
+  two-address shape.
+- `LogicalAnd` / `LogicalOr` use short-circuit lowering:
+  - `&&`: eval e1; `JumpIfZero e1, and_false.N`; eval e2;
+    `JumpIfZero e2, and_false.N`; `Copy 1, dst`; `Jump and_end.M`;
+    `Label and_false.N: Copy 0, dst`; `Label and_end.M`.
+  - `||`: mirror with `JumpIfNotZero` and `or_false.N` / `or_end.M`.
+- A fresh `LabelGenerator` is owned by `lower_program` so labels are
+  unique per expression.
+
+**Codegen** (`src/codegen/codegen.rs`):
+- `Instruction::Cmp` lowers to:
+  ```
+  [ optional movl $imm, %r11d   ; if left was an immediate ]
+  cmpl  right, left
+  setCC cc dst                  ; writes 1 byte to dst
+  movzbl dst, %r10d             ; zero-extend byte to 32-bit
+  movl   %r10d, dst             ; write full word back
+  ```
+  The immediate-routing uses `%r11d` (not `%r10d`) to avoid a
+  clobber from `split_memory_to_memory`, which also uses `%r10d`.
+- `Instruction::JumpIfZero` / `Instruction::JumpIfNotZero` lower to
+  `cmpl $0, cond; je/jne target` (with the same `%r10d` immediate
+  routing as the `Cmp` instruction).
+- `Instruction::Jump` lowers to `jmp target`.
+- `Instruction::Label(name)` lowers to `name:`.
+- `map_cc` translates `tacky::ConditionCode` into the structurally
+  identical `assembly::ConditionCode` (kept as a separate type so
+  the IR layer stays free of codegen dependencies).
+
+**Emitter** (`src/codegen/emit.rs`):
+- Added formatters for the new instructions:
+  `Instr::Cmp` → `cmpl right, left` (AT&T: dst = left),
+  `Instr::Jmp` → `jmp label`,
+  `Instr::JmpCC` → `j{cc} label`,
+  `Instr::SetCC` → `set{cc} operand`,
+  `Instr::MovZeroExtend` → `movzbl src, dst`,
+  `Instr::Label` → `label:`.
+- `format_cond_code` covers the signed subset used by chapter 4
+  (`e, ne, l, le, g, ge`) plus the unsigned + parity codes reserved
+  for chapter 12.
+
+**Pseudo replacement** (`src/codegen/replace_pseudos.rs`):
+- Extended `replace_in_instruction` to walk `Cmp`, `SetCC`,
+  `MovZeroExtend`, `Jmp`, `JmpCC`, and `Label` operands.
+- Extended `split_memory_to_memory` to split memory-to-memory
+  `cmpl` via a `%r10d` scratch register (x86-64 forbids mem/mem
+  comparisons).
+
+### x86-64 constraints handled
+
+- `cmpl imm, imm` is invalid → route an immediate left operand
+  through `%r11d` first.
+- `cmpl imm, mem` is invalid (immediate cannot be the AT&T
+  destination) → same routing.
+- `cmpl mem, mem` is invalid → split the right operand through
+  `%r10d` in `split_memory_to_memory`.
+- `movzbl mem, mem` is invalid (and `sete` only writes a byte so
+  the destination's upper bytes are undefined) → after `sete`,
+  read the byte via `movzbl dst, %r10d` then `movl %r10d, dst` to
+  restore a clean 32-bit value.
+
+### Gate commands
+
+- `cargo build --release` → exit 0, zero warnings
+- `cargo test --release` → 9 passed, 0 failed
+- `./tests/test_compiler ./target/release/rustcc --chapter 4
+   --latest-only --bitwise` → 43 tests pass (all green)
+- `./tests/test_compiler ./target/release/rustcc --chapter 4
+   --bitwise` → 121 tests pass (chapters 1-4 cumulative, no
+   regressions)
+
+### Manual QA (5 scenarios from the chapter 4 task + short-circuit)
+
+| Source                                          | Expected | Actual |
+|-------------------------------------------------|---------:|-------:|
+| `int main(void){return 1<2;}`                   |        1 |      1 |
+| `int main(void){return 1&&0;}`                  |        0 |      0 |
+| `int main(void){return (1\|\|0)&&1;}`           |        1 |      1 |
+| `int main(void){return 1==1;}`                  |        1 |      1 |
+| `int main(void){return 5!=3;}`                  |        1 |      1 |
+| `int main(void){return 0&&(1/0);}` (short-circuit) |   0 |      0 |
+| `int main(void){return 1\|\|(1/0);}` (short-circuit) |  1 |      1 |
+
+The short-circuit cases exercise the `&&` / `||` control-flow
+plumbing without triggering a divide-by-zero (the right operand is
+never evaluated when the left's boolean outcome makes it
+unnecessary).
+
+### Evidence
+
+- `cargo build`: `.omo/evidence/task-17-cargo-build.txt`
+- `cargo test`: `.omo/evidence/task-17-cargo-test.txt`
+- chapter 4 + bitwise gate: `.omo/evidence/task-17-ch4-gate.txt`

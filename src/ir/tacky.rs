@@ -25,6 +25,29 @@ pub enum Val {
     // ch.13: ConstantDouble(f64),
 }
 
+/// x86-64 condition codes used by `Cmp` (which captures both branches) and
+/// the auxiliary `JumpIfZero` / `JumpIfNotZero` instructions that use the
+/// implied "compare against zero" form.
+///
+/// Mirrors `nqcc2/lib/assembly.ml` `condition_code`.  Chapter 4 uses the
+/// signed comparison codes (`E`, `NE`, `L`, `LE`, `G`, `GE`); the unsigned
+/// codes (`A`, `AE`, `B`, `BE`) and the parity code (`P`) are reserved
+/// for the chapter-12 unsigned work.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ConditionCode {
+    E,
+    NE,
+    L,
+    LE,
+    G,
+    GE,
+    A,
+    AE,
+    B,
+    BE,
+    P,
+}
+
 /// A TACKY pseudo-variable.  Defined as a type alias to keep the surface flat
 /// and to match OCaml's pervasive `string` Var representation.
 pub type Var = String;
@@ -113,6 +136,23 @@ pub enum Instruction {
     },
     Not {
         dst: Var,
+    },
+    /// Chapter 4 comparison instruction.  Lowerer emits this for the
+    /// equality / relational operators and for the unary `Not`
+    /// operator; codegen turns it into a `cmpl` + `setCC` + `movzbl`
+    /// trio so the destination holds the 0/1 boolean result.
+    ///
+    /// The compare uses x86-64 `cmpl right, left` semantics (AT&T:
+    /// the second operand is the source of the subtraction): flags
+    /// are set as if computing `left - right`.  The condition code
+    /// `cc` selects which boolean predicate the comparison satisfies.
+    /// Mirrors `nqcc2/lib/tacky_gen.ml` `Equal | NotEqual |
+    /// GreaterThan | GreaterOrEqual | LessThan | LessOrEqual` arms.
+    Cmp {
+        left: Val,
+        right: Val,
+        dst: Var,
+        cc: ConditionCode,
     },
     Jump {
         target: String,

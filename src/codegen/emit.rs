@@ -31,7 +31,7 @@
 use anyhow::{Result, anyhow};
 
 use crate::codegen::assembly::{
-    AsmProgram, BinaryOpInstr, Instr, Operand, Reg, TopLevel, UnaryOpInstr,
+    AsmProgram, BinaryOpInstr, ConditionCode, Instr, Operand, Reg, TopLevel, UnaryOpInstr,
 };
 
 const INDENT: &str = "    ";
@@ -115,6 +115,22 @@ fn format_unary_op(op: UnaryOpInstr) -> &'static str {
     }
 }
 
+fn format_cond_code(cc: ConditionCode) -> &'static str {
+    match cc {
+        ConditionCode::E => "e",
+        ConditionCode::NE => "ne",
+        ConditionCode::L => "l",
+        ConditionCode::LE => "le",
+        ConditionCode::G => "g",
+        ConditionCode::GE => "ge",
+        ConditionCode::A => "a",
+        ConditionCode::AE => "ae",
+        ConditionCode::B => "b",
+        ConditionCode::BE => "be",
+        ConditionCode::P => "p",
+    }
+}
+
 fn format_binary_op(op: BinaryOpInstr) -> &'static str {
     match op {
         BinaryOpInstr::Add => "addl",
@@ -142,6 +158,11 @@ fn format_instruction(instr: &Instr) -> Result<String> {
             format_operand(src)?,
             format_operand(dst)?
         )),
+        Instr::MovZeroExtend { src, dst } => Ok(format!(
+            "movzbl {}, {}",
+            format_operand(src)?,
+            format_operand(dst)?
+        )),
         Instr::Unary { op, operand } => Ok(format!(
             "{} {}",
             format_unary_op(*op),
@@ -158,6 +179,19 @@ fn format_instruction(instr: &Instr) -> Result<String> {
         Instr::AllocateStack(n) => Ok(format!("subq ${n}, %rsp")),
         Instr::DeallocateStack(n) => Ok(format!("addq ${n}, %rsp")),
         Instr::Ret => Ok("movq %rbp, %rsp\npopq %rbp\nret".to_string()),
+        Instr::Cmp { left, right } => Ok(format!(
+            "cmpl {}, {}",
+            format_operand(right)?,
+            format_operand(left)?
+        )),
+        Instr::Jmp(label) => Ok(format!("jmp {label}")),
+        Instr::JmpCC { cc, label } => Ok(format!("j{} {label}", format_cond_code(*cc))),
+        Instr::SetCC { cc, dst } => Ok(format!(
+            "set{} {}",
+            format_cond_code(*cc),
+            format_operand(dst)?
+        )),
+        Instr::Label(name) => Ok(format!("{name}:")),
         other => Err(anyhow!(
             "ch.3 emit does not yet support instruction variant: {other:?}"
         )),

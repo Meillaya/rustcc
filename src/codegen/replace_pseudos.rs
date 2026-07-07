@@ -80,6 +80,23 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
             },
             Instr::Idiv(Operand::Reg(Reg::R10)),
         ],
+        // Chapter 4: `cmpl mem, mem` is invalid on x86-64 (memory-
+        // to-memory comparisons are not allowed).  Route the right
+        // operand through a scratch register so the emitted
+        // `cmpl reg, mem` is assembler-valid.
+        Instr::Cmp {
+            left,
+            right: right @ Operand::Stack(_),
+        } => vec![
+            Instr::Mov {
+                src: right,
+                dst: Operand::Reg(Reg::R10),
+            },
+            Instr::Cmp {
+                left,
+                right: Operand::Reg(Reg::R10),
+            },
+        ],
         other => vec![other],
     }
 }
@@ -87,6 +104,10 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
 fn replace_in_instruction(state: &mut ReplaceState, instr: Instr) -> Vec<Instr> {
     let instr = match instr {
         Instr::Mov { src, dst } => Instr::Mov {
+            src: replace_operand(state, src),
+            dst: replace_operand(state, dst),
+        },
+        Instr::MovZeroExtend { src, dst } => Instr::MovZeroExtend {
             src: replace_operand(state, src),
             dst: replace_operand(state, dst),
         },
@@ -100,7 +121,24 @@ fn replace_in_instruction(state: &mut ReplaceState, instr: Instr) -> Vec<Instr> 
             dst: replace_operand(state, dst),
         },
         Instr::Idiv(src) => Instr::Idiv(replace_operand(state, src)),
+        // Chapter 4: `cmpl` may reference pseudo slots for either
+        // operand; rewrite both sides through `replace_operand`.
+        Instr::Cmp { left, right } => Instr::Cmp {
+            left: replace_operand(state, left),
+            right: replace_operand(state, right),
+        },
+        // Chapter 4: `setCC` writes to its destination; rewrite the
+        // destination operand.  `setCC` only ever writes to a byte
+        // operand, so the operand is rewritten in place — the OCaml
+        // reference uses a byte-formatted operand here, but in the
+        // Rust port the byte vs long distinction is handled by the
+        // emit pass (it ignores the size suffix on stack slots).
+        Instr::SetCC { cc, dst } => Instr::SetCC {
+            cc,
+            dst: replace_operand(state, dst),
+        },
         Instr::AllocateStack(_) => instr,
+        Instr::Jmp(_) | Instr::JmpCC { .. } | Instr::Label(_) => instr,
         other => other,
     };
     split_memory_to_memory(instr)

@@ -11,11 +11,13 @@ pub(crate) enum Expr {
     Constant(i32),
     Var(String),
     Paren(Box<Expr>),
+    /// A unary operation. Carries the operator kind via [`UnaryOp`] so the
+    /// parser, lowerer, and codegen can dispatch on a single field.  Covers
+    /// `-` (`Negate`), `~` (`Complement`), and chapter-4 `!` (`Not`).
     Unary {
         op: UnaryOp,
         expr: Box<Expr>,
     },
-    LogicalNot(Box<Expr>),
     PreInc(Box<Expr>),
     PreDec(Box<Expr>),
     PostInc(Box<Expr>),
@@ -30,6 +32,10 @@ pub(crate) enum Expr {
         then_expr: Box<Expr>,
         else_expr: Box<Expr>,
     },
+    /// A binary operation. Carries the operator kind via [`BinaryOp`] so the
+    /// parser, lowerer, and codegen can dispatch on a single field.  Covers
+    /// chapter-3 arithmetic / bitwise / shift operators and the chapter-4
+    /// equality / relational / logical operators.
     Binary {
         op: BinaryOp,
         left: Box<Expr>,
