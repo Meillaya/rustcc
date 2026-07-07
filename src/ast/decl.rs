@@ -5,11 +5,11 @@
 
 use super::{expr::Expr, stmt::Statement};
 
-/// Mirrors `nqcc2/lib/ast.ml` chapter-1 subset (`function_declaration` body).
+/// Mirrors `nqcc2/lib/ast.ml` `function_definition` body.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Function {
     pub(crate) name: String,
-    pub(crate) body: Vec<Statement>,
+    pub(crate) body: Vec<BlockItem>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

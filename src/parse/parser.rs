@@ -36,14 +36,12 @@ impl Parser {
         self.expect_exact(&TokenKind::Void, "parameter list 'void'")?;
         self.expect_exact(&TokenKind::CloseParen, "')'")?;
         self.expect_exact(&TokenKind::OpenBrace, "'{'")?;
-        let mut body: Vec<Statement> = Vec::new();
+        let mut body: Vec<BlockItem> = Vec::new();
         while !self.check(&TokenKind::CloseBrace) {
             if self.check(&TokenKind::Eof) {
                 bail!("parse error: expected '}}'");
             }
-            if let BlockItem::Statement(stmt) = self.parse_block_item()? {
-                body.push(stmt);
-            }
+            body.push(self.parse_block_item()?);
         }
         self.expect_exact(&TokenKind::CloseBrace, "'}'")?;
         self.expect_exact(&TokenKind::Eof, "end of file")?;

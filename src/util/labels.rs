@@ -14,7 +14,7 @@
 /// Construct one per lowering (so each pass gets a fresh, monotonically
 /// increasing sequence) and call [`Self::next_with_prefix`] to allocate the
 /// next label of a given prefix.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct LabelGenerator {
     next: u32,
 }

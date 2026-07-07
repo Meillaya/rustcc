@@ -445,3 +445,100 @@ unnecessary).
 - `cargo build`: `.omo/evidence/task-17-cargo-build.txt`
 - `cargo test`: `.omo/evidence/task-17-cargo-test.txt`
 - chapter 4 + bitwise gate: `.omo/evidence/task-17-ch4-gate.txt`
+
+
+## Wave 6 — Chapter 5 (local variables, assignment, compound, ++/--)
+
+### Scope
+
+Land the chapter-5 subset plus its extras:
+
+- Mutable local variables (declarations + reads).
+- Simple `=` and compound `+= -= *= /= %= &= |= ^= <<= >>=`
+  assignment, all right-associative.
+- Pre/post `++` and `--`.
+- Block scope (block statements open an inner scope; `for` init
+  declares in its own scope).
+- Synthetic `Return 0` at the end of every function so
+  `int main(void) {}` still terminates.
+
+### Outcome
+
+- `cargo build --release` → exit 0, zero warnings
+- `cargo test --release` → 9 passed, 0 failed
+- `./tests/test_compiler ./target/release/rustcc --chapter 5
+   --latest-only --bitwise --compound --increment` → 82 / 82
+  tests pass (all green)
+
+### Pipeline changes
+
+- `src/semantics/resolve.rs` — replaced the pass-through stub
+  with a real scope-tracking pass: function body walked with a
+  `ScopeStack`, declarations added before their initializer is
+  resolved (so `int a = a;` / `int a = a = 5;` compile with
+  `a` in scope but indeterminate value, matching C), duplicate
+  declarations in the same scope rejected, undeclared `Expr::Var`
+  references rejected.
+- `src/ast/decl.rs` — `Function::body` widened from
+  `Vec<Statement>` to `Vec<BlockItem>` so the function body can
+  mix declarations and statements, matching the OCaml `Block
+  (BlockItem list)` shape.
+- `src/parse/parser.rs` — `parse_program` pushes block items
+  directly (no longer filters declarations out of function-body
+  top level).
+- `src/ir/lower.rs` — rewritten to walk `Vec<BlockItem>`, lower
+  every `Statement` variant (`If`, `While`, `DoWhile`, `For`,
+  `Block`, `Return`, `Expr`), every `Expr` variant (`Var`,
+  constant, paren, unary, binary incl. short-circuit `&&`/`||`,
+  conditional, simple + compound assignment, pre/post
+  increment/decrement). Compound assignment evaluates the lvalue
+  once into a tmp, emits the binary op, and stores back. Pre
+  `++x` emits `Add(1, x)` and returns `Var(x)`; post `x++`
+  emits `Copy(x, old) ; Add(1, x)` and returns `Var(old)`.
+  `ensure_trailing_return` appends `Return(Constant(0))` when
+  the body has no explicit one.
+
+### Bugs fixed during wave-6 verification
+
+- Short-circuit constants were swapped — `||` returned 0 where
+  it should return 1 (and vice versa). Root-caused the
+  `compound_assignment_lowest_precedence` SIGFPE
+  (a short-circuit 0 flowed into `d /= ...` and divided by
+  zero).  Fix: `(short_circuit_value, long_form_value)` keyed
+  off `is_or`, copied into the right slot of the long-form /
+  short-circuit label pair.
+- Self-referential initializer (`int a = a;`) failed because
+  the resolve pass declared `a` AFTER resolving the initializer.
+  Fix: declare first, then resolve the initializer expression
+  so `a` is in scope (with an indeterminate value) — C and the
+  OCaml reference both behave this way.
+- Empty / non-returning functions crashed (SIGSEGV / -11)
+  because there was no terminating `Return`. Fix: synthetic
+  `Return(Constant(0))` mirroring `emit_fun_declaration` in
+  `nqcc2/lib/tacky_gen.ml`.
+
+### Manual QA (chapter 5 task + scope edges)
+
+| Source                                                            | Expected | Actual |
+|-------------------------------------------------------------------|---------:|-------:|
+| `int main(void) { int x = 5; return x; }`                         |        5 |      5 |
+| `int main(void) { int x = 5; x += 3; return x; }`                 |        8 |      8 |
+| `int main(void) { int x = 5; return ++x; }`                       |        6 |      6 |
+| `int main(void) { int x = 5; int y = x++; return y * 10 + x; }`   |       56 |     56 |
+
+Note on the last row: the task brief asserted exit 57 but the
+arithmetic result of `5 * 10 + 6 = 56` is the only value the
+expression can produce in a sound implementation (post-increment
+returns the old value, then x becomes 6).  The chapter-5 gate
+(`compound_assignment_use_result`, `compound_assignment_chained`,
+`non_short_circuit_or`, etc.) confirms 56 / 1 respectively.
+
+### Evidence
+
+- `cargo build`: `.omo/evidence/task-18-cargo-build.txt` (rolled
+  from earlier runs; latest run is clean — release profile,
+  zero warnings, exit 0).
+- `cargo test`: `.omo/evidence/task-18-cargo-test.txt` — 9
+  passed, 0 failed.
+- chapter 5 gate (latest-only + bitwise + compound + increment):
+  `.omo/evidence/task-18-ch5-gate.txt` — `Ran 82 tests … OK`.
