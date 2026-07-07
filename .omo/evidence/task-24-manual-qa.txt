@@ -1,0 +1,18 @@
+=== Chapter 8 Manual QA ===
+
+QA1: while sum
+  Source: int main(void) { int i = 0; int s = 0; while (i < 10) s += i++; return s; }
+  Expected: 45
+  Actual:   45  PASS
+
+QA2: switch dispatch
+  Source: int main(void) { int x = 1; switch (x) { case 0: return 0; case 1: return 1; case 2: return 2; default: return 99; } }
+  Expected: 1
+  Actual:   1   PASS
+
+QA3: for + break
+  Source: int main(void) { int x = 0; for (int i = 0; i < 5; i++) { if (i == 3) break; x += i; } return x; }
+  Expected: 3
+  Actual:   3   PASS
+
+All three pass.

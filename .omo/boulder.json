@@ -8,7 +8,7 @@
       "plan_name": "c-compiler-rust",
       "status": "active",
       "started_at": "2026-07-07T19:15:31.671Z",
-      "updated_at": "2026-07-07T20:33:11.906Z",
+      "updated_at": "2026-07-07T22:09:19.050Z",
       "session_ids": [
         "opencode:ses_0c241b468ffeuCkDS36rF8DZEG",
         "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2",
@@ -17,7 +17,13 @@
         "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ",
         "opencode:ses_0c1cc6b55ffee42n5g5Jw2hHhT",
         "opencode:ses_0c1c99a89ffeV8uZrL0cV4uwu0",
-        "opencode:ses_0c1c14b8bffeIS6lyCMS9AmJbf"
+        "opencode:ses_0c1c14b8bffeIS6lyCMS9AmJbf",
+        "opencode:ses_0c1b67dbdffeFiEV5303wZ6zyD",
+        "opencode:ses_0c1a47773ffePB6AWbZkihSiZ7",
+        "opencode:ses_0c19038a2ffe7EzKQLTupDDoIT",
+        "opencode:ses_0c1872311ffegi8yfTYwf2HZrL",
+        "opencode:ses_0c180b85affelQSDTnKYs7bLZT",
+        "opencode:ses_0c17a961dffeJpdd5FnWJ42kYG"
       ],
       "session_origins": {
         "opencode:ses_0c241b468ffeuCkDS36rF8DZEG": "direct",
@@ -27,7 +33,13 @@
         "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ": "appended",
         "opencode:ses_0c1cc6b55ffee42n5g5Jw2hHhT": "appended",
         "opencode:ses_0c1c99a89ffeV8uZrL0cV4uwu0": "appended",
-        "opencode:ses_0c1c14b8bffeIS6lyCMS9AmJbf": "appended"
+        "opencode:ses_0c1c14b8bffeIS6lyCMS9AmJbf": "appended",
+        "opencode:ses_0c1b67dbdffeFiEV5303wZ6zyD": "appended",
+        "opencode:ses_0c1a47773ffePB6AWbZkihSiZ7": "appended",
+        "opencode:ses_0c19038a2ffe7EzKQLTupDDoIT": "appended",
+        "opencode:ses_0c1872311ffegi8yfTYwf2HZrL": "appended",
+        "opencode:ses_0c180b85affelQSDTnKYs7bLZT": "appended",
+        "opencode:ses_0c17a961dffeJpdd5FnWJ42kYG": "appended"
       },
       "agent": "atlas",
       "task_sessions": {
@@ -134,7 +146,40 @@
           "session_id": "opencode:ses_0c1c14b8bffeIS6lyCMS9AmJbf",
           "agent": "Sisyphus-Junior",
           "category": "unspecified-high",
-          "updated_at": "2026-07-07T20:33:11.906Z"
+          "updated_at": "2026-07-07T20:33:24.863Z",
+          "ended_at": "2026-07-07T20:33:24.863Z",
+          "status": "completed"
+        },
+        "todo:14": {
+          "task_key": "todo:14",
+          "task_label": "14",
+          "task_title": "W4-T1: Chapter 3 - binary operators `+ - * / %` + parser precedence + bitwise extras `& | ^ << >>`",
+          "session_id": "opencode:ses_0c1b67dbdffeFiEV5303wZ6zyD",
+          "agent": "Sisyphus-Junior",
+          "category": "deep",
+          "updated_at": "2026-07-07T20:53:05.082Z",
+          "ended_at": "2026-07-07T20:53:05.082Z",
+          "status": "completed"
+        },
+        "todo:17": {
+          "task_key": "todo:17",
+          "task_label": "17",
+          "task_title": "W5-T1: Chapter 4 - logical (`&& || !`) and relational (`== != < > <= >=`) operators",
+          "session_id": "opencode:ses_0c1a47773ffePB6AWbZkihSiZ7",
+          "agent": "Sisyphus-Junior",
+          "category": "deep",
+          "updated_at": "2026-07-07T21:15:40.821Z",
+          "ended_at": "2026-07-07T21:15:40.821Z",
+          "status": "completed"
+        },
+        "todo:18": {
+          "task_key": "todo:18",
+          "task_label": "18",
+          "task_title": "W6-T1: Chapter 5 - local variables, assignment, lvalues + `--compound` extra (`+= -= *= /= %= &= |= ^= <<= >>=`) + `--increment` extra (`++ --` prefix/postfix)",
+          "session_id": "opencode:ses_0c17a961dffeJpdd5FnWJ42kYG",
+          "agent": "Sisyphus-Junior",
+          "category": "deep",
+          "updated_at": "2026-07-07T22:09:19.050Z"
         }
       }
     }
@@ -142,7 +187,7 @@
   "active_plan": "/home/mei/projects/rustcc/.omo/plans/c-compiler-rust.md",
   "started_at": "2026-07-07T19:15:31.671Z",
   "status": "active",
-  "updated_at": "2026-07-07T20:33:11.906Z",
+  "updated_at": "2026-07-07T22:09:19.050Z",
   "session_ids": [
     "opencode:ses_0c241b468ffeuCkDS36rF8DZEG",
     "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2",
@@ -151,7 +196,13 @@
     "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ",
     "opencode:ses_0c1cc6b55ffee42n5g5Jw2hHhT",
     "opencode:ses_0c1c99a89ffeV8uZrL0cV4uwu0",
-    "opencode:ses_0c1c14b8bffeIS6lyCMS9AmJbf"
+    "opencode:ses_0c1c14b8bffeIS6lyCMS9AmJbf",
+    "opencode:ses_0c1b67dbdffeFiEV5303wZ6zyD",
+    "opencode:ses_0c1a47773ffePB6AWbZkihSiZ7",
+    "opencode:ses_0c19038a2ffe7EzKQLTupDDoIT",
+    "opencode:ses_0c1872311ffegi8yfTYwf2HZrL",
+    "opencode:ses_0c180b85affelQSDTnKYs7bLZT",
+    "opencode:ses_0c17a961dffeJpdd5FnWJ42kYG"
   ],
   "session_origins": {
     "opencode:ses_0c241b468ffeuCkDS36rF8DZEG": "direct",
@@ -161,7 +212,13 @@
     "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ": "appended",
     "opencode:ses_0c1cc6b55ffee42n5g5Jw2hHhT": "appended",
     "opencode:ses_0c1c99a89ffeV8uZrL0cV4uwu0": "appended",
-    "opencode:ses_0c1c14b8bffeIS6lyCMS9AmJbf": "appended"
+    "opencode:ses_0c1c14b8bffeIS6lyCMS9AmJbf": "appended",
+    "opencode:ses_0c1b67dbdffeFiEV5303wZ6zyD": "appended",
+    "opencode:ses_0c1a47773ffePB6AWbZkihSiZ7": "appended",
+    "opencode:ses_0c19038a2ffe7EzKQLTupDDoIT": "appended",
+    "opencode:ses_0c1872311ffegi8yfTYwf2HZrL": "appended",
+    "opencode:ses_0c180b85affelQSDTnKYs7bLZT": "appended",
+    "opencode:ses_0c17a961dffeJpdd5FnWJ42kYG": "appended"
   },
   "plan_name": "c-compiler-rust",
   "task_sessions": {
@@ -268,7 +325,40 @@
       "session_id": "opencode:ses_0c1c14b8bffeIS6lyCMS9AmJbf",
       "agent": "Sisyphus-Junior",
       "category": "unspecified-high",
-      "updated_at": "2026-07-07T20:33:11.906Z"
+      "updated_at": "2026-07-07T20:33:24.863Z",
+      "ended_at": "2026-07-07T20:33:24.863Z",
+      "status": "completed"
+    },
+    "todo:14": {
+      "task_key": "todo:14",
+      "task_label": "14",
+      "task_title": "W4-T1: Chapter 3 - binary operators `+ - * / %` + parser precedence + bitwise extras `& | ^ << >>`",
+      "session_id": "opencode:ses_0c1b67dbdffeFiEV5303wZ6zyD",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-07-07T20:53:05.082Z",
+      "ended_at": "2026-07-07T20:53:05.082Z",
+      "status": "completed"
+    },
+    "todo:17": {
+      "task_key": "todo:17",
+      "task_label": "17",
+      "task_title": "W5-T1: Chapter 4 - logical (`&& || !`) and relational (`== != < > <= >=`) operators",
+      "session_id": "opencode:ses_0c1a47773ffePB6AWbZkihSiZ7",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-07-07T21:15:40.821Z",
+      "ended_at": "2026-07-07T21:15:40.821Z",
+      "status": "completed"
+    },
+    "todo:18": {
+      "task_key": "todo:18",
+      "task_label": "18",
+      "task_title": "W6-T1: Chapter 5 - local variables, assignment, lvalues + `--compound` extra (`+= -= *= /= %= &= |= ^= <<= >>=`) + `--increment` extra (`++ --` prefix/postfix)",
+      "session_id": "opencode:ses_0c17a961dffeJpdd5FnWJ42kYG",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-07-07T22:09:19.050Z"
     }
   },
   "agent": "atlas"

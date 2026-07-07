@@ -761,7 +761,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-13-ch2-cross-check.txt
   ```
 
-- [ ] 14. W4-T1: Chapter 3 - binary operators `+ - * / %` + parser precedence + bitwise extras `& | ^ << >>`
+- [x] 14. W4-T1: Chapter 3 - binary operators `+ - * / %` + parser precedence + bitwise extras `& | ^ << >>`
 
   **What to do**: Add the binary operator family to AST, parser (with precedence), TACKY, codegen. The bitwise extras `& | ^ << >>` also land here.
   - Extend `src/ast/operator.rs`: add `pub enum BinaryOp { Add, Sub, Mul, DivSigned, RemSigned, BitAnd, BitOr, BitXor, BitShiftLeft, BitShiftRight, ...}`. Order matters for precedence parsing.
@@ -803,7 +803,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-14-chapter-gate.txt
   ```
 
-- [ ] 15. W4-T2: Chapter 3 - codegen landing (binary ops + bitwise + double-check precedence)
+- [x] 15. W4-T2: Chapter 3 - codegen landing (binary ops + bitwise + double-check precedence)
 
   **What to do**: Run the codegen for a binary-heavy C program (e.g., a calculator-like snippet from `tests/tests/chapter_3/valid/bitwise/`) and confirm the output assembly uses `imull`, `idivl`, `andl`, `orl`, `xorl`, `sall` correctly. Update the `--chapter 3` gate by re-running. Capture evidence.
 
@@ -828,7 +828,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-15-bitwise-codegen-check.txt
   ```
 
-- [ ] 16. W4-T3: Chapter 3 - gate rerun + COACHING_LOG update + commit
+- [x] 16. W4-T3: Chapter 3 - gate rerun + COACHING_LOG update + commit
 
   **What to do**: Run `./tests/test_compiler ./target/release/rustcc --chapter 3 --latest-only --bitwise` once more, update COACHING_LOG, commit. Same protocol as W3-T2.
 
@@ -853,7 +853,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-16-ch3-final.txt
   ```
 
-- [ ] 17. W5-T1: Chapter 4 - logical (`&& || !`) and relational (`== != < > <= >=`) operators
+- [x] 17. W5-T1: Chapter 4 - logical (`&& || !`) and relational (`== != < > <= >=`) operators
 
   **What to do**: Add `||`, `&&`, `!`, `==`, `!=`, `<`, `>`, `<=`, `>=` to AST/parser/TACKY/codegen. Precedence: relational > equality > `&&` > `||`. Logical ops short-circuit (jump over right side).
   - Extend `src/ast/operator.rs` with relational/logical `BinaryOp` variants. Extend `UnaryOp` with `Not`.
@@ -935,7 +935,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-18-ch5-gate.txt
   ```
 
-- [ ] 19. W6-T2: Chapter 5 - scope shadowing + nested blocks (deferred to W8 with chapter 7). Update COACHING_LOG + commit.
+- [x] 19. W6-T2: Chapter 5 - scope shadowing + nested blocks (deferred to W8 with chapter 7). Update COACHING_LOG + commit.
 
   **Recommended Agent Profile**: `quick`.
 
@@ -943,7 +943,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
 
   **Acceptance Criteria**: gate green; log updated; commit made.
 
-- [ ] 20. W7-T1: Chapter 6 - `if`/`else`/ternary `?:` + `--goto` extra (labeled statements and `goto`)
+- [x] 20. W7-T1: Chapter 6 - `if`/`else`/ternary `?:` + `--goto` extra (labeled statements and `goto`)
 
   **What to do**: Add `if`, `if/else`, conditional expressions, and the goto extra.
   - Extend `src/ast/stmt.rs` with `If { condition, then_branch, else_branch: Option<Vec<Stmt>> }` and `Label { name: String, stmt: Box<Stmt> }` (extra) and `Goto(String)` (extra).
@@ -982,7 +982,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-20-ch6-gate.txt
   ```
 
-- [ ] 21. W7-T2: Chapter 6 - regression `chapter 5` core (no extras) still green. COACHING_LOG + commit.
+- [x] 21. W7-T2: Chapter 6 - regression `chapter 5` core (no extras) still green. COACHING_LOG + commit.
 
   **What to do**: After W7-T1 lands, run `./tests/test_compiler ./target/release/rustcc --chapter 5 --latest-only` (no extras) to confirm chapter 5 has no regression; chapter 5's gate was verified in W6-T1 but `--latest-only` isolated it - this rerun verifies the chapter 6 parser + AST extensions do not break the chapter 5 subset.
 
@@ -1011,7 +1011,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
 
   **Recommended Agent Profile**: `quick`.
 
-- [ ] 22. W8-T1: Chapter 7 - compound statements, nested blocks, shadowing
+- [x] 22. W8-T1: Chapter 7 - compound statements, nested blocks, shadowing
 
   **What to do**: Add support for `{ }` blocks with their own scope; allow variable shadowing in inner scopes.
   - Extend `src/ast/stmt.rs`: `Block(Vec<BlockItem>)` and `BlockItem = Decl | Stmt`.
@@ -1046,7 +1046,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-22-ch7-gate.txt
   ```
 
-- [ ] 23. W8-T2: Chapter 7 gate verification + commit.
+- [x] 23. W8-T2: Chapter 7 gate verification + commit.
 
   **What to do**: Run the full chapter 7 gate with extras (`--compound --goto`), update `docs/COACHING_LOG.md`, commit.
 

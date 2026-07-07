@@ -209,19 +209,30 @@ fn resolve_statement(stmt: &Statement, scopes: &mut ScopeStack) -> Result<Statem
             scopes.pop();
             Ok(Statement::Block(result?))
         }
-        Statement::While { condition, body } => Ok(Statement::While {
+        Statement::While {
+            condition,
+            body,
+            label,
+        } => Ok(Statement::While {
             condition: resolve_expr(condition, scopes)?,
             body: Box::new(resolve_statement(body, scopes)?),
+            label: label.clone(),
         }),
-        Statement::DoWhile { body, condition } => Ok(Statement::DoWhile {
+        Statement::DoWhile {
+            body,
+            condition,
+            label,
+        } => Ok(Statement::DoWhile {
             body: Box::new(resolve_statement(body, scopes)?),
             condition: resolve_expr(condition, scopes)?,
+            label: label.clone(),
         }),
         Statement::For {
             init,
             condition,
             post,
             body,
+            label,
         } => {
             // `for` opens its own scope for the init declaration so a
             // `for (int i = ...)` doesn't leak the loop variable.  The
@@ -246,12 +257,15 @@ fn resolve_statement(stmt: &Statement, scopes: &mut ScopeStack) -> Result<Statem
                 condition: resolved_condition,
                 post: resolved_post,
                 body: Box::new(body_result?),
+                label: label.clone(),
             })
         }
-        Statement::Break | Statement::Continue => Ok(stmt.clone()),
-        Statement::Switch { expr, body } => Ok(Statement::Switch {
+        Statement::Break(target) => Ok(Statement::Break(target.clone())),
+        Statement::Continue(target) => Ok(Statement::Continue(target.clone())),
+        Statement::Switch { expr, body, label } => Ok(Statement::Switch {
             expr: resolve_expr(expr, scopes)?,
             body: Box::new(resolve_statement(body, scopes)?),
+            label: label.clone(),
         }),
         Statement::Case { value, statement } => Ok(Statement::Case {
             value: resolve_expr(value, scopes)?,

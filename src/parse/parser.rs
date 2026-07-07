@@ -122,6 +122,7 @@ impl Parser {
             Ok(Statement::While {
                 condition,
                 body: Box::new(self.parse_statement()?),
+                label: String::new(),
             })
         } else if self.match_exact(&TokenKind::Do) {
             let body = Box::new(self.parse_statement()?);
@@ -130,15 +131,21 @@ impl Parser {
             let condition = self.parse_expr()?;
             self.expect_exact(&TokenKind::CloseParen, "')' after do-while condition")?;
             self.expect_exact(&TokenKind::Semicolon, "';' after do-while")?;
-            Ok(Statement::DoWhile { body, condition })
+            Ok(Statement::DoWhile {
+                body,
+                condition,
+                label: String::new(),
+            })
         } else if self.match_exact(&TokenKind::For) {
             self.parse_for_statement()
         } else if self.match_exact(&TokenKind::Break) {
+            let target = self.match_break_continue_target();
             self.expect_exact(&TokenKind::Semicolon, "';' after break")?;
-            Ok(Statement::Break)
+            Ok(Statement::Break(target))
         } else if self.match_exact(&TokenKind::Continue) {
+            let target = self.match_break_continue_target();
             self.expect_exact(&TokenKind::Semicolon, "';' after continue")?;
-            Ok(Statement::Continue)
+            Ok(Statement::Continue(target))
         } else if self.match_exact(&TokenKind::Switch) {
             self.expect_exact(&TokenKind::OpenParen, "'(' after switch")?;
             let expr = self.parse_expr()?;
@@ -146,6 +153,7 @@ impl Parser {
             Ok(Statement::Switch {
                 expr,
                 body: Box::new(self.parse_statement()?),
+                label: String::new(),
             })
         } else if self.match_exact(&TokenKind::Case) {
             let value = self.parse_expr()?;
@@ -206,6 +214,7 @@ impl Parser {
             condition,
             post,
             body: Box::new(self.parse_statement()?),
+            label: String::new(),
         })
     }
 
@@ -375,6 +384,20 @@ impl Parser {
                 Some(label)
             }
             _ => None,
+        }
+    }
+
+    /// Optional identifier after `break` / `continue`.  Empty string
+    /// means a bare `break;` / `continue;`; a non-empty value means
+    /// the chapter-8 extra `break <id>;` / `continue <id>;`.  Either
+    /// form is later rewritten by the `label_loops` pass.
+    fn match_break_continue_target(&mut self) -> String {
+        if let TokenKind::Identifier(name) = &self.peek().kind {
+            let name = name.clone();
+            self.current += 1;
+            name
+        } else {
+            String::new()
         }
     }
 

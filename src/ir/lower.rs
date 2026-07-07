@@ -21,6 +21,7 @@
 //!   lvalue expression stay well-behaved.
 
 use anyhow::Result;
+use std::collections::HashMap;
 
 use crate::ast::{
     AssignOp, BinaryOp, BlockItem, Expr, ForInit, Program, Statement, UnaryOp,
@@ -77,6 +78,19 @@ fn ensure_trailing_return(body: Vec<Instruction>) -> Vec<Instruction> {
 struct LowerCtx {
     temps: TempIdGenerator,
     labels: LabelGenerator,
+    /// Map from `case value -> dispatch label` for the switch
+    /// currently being lowered.  Set by `lower_switch` before
+    /// lowering the switch body and cleared afterwards so that
+    /// any `Case` nodes encountered inside the body emit the
+    /// matching `Label` instruction.  Supports Duff's device
+    /// where `case` labels are nested inside loops / other
+    /// constructs — every `Case` value gets exactly one entry
+    /// here, and `lower_statement` looks it up by value.
+    case_labels: Option<HashMap<i64, String>>,
+    /// Dispatch label for `default:` of the switch currently
+    /// being lowered, if any.  Same nesting semantics as
+    /// `case_labels`.
+    default_label: Option<String>,
 }
 
 impl LowerCtx {
@@ -84,6 +98,8 @@ impl LowerCtx {
         Self {
             temps: TempIdGenerator::new(),
             labels: LabelGenerator::new(),
+            case_labels: None,
+            default_label: None,
         }
     }
 
@@ -160,37 +176,60 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
             Ok(out)
         }
         Statement::Block(items) => lower_block_items(items, ctx),
-        Statement::While { condition, body } => {
-            let cond_label = ctx.labels.next_with_prefix("while_cond");
-            let end_label = ctx.labels.next_with_prefix("while_end");
+        Statement::While {
+            condition,
+            body,
+            label,
+        } => {
+            // Mirrors `emit_tacky_for_while_loop` in
+            // `nqcc2/lib/tacky_gen.ml`:
+            //   Label continue.<id>
+            //   <eval condition>
+            //   JumpIfZero c, break.<id>
+            //   <body>
+            //   Jump continue.<id>
+            //   Label break.<id>
+            let cont = continue_label(label);
+            let br = break_label(label);
             let (cond_instrs, cond_val) = lower_expr(condition, ctx)?;
             let mut out = Vec::new();
-            out.push(Instruction::Label(cond_label.clone()));
+            out.push(Instruction::Label(cont.clone()));
             out.extend(cond_instrs);
             out.push(Instruction::JumpIfZero {
                 condition: cond_val,
-                target: end_label.clone(),
+                target: br.clone(),
             });
             out.extend(lower_statement(body, ctx)?);
-            out.push(Instruction::Jump {
-                target: cond_label,
-            });
-            out.push(Instruction::Label(end_label));
+            out.push(Instruction::Jump { target: cont });
+            out.push(Instruction::Label(br));
             Ok(out)
         }
-        Statement::DoWhile { body, condition } => {
-            let start_label = ctx.labels.next_with_prefix("do_start");
-            let cond_label = ctx.labels.next_with_prefix("do_cond");
+        Statement::DoWhile {
+            body,
+            condition,
+            label,
+        } => {
+            // Mirrors `emit_tacky_for_do_loop`:
+            //   Label start_label
+            //   <body>
+            //   Label continue.<id>
+            //   <eval condition>
+            //   JumpIfNotZero c, start_label
+            //   Label break.<id>
+            let start = format!("do_start.{label}");
+            let cont = continue_label(label);
+            let br = break_label(label);
             let (cond_instrs, cond_val) = lower_expr(condition, ctx)?;
             let mut out = Vec::new();
-            out.push(Instruction::Label(start_label.clone()));
+            out.push(Instruction::Label(start.clone()));
             out.extend(lower_statement(body, ctx)?);
-            out.push(Instruction::Label(cond_label.clone()));
+            out.push(Instruction::Label(cont));
             out.extend(cond_instrs);
             out.push(Instruction::JumpIfNotZero {
                 condition: cond_val,
-                target: start_label,
+                target: start,
             });
+            out.push(Instruction::Label(br));
             Ok(out)
         }
         Statement::For {
@@ -198,9 +237,19 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
             condition,
             post,
             body,
+            label,
         } => {
-            let start_label = ctx.labels.next_with_prefix("for_start");
-            let end_label = ctx.labels.next_with_prefix("for_end");
+            // Mirrors `emit_tacky_for_for_loop`:
+            //   <init>
+            //   Label start_label
+            //   <eval condition>; JumpIfZero c, break.<id>
+            //   <body>
+            //   Label continue.<id>; <post>
+            //   Jump start_label
+            //   Label break.<id>
+            let start = format!("for_start.{label}");
+            let cont = continue_label(label);
+            let br = break_label(label);
             let mut out = Vec::new();
             if let Some(init) = init {
                 match init {
@@ -220,24 +269,23 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
                     }
                 }
             }
-            out.push(Instruction::Label(start_label.clone()));
+            out.push(Instruction::Label(start.clone()));
             if let Some(condition) = condition {
                 let (cond_instrs, cond_val) = lower_expr(condition, ctx)?;
                 out.extend(cond_instrs);
                 out.push(Instruction::JumpIfZero {
                     condition: cond_val,
-                    target: end_label.clone(),
+                    target: br.clone(),
                 });
             }
             out.extend(lower_statement(body, ctx)?);
+            out.push(Instruction::Label(cont));
             if let Some(post) = post {
                 let (instrs, _val) = lower_expr(post, ctx)?;
                 out.extend(instrs);
             }
-            out.push(Instruction::Jump {
-                target: start_label,
-            });
-            out.push(Instruction::Label(end_label));
+            out.push(Instruction::Jump { target: start });
+            out.push(Instruction::Label(br));
             Ok(out)
         }
         Statement::Goto(target) => Ok(vec![Instruction::Jump {
@@ -249,11 +297,244 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
             out.extend(lower_statement(statement, ctx)?);
             Ok(out)
         }
-        Statement::Break | Statement::Continue => Ok(Vec::new()),
-        Statement::Switch { .. } | Statement::Case { .. } | Statement::Default { .. } => {
-            Ok(Vec::new())
+        Statement::Break(target) => Ok(vec![Instruction::Jump {
+            target: break_label(target),
+        }]),
+        Statement::Continue(target) => Ok(vec![Instruction::Jump {
+            target: continue_label(target),
+        }]),
+        Statement::Switch { expr, body, label } => lower_switch(expr, body, label, ctx),
+        Statement::Case { value, statement } => {
+            // `Case` nodes are only ever encountered while
+            // lowering a switch body — the outer switch has
+            // populated `ctx.case_labels` with the dispatch
+            // labels.  Emit the matching label, then lower the
+            // case's own statement.
+            let label = match value {
+                Expr::Constant(n) => ctx
+                    .case_labels
+                    .as_ref()
+                    .and_then(|m| m.get(&i64::from(*n)).cloned())
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "lower: case {} outside of any switch dispatch",
+                            i64::from(*n)
+                        )
+                    })?,
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "lower: switch case value must be a constant integer"
+                    ))
+                }
+            };
+            let mut out = vec![Instruction::Label(label)];
+            out.extend(lower_statement(statement, ctx)?);
+            Ok(out)
+        }
+        Statement::Default { statement } => {
+            // Same story as `Case`: emit the default label
+            // (populated by the enclosing switch), then lower
+            // the default's own statement.
+            let label = ctx.default_label.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("lower: `default` outside of any switch")
+            })?;
+            let mut out = vec![Instruction::Label(label.clone())];
+            out.extend(lower_statement(statement, ctx)?);
+            Ok(out)
         }
     }
+}
+
+/// Lower a `switch (expr) body`.
+///
+/// The lowering has two phases:
+///
+/// 1. **Dispatch** — walk `body` (recursively, so nested
+///    `Case`/`Default` inside loops / `if`s / other switches are
+///    picked up; this matches Duff's device where case labels are
+///    scattered through nested constructs) and collect every
+///    case value in source order, plus optionally one `default`.
+///    Then emit the canonical chain:
+///
+///    ```text
+///      eval(expr) -> v
+///      for each case value (in source order):
+///          copy v to tmp
+///          sub tmp, case_value
+///          JumpIfZero tmp, case.<i>.<switch_label>
+///      jump to default_label if any, else jump to switch_end
+///    ```
+///
+/// 2. **Body** — lower `body` via the normal `lower_statement`
+///    path.  `Case` and `Default` nodes emit a `Label` using the
+///    case-label map stored on `ctx`; everything else falls
+///    through normally.  This means case labels appear inside the
+///    body wherever the C source put them — including inside
+///    nested loops / `if`s — and the dispatch's `case.<i>` jumps
+///    land on the same labels that the body emits at those
+///    positions.
+///
+/// `break;` jumps to `switch_end` (= `break.<label>`); the
+/// `label_loops` pass already filled in that target.
+fn lower_switch(
+    expr: &Expr,
+    body: &Statement,
+    label: &str,
+    ctx: &mut LowerCtx,
+) -> Result<Vec<Instruction>> {
+    let switch_end = break_label(label);
+    let default_label = format!("default.{label}");
+
+    // Phase 1: collect all case values (recursively) and the
+    // presence of a default.  Assign sequential indices so the
+    // dispatch's `case.<i>` matches the label that the body
+    // emits for that occurrence.
+    let mut case_values: Vec<i64> = Vec::new();
+    let mut has_default = false;
+    collect_switch_dispatch(body, &mut case_values, &mut has_default)?;
+
+    // Save any outer switch's state so a nested switch doesn't
+    // clobber it.
+    let saved_case_labels = ctx.case_labels.take();
+    let saved_default_label = ctx.default_label.take();
+
+    let mut case_label_map: HashMap<i64, String> = HashMap::new();
+    for (i, v) in case_values.iter().enumerate() {
+        case_label_map.insert(*v, format!("case.{i}.{label}"));
+    }
+    ctx.case_labels = Some(case_label_map);
+    ctx.default_label = if has_default {
+        Some(default_label.clone())
+    } else {
+        None
+    };
+
+    let (eval_instrs, switch_val) = lower_expr(expr, ctx)?;
+    let mut out = eval_instrs;
+
+    for case_val in &case_values {
+        let case_label = format!("case.{}.{label}", case_label_index(case_val, &case_values));
+        let tmp = ctx.fresh_tmp();
+        out.push(Instruction::Copy {
+            src: switch_val.clone(),
+            dst: tmp.clone(),
+        });
+        out.push(Instruction::Sub {
+            src: Val::Constant(*case_val),
+            dst: tmp.clone(),
+        });
+        out.push(Instruction::JumpIfZero {
+            condition: Val::Var(tmp),
+            target: case_label,
+        });
+    }
+
+    let default_target = if has_default {
+        default_label.clone()
+    } else {
+        switch_end.clone()
+    };
+    out.push(Instruction::Jump {
+        target: default_target,
+    });
+
+    // Phase 2: lower the body normally.  `Case` and `Default`
+    // nodes encountered here emit `Label` instructions via
+    // `ctx.case_labels` / `ctx.default_label`; everything else
+    // lowers as it would outside a switch.
+    out.extend(lower_statement(body, ctx)?);
+
+    out.push(Instruction::Label(switch_end));
+
+    // Restore outer switch state (or clear if this was the
+    // outermost switch).
+    ctx.case_labels = saved_case_labels;
+    ctx.default_label = saved_default_label;
+
+    Ok(out)
+}
+
+/// Find the dispatch index of a given case value in the
+/// collected list.  O(n) but the case lists are tiny.
+fn case_label_index(value: &i64, values: &[i64]) -> usize {
+    values.iter().position(|v| v == value).unwrap_or(0)
+}
+
+/// Walk `stmt` collecting every `Case` value (recursively into
+/// nested constructs) and recording whether a `default:` exists.
+/// The order of `case_values` matches source order, which is
+/// what determines the dispatch's `case.<i>` numbering.
+fn collect_switch_dispatch(
+    stmt: &Statement,
+    case_values: &mut Vec<i64>,
+    has_default: &mut bool,
+) -> Result<()> {
+    match stmt {
+        Statement::Block(items) => {
+            for item in items {
+                if let BlockItem::Statement(s) = item {
+                    collect_switch_dispatch(s, case_values, has_default)?;
+                }
+            }
+            Ok(())
+        }
+        Statement::Case { value, statement } => {
+            let v = match value {
+                Expr::Constant(n) => i64::from(*n),
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "lower: switch case value must be a constant integer"
+                    ))
+                }
+            };
+            case_values.push(v);
+            // Recurse into the case body — Duff's device has
+            // case labels nested inside loops / ifs that are
+            // themselves inside a case's body.
+            collect_switch_dispatch(statement, case_values, has_default)
+        }
+        Statement::Default { statement } => {
+            *has_default = true;
+            collect_switch_dispatch(statement, case_values, has_default)
+        }
+        Statement::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_switch_dispatch(then_branch, case_values, has_default)?;
+            if let Some(else_branch) = else_branch {
+                collect_switch_dispatch(else_branch, case_values, has_default)?;
+            }
+            Ok(())
+        }
+        Statement::While { body, .. } | Statement::DoWhile { body, .. } => {
+            collect_switch_dispatch(body, case_values, has_default)
+        }
+        Statement::For { body, .. } => collect_switch_dispatch(body, case_values, has_default),
+        Statement::Switch { .. } => {
+            // A nested switch has its own dispatch; its
+            // cases belong to that inner switch, not to us.
+            // `lower_switch` saves and restores the outer
+            // switch's case-label map, so the inner switch
+            // gets a fresh map of its own.
+            Ok(())
+        }
+        Statement::Labeled { statement, .. } => {
+            collect_switch_dispatch(statement, case_values, has_default)
+        }
+        // Everything else (expressions, returns, declarations,
+        // gotos, etc.) carries no case/default.
+        _ => Ok(()),
+    }
+}
+
+fn break_label(id: &str) -> String {
+    format!("break.{id}")
+}
+
+fn continue_label(id: &str) -> String {
+    format!("continue.{id}")
 }
 
 fn lower_expr(expr: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)> {
