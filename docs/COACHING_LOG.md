@@ -649,3 +649,131 @@ before W7-T1):
 - chapter 6 gate (latest-only + bitwise + compound +
   increment + goto):
   `.omo/evidence/task-20-ch6-gate.txt` — `Ran 68 tests … OK`.
+
+---
+
+## Wave 8 / W8-T1 — Chapter 7 compound statements
+
+### Working mode
+- Focused executor (Sisyphus-Junior). Direct implementation against the
+  plan; no interview gate.
+
+### Scope
+- Add compound statements (`{ ... }` blocks) with nested scopes and
+  variable shadowing.  Per-block scope stack; declarations get unique
+  names; references resolve innermost-first; inner-scope bindings
+  shadow outer-scope bindings on re-declaration.
+
+### Outcome
+
+- `cargo build --release` → exit 0, zero warnings.
+- `cargo test --release` → 9 passed, 0 failed.
+- `./tests/test_compiler ./target/release/rustcc --chapter 7
+   --latest-only --compound --goto` → 27 / 27 tests pass (all green).
+- Chapter 1-7 cumulative regression (with the same extra-credit
+  flags) → 298 / 298 tests pass (no regressions).
+- Manual QA scenarios all match the expected exit codes:
+  shadowed inner x does not leak, inner block does not pollute the
+  outer scope, deep-nested return surfaces the inner binding.
+
+### Pipeline changes
+
+The parser, IR, codegen, and replace-pseudos paths were already in
+place from earlier waves (the AST's `Statement::Block(Vec<BlockItem>)`
+existed and the parser already handled `{ items }` as a recursive
+block, and `replace_pseudos` already allocates a fresh stack slot
+per unique pseudo name); the new work was concentrated in the
+semantic-analysis phase:
+
+- `src/semantics/resolve.rs` — promoted the chapter-5 flat scope
+  tracker to a true per-block scope stack that **mangles names**
+  on the way through.  Each `Block` / `For` arm opens a fresh inner
+  scope (push), each `declare` mints a globally unique name
+  (`x` → `x.0`, `x.1`, …, mirroring the OCaml
+  `Unique_ids.make_named_temporary` helper), and each `Var(name)`
+  reference is rewritten to the unique name from the nearest
+  enclosing scope (innermost-first lookup).  Walking out of a block
+  pops the inner scope so the outer binding is naturally visible
+  again.  `resolve_program` now returns a new `Program` whose
+  declarations and references use the unique names; the lowerer
+  consumes the resolved AST verbatim and the codegen / replace-
+  pseudos stages naturally map each unique name to its own
+  `Stack(offset)` slot.
+  - Declaration order matches C99 / OCaml: `int a = init` declares
+    `a` in the current scope **before** resolving `init`, so
+    `int a = a + 1` references the new `a` (the
+    `assign_to_self_2` test in chapter 7 relies on this).
+  - Duplicate detection stays in the current scope; shadowing
+    across nested scopes is allowed by design.
+  - Undeclared references still fail with a precise error
+    message; the resolve pass is now the single source of truth
+    for both name-mangling and undeclared-variable rejection.
+- `src/ir/lower.rs`, `src/codegen/codegen.rs`, and
+  `src/codegen/replace_pseudos.rs` — verified end-to-end that the
+  resolved unique names flow through unchanged.  The lowerer emits
+  `Copy { src, dst: <unique_name> }` and the assembly emitter maps
+  each unique pseudo to its own `Stack(offset)` via
+  `ReplaceState::resolve`, which already does `entry.or_insert`
+  on the pseudo map.  No new offsets to track — the per-block
+  "release" of stack slots is implicit in the
+  monotonic-grow / never-shrink `stack_size` counter, while the
+  unique-name guarantee prevents accidental cross-scope aliasing.
+- `src/parse/parser.rs::parse_statement` — verified that the
+  existing `OpenBrace` arm in `parse_statement` already produced
+  `Statement::Block(Vec<BlockItem>)`, so the chapter-7 grammar
+  (`{ <block-item>* }` with `block-item ::= decl | stmt`) was
+  already wired.  No changes required.
+
+### Manual QA (chapter 7 + shadowing edges)
+
+| Source                                                                          | Expected | Actual |
+|---------------------------------------------------------------------------------|---------:|-------:|
+| `int main(void) { int x = 1; { int x = 5; } return x; }`                         |        1 |      1 |
+| `int main(void) { int x = 1; { int y = 7; } return x + 0; }`                     |        1 |      1 |
+| `int main(void) { { int x = 3; { int y = 4; } return x; } }`                     |        3 |      3 |
+
+All three exercise the new per-block scope stack:
+- Row 1: inner `x = 5` is a shadow of the outer `x`; on block exit
+  the outer `x` (value 1) is what `return x` reads.
+- Row 2: inner `y = 7` does not pollute the outer scope; the
+  return sees only the outer `x` (value 1).
+- Row 3: three nested blocks; only the innermost-but-one binding of
+  `x` is live when `return x;` runs.
+
+### Test gates flipped green
+
+- `assign_to_self_2` (chapter 7 valid) — `int a = 3; { int a = a
+  = 4; } return a;` returns 3.  The `a = 4` on the right of the
+  inner `int a = ...` declaration references the **inner** `a`
+  (because the inner `a` is in scope for the init), so only the
+  inner binding is set to 4; the outer `a` is untouched.
+- `hidden_then_visible` (chapter 7 valid) — `int a = 2; int b; { a
+  = -4; int a = 7; b = a + 1; } return b == 8 && a == -4;`
+  returns 1.  Pre-declaration `a = -4` resolves to the outer
+  binding; post-declaration `a + 1` resolves to the inner binding
+  (= 7), so `b = 8`; the outer `a` stayed at -4.
+- `similar_var_names` (chapter 7 valid) — the deeply-nested
+  `a` / `a1` shadow test returns 28 (= 20 + 5 + 2 + 1).  The
+  per-block scope stack guarantees the inner `a1` (value 2) is
+  used in the same scope and the outer `a1` (value 1) is used
+  after the scope exits.
+- `--goto` extra-credit tests in chapter 7
+  (`goto_before_declaration`, `goto_outer_scope`) now compile and
+  run correctly because the resolve pass leaves label names alone
+  (only variables are mangled) and the lowerer's
+  `mangle_user_label` keeps the assembly label namespace
+  disjoint.
+
+### Evidence
+
+- `cargo build`: `.omo/evidence/task-22-cargo-build.txt` — zero
+  warnings, exit 0.
+- `cargo test`: `.omo/evidence/task-22-cargo-test.txt` — 9
+  passed, 0 failed.
+- chapter 7 gate (latest-only + compound + goto):
+  `.omo/evidence/task-22-ch7-gate.txt` — `Ran 27 tests … OK`.
+- chapter 1-7 cumulative (compound + bitwise + increment + goto):
+  `.omo/evidence/task-22-ch7-cumulative.txt` — `Ran 298 tests …
+  OK`.
+- manual QA: `.omo/evidence/task-22-manual-qa.txt` — all three
+  rows match expected exit codes.
