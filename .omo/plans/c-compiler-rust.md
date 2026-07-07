@@ -466,7 +466,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-6-semantics-ir-scaffold.txt
   ```
 
-- [ ] 7. W0-T7: Verify the foundation rewrite is clean (zero warnings, no stale fingerprints, all unit tests pass)
+- [x] 7. W0-T7: Verify the foundation rewrite is clean (zero warnings, no stale fingerprints, all unit tests pass)
 
   **What to do**: After W0-T1..T6 are complete, run a comprehensive grep + build + test sweep. Confirm:
   - `cargo build --release` reports zero warnings, exit 0.
@@ -509,7 +509,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-7-wave0-gate.txt
   ```
 
-- [ ] 8. W1-T1: Port `nqcc2/lib/lex.ml` + `nqcc2/lib/tokens.ml` to `src/lex/`
+- [x] 8. W1-T1: Port `nqcc2/lib/lex.ml` + `nqcc2/lib/tokens.ml` to `src/lex/`
 
   **What to do**:
   - Open `nqcc2/lib/tokens.ml` (lexer token types) and mirror exactly into `src/lex/token.rs`. Replace the existing 88-LOC `src/lex/token.rs` with the book-faithful types: `pub enum Token { Identifier(String), IntConstant(i64), LongConstant(i64), UIntConstant(u64), ULongConstant(u64), DoubleConstant(f64), CharConstant(i64), StringConstant(String), Keyword(Keyword), Punct(Punct) }` (the book introduces new tokens chapter by chapter; in this port, define all tokens up front since the test suite asserts on every token at the right chapter; see `nqcc2/lib/tokens.ml` for the canonical list).

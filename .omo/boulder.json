@@ -8,18 +8,20 @@
       "plan_name": "c-compiler-rust",
       "status": "active",
       "started_at": "2026-07-07T19:15:31.671Z",
-      "updated_at": "2026-07-07T19:48:57.671Z",
+      "updated_at": "2026-07-07T20:04:34.633Z",
       "session_ids": [
         "opencode:ses_0c241b468ffeuCkDS36rF8DZEG",
         "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2",
         "opencode:ses_0c1eae4a0ffeZB0ZIlWOZu4OKb",
-        "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ"
+        "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ",
+        "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ"
       ],
       "session_origins": {
         "opencode:ses_0c241b468ffeuCkDS36rF8DZEG": "direct",
         "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2": "appended",
         "opencode:ses_0c1eae4a0ffeZB0ZIlWOZu4OKb": "appended",
-        "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ": "appended"
+        "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ": "appended",
+        "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ": "appended"
       },
       "agent": "atlas",
       "task_sessions": {
@@ -80,9 +82,20 @@
           "session_id": "opencode:ses_0c1e174d0ffeWNYpliACg0LHnn",
           "agent": "Sisyphus-Junior",
           "category": "quick",
-          "updated_at": "2026-07-07T19:48:57.671Z",
+          "updated_at": "2026-07-07T19:49:26.372Z",
           "started_at": "2026-07-07T19:48:57.671Z",
-          "status": "running"
+          "status": "completed",
+          "ended_at": "2026-07-07T19:49:26.372Z",
+          "elapsed_ms": 28701
+        },
+        "todo:8": {
+          "task_key": "todo:8",
+          "task_label": "8",
+          "task_title": "W1-T1: Port `nqcc2/lib/lex.ml` + `nqcc2/lib/tokens.ml` to `src/lex/`",
+          "session_id": "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "updated_at": "2026-07-07T20:04:34.633Z"
         }
       }
     }
@@ -90,18 +103,20 @@
   "active_plan": "/home/mei/projects/rustcc/.omo/plans/c-compiler-rust.md",
   "started_at": "2026-07-07T19:15:31.671Z",
   "status": "active",
-  "updated_at": "2026-07-07T19:48:57.671Z",
+  "updated_at": "2026-07-07T20:04:34.633Z",
   "session_ids": [
     "opencode:ses_0c241b468ffeuCkDS36rF8DZEG",
     "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2",
     "opencode:ses_0c1eae4a0ffeZB0ZIlWOZu4OKb",
-    "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ"
+    "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ",
+    "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ"
   ],
   "session_origins": {
     "opencode:ses_0c241b468ffeuCkDS36rF8DZEG": "direct",
     "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2": "appended",
     "opencode:ses_0c1eae4a0ffeZB0ZIlWOZu4OKb": "appended",
-    "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ": "appended"
+    "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ": "appended",
+    "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ": "appended"
   },
   "plan_name": "c-compiler-rust",
   "task_sessions": {
@@ -162,9 +177,20 @@
       "session_id": "opencode:ses_0c1e174d0ffeWNYpliACg0LHnn",
       "agent": "Sisyphus-Junior",
       "category": "quick",
-      "updated_at": "2026-07-07T19:48:57.671Z",
+      "updated_at": "2026-07-07T19:49:26.372Z",
       "started_at": "2026-07-07T19:48:57.671Z",
-      "status": "running"
+      "status": "completed",
+      "ended_at": "2026-07-07T19:49:26.372Z",
+      "elapsed_ms": 28701
+    },
+    "todo:8": {
+      "task_key": "todo:8",
+      "task_label": "8",
+      "task_title": "W1-T1: Port `nqcc2/lib/lex.ml` + `nqcc2/lib/tokens.ml` to `src/lex/`",
+      "session_id": "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-07-07T20:04:34.633Z"
     }
   },
   "agent": "atlas"
