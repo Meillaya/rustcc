@@ -8,7 +8,7 @@
       "plan_name": "c-compiler-rust",
       "status": "active",
       "started_at": "2026-07-07T19:15:31.671Z",
-      "updated_at": "2026-07-07T20:21:15.424Z",
+      "updated_at": "2026-07-07T20:33:11.906Z",
       "session_ids": [
         "opencode:ses_0c241b468ffeuCkDS36rF8DZEG",
         "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2",
@@ -16,7 +16,8 @@
         "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ",
         "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ",
         "opencode:ses_0c1cc6b55ffee42n5g5Jw2hHhT",
-        "opencode:ses_0c1c99a89ffeV8uZrL0cV4uwu0"
+        "opencode:ses_0c1c99a89ffeV8uZrL0cV4uwu0",
+        "opencode:ses_0c1c14b8bffeIS6lyCMS9AmJbf"
       ],
       "session_origins": {
         "opencode:ses_0c241b468ffeuCkDS36rF8DZEG": "direct",
@@ -25,7 +26,8 @@
         "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ": "appended",
         "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ": "appended",
         "opencode:ses_0c1cc6b55ffee42n5g5Jw2hHhT": "appended",
-        "opencode:ses_0c1c99a89ffeV8uZrL0cV4uwu0": "appended"
+        "opencode:ses_0c1c99a89ffeV8uZrL0cV4uwu0": "appended",
+        "opencode:ses_0c1c14b8bffeIS6lyCMS9AmJbf": "appended"
       },
       "agent": "atlas",
       "task_sessions": {
@@ -124,6 +126,15 @@
           "agent": "Sisyphus-Junior",
           "category": "deep",
           "updated_at": "2026-07-07T20:21:15.424Z"
+        },
+        "todo:12": {
+          "task_key": "todo:12",
+          "task_label": "12",
+          "task_title": "W3-T1: Chapter 2 - unary `-` and `~` operators (parser, AST, TACKY, codegen)",
+          "session_id": "opencode:ses_0c1c14b8bffeIS6lyCMS9AmJbf",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "updated_at": "2026-07-07T20:33:11.906Z"
         }
       }
     }
@@ -131,7 +142,7 @@
   "active_plan": "/home/mei/projects/rustcc/.omo/plans/c-compiler-rust.md",
   "started_at": "2026-07-07T19:15:31.671Z",
   "status": "active",
-  "updated_at": "2026-07-07T20:21:15.424Z",
+  "updated_at": "2026-07-07T20:33:11.906Z",
   "session_ids": [
     "opencode:ses_0c241b468ffeuCkDS36rF8DZEG",
     "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2",
@@ -139,7 +150,8 @@
     "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ",
     "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ",
     "opencode:ses_0c1cc6b55ffee42n5g5Jw2hHhT",
-    "opencode:ses_0c1c99a89ffeV8uZrL0cV4uwu0"
+    "opencode:ses_0c1c99a89ffeV8uZrL0cV4uwu0",
+    "opencode:ses_0c1c14b8bffeIS6lyCMS9AmJbf"
   ],
   "session_origins": {
     "opencode:ses_0c241b468ffeuCkDS36rF8DZEG": "direct",
@@ -148,7 +160,8 @@
     "opencode:ses_0c1eae419ffeMR46XFZfYARRFZ": "appended",
     "opencode:ses_0c1dece53ffelxwscl9MrpZzHQ": "appended",
     "opencode:ses_0c1cc6b55ffee42n5g5Jw2hHhT": "appended",
-    "opencode:ses_0c1c99a89ffeV8uZrL0cV4uwu0": "appended"
+    "opencode:ses_0c1c99a89ffeV8uZrL0cV4uwu0": "appended",
+    "opencode:ses_0c1c14b8bffeIS6lyCMS9AmJbf": "appended"
   },
   "plan_name": "c-compiler-rust",
   "task_sessions": {
@@ -247,6 +260,15 @@
       "agent": "Sisyphus-Junior",
       "category": "deep",
       "updated_at": "2026-07-07T20:21:15.424Z"
+    },
+    "todo:12": {
+      "task_key": "todo:12",
+      "task_label": "12",
+      "task_title": "W3-T1: Chapter 2 - unary `-` and `~` operators (parser, AST, TACKY, codegen)",
+      "session_id": "opencode:ses_0c1c14b8bffeIS6lyCMS9AmJbf",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-07-07T20:33:11.906Z"
     }
   },
   "agent": "atlas"

@@ -38,6 +38,7 @@ pub mod replace_pseudos;
 
 pub use assembly::{
     AsmProgram, BinaryOpInstr, ConditionCode, Instr, Operand, Reg, StaticInit, TopLevel,
+    UnaryOpInstr,
 };
 pub use codegen::generate;
 pub use emit::emit;

@@ -693,7 +693,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-11-chapter-gate.txt
   ```
 
-- [ ] 12. W3-T1: Chapter 2 - unary `-` and `~` operators (parser, AST, TACKY, codegen)
+- [x] 12. W3-T1: Chapter 2 - unary `-` and `~` operators (parser, AST, TACKY, codegen)
 
   **What to do**: Add unary operators to the AST, parser, and TACKY lowering.
   - Extend `src/ast/expr.rs`: add `UnaryOp` enum (`Negate`, `Complement`) and `Expr::Unary { op: UnaryOp, expr: Box<Expr> }` variant. Add unary-related fields to `src/ast/operator.rs` if needed.
@@ -732,7 +732,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-12-chapter-gate.txt
   ```
 
-- [ ] 13. W3-T2: Chapter 2 - chapter gate verification + COACHING_LOG update
+- [x] 13. W3-T2: Chapter 2 - chapter gate verification + COACHING_LOG update
 
   **What to do**: Run `./tests/test_compiler ./target/release/rustcc --chapter 2 --latest-only` and update `docs/COACHING_LOG.md` with the wave-3 chapter gate having been actually run. Capture stdout+stderr to `.omo/evidence/`.
 

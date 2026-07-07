@@ -1,0 +1,8 @@
+=== Scenario 1: return -3; expected: 253 (0xFFFFFFFD) ===
+exit=253
+=== Scenario 2: return ~0; expected: 255 ===
+exit=255
+=== Scenario 3: return -(-3); expected: 3 ===
+exit=3
+=== Scenario 4: return ~~5; expected: 5 ===
+exit=5

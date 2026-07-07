@@ -79,6 +79,16 @@ pub enum BinaryOpInstr {
     DivDoubleDouble,
 }
 
+/// The unary operator carried by `Instr::Unary`. Mirrors
+/// `nqcc2/lib/assembly.ml` `unary_operator`. Chapter 2 covers `Neg`
+/// (`negl`) and `Not` (`notl`); `Shr` arrives in chapter 19.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum UnaryOpInstr {
+    Neg,
+    Not,
+    Shr,
+}
+
 /// x86-64 condition codes used by `JmpCC` and `SetCC`. `P` (parity) is
 /// included because `setCC` may be emitted by later chapters.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -131,6 +141,10 @@ pub enum Instr {
     },
     Idiv(Operand),
     Cdq,
+    Unary {
+        op: UnaryOpInstr,
+        operand: Operand,
+    },
     Call(String),
     Ret,
     Push(Operand),

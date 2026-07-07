@@ -4,15 +4,17 @@
 //! plus pattern matching makes every compiler phase handle each expression kind
 //! explicitly.
 
-use super::operator::{AssignOp, BinaryOp};
+use super::operator::{AssignOp, BinaryOp, UnaryOp};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Expr {
     Constant(i32),
     Var(String),
     Paren(Box<Expr>),
-    Negate(Box<Expr>),
-    Complement(Box<Expr>),
+    Unary {
+        op: UnaryOp,
+        expr: Box<Expr>,
+    },
     LogicalNot(Box<Expr>),
     PreInc(Box<Expr>),
     PreDec(Box<Expr>),

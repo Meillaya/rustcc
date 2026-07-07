@@ -11,7 +11,7 @@
 
 use anyhow::{Result, bail};
 
-use crate::ast::{AssignOp, BinaryOp, BlockItem, Expr, ForInit, Function, Program, Statement};
+use crate::ast::{AssignOp, BinaryOp, BlockItem, Expr, ForInit, Function, Program, Statement, UnaryOp};
 use crate::lex::{Token, TokenKind};
 
 pub(crate) fn parse_program(tokens: Vec<Token>) -> Result<Program> {
@@ -291,11 +291,17 @@ impl Parser {
             }
             TokenKind::Minus => {
                 self.current += 1;
-                Ok(Expr::Negate(Box::new(self.parse_unary_expr()?)))
+                Ok(Expr::Unary {
+                    op: UnaryOp::Negate,
+                    expr: Box::new(self.parse_unary_expr()?),
+                })
             }
             TokenKind::Tilde => {
                 self.current += 1;
-                Ok(Expr::Complement(Box::new(self.parse_unary_expr()?)))
+                Ok(Expr::Unary {
+                    op: UnaryOp::Complement,
+                    expr: Box::new(self.parse_unary_expr()?),
+                })
             }
             TokenKind::Bang => {
                 self.current += 1;

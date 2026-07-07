@@ -20,6 +20,14 @@ pub(crate) enum AssignOp {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UnaryOp {
+    /// `-<expr>` — additive inverse.
+    Negate,
+    /// `~<expr>` — bitwise NOT.
+    Complement,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BinaryOp {
     Add,
     Subtract,
