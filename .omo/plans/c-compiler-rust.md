@@ -1635,7 +1635,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   ```
 
 
-- [ ] 44. W17-T1: Chapter 16 - characters and string literals
+- [x] 44. W17-T1: Chapter 16 - characters and string literals
 
   **What to do**: Add `char` and string/char literals.
   - Extend AST `Type` with `Char`.
@@ -1660,7 +1660,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   - [ ] `int main(void) { char *s = "hello"; return s[0]; }` -> exit 104.
   - [ ] `./tests/test_compiler ./target/release/rustcc --chapter 16 --latest-only` green.
 
-- [ ] 45. W17-T2: Chapter 16 - gate verification + commit.
+- [x] 45. W17-T2: Chapter 16 - gate verification + commit.
 
   **What to do**: Run chapter 16 gate (chars and string literals), update COACHING_LOG, commit.
 
