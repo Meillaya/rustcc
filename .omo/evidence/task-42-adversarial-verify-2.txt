@@ -1,0 +1,462 @@
+recommendation: APPROVE
+blockers: []
+originalIntent: Complete task 42 / W16-T1 Chapter 15 arrays and pointer arithmetic in the native Rust compiler, preserving the strict no-system-C-bridge requirement. Required user-visible result is a native rustcc that passes the Chapter 15 latest-only harness and does not regress Chapter 14 pointers or Chapter 13 NaN behavior.
+desiredOutcome: cargo build/test pass; chapter 15 latest-only pass; chapter 14 latest-only pass; chapter 13 latest-only --nan pass; manual native probes show Chapter 15 array/pointer lowering and executable behavior; forbidden bridge/bypass strings absent from src; dirty worktree understood; no plan checkbox/commit changes by this verifier.
+userOutcomeReview: APPROVE. The current worktree satisfies the user's requested outcome from an end-user perspective: ./target/release/rustcc compiles and runs Chapter 15 arrays/pointer arithmetic through the native pipeline, the official Chapter 15 latest-only harness reports 83/83 OK, and Chapter 14/13 regression gates remain OK. The approval is for the current dirty worktree state, not for a commit.
+
+checkedArtifactPaths:
+  - .omo/plans/c-compiler-rust.md (task 42 read; task 42 checkbox remains unchecked)
+  - .omo/evidence/task-42-native-followup-failures.txt (prior 16-failure rejection read)
+  - .omo/evidence/task-42-executor-fix.txt (executor DoneClaim evidence read)
+  - .omo/evidence/task-42-code-review.txt (slop/code-review report read; status section is stale but includes no-bridge/no-overfit checks)
+  - .omo/evidence/task-42-manual-qa.txt (manual QA matrix read; stale before executor ZeroExtend fix)
+  - .omo/evidence/task-42-debugger-diagnosis.txt (diagnosis map read)
+  - .omx/notepad.md (exists; not modified)
+  - src/codegen/codegen.rs (current source inspected via codegraph; diff inspected)
+  - src/toolchain.rs (confirmed gcc is only preprocessor/assembler/linker boundary)
+  - /tmp/task42-required-verify-2.log (raw required command log copied below)
+  - /tmp/task42-manual-probes-2.log (raw manual probe log copied below)
+  - /tmp/task42-zeroextend-scan-2.log (raw chapter 15 ZeroExtend scan copied below)
+  - /tmp/task42-zeroextend-codegen-2.log (raw ZeroExtend codegen probe copied below)
+
+evidenceGaps:
+  - The repo remains intentionally dirty with broad task-42 implementation files; this verifier did not commit and did not mark task 42 complete.
+  - .omo/evidence/task-42-code-review.txt and task-42-manual-qa.txt are stale in their final status because they predate the executor's ZeroExtend fix; independent commands in this review supersede them.
+  - Static/security scanner was not separately configured or run; cargo build/test and official harness gates were run as requested.
+
+semanticSanity:
+  - src/codegen/codegen.rs now explicitly handles Instruction::ZeroExtend at lower_instruction lines 507-525 before the catch-all, lowering via 32-bit Mov into R10 followed by Movq to the destination pseudo. This is native x86-64 zero-extension behavior and is not a catch-all drop.
+  - Instruction::AddPtr is explicitly handled at lines 1416-1465 using native index scaling and LEA.
+  - convert_static_init handles aggregate static initialization and byte-array zero sizing; generate uses it for static variables.
+  - The remaining `_ => Vec::new()` catch-all is still present, but ZeroExtend/AddPtr are not relying on it.
+
+removeAiSlopsProgrammingPass:
+  - Required skills consulted: omo:remove-ai-slops and omo:programming, including Rust reference.
+  - Tests/harness were not modified: git diff -- tests has 0 lines.
+  - Direct overfit/slop check found no excessive/useless tests, deletion-only tests, tautological tests, or implementation-mirroring tests introduced by this task.
+  - Direct production scan found no forbidden bridge strings, debug leftovers, TODO DEBUG/HACK/XXX/breakpoint, unwrap/expect/panic/unsafe additions, or new std::process::Command/gcc bridge additions in added src lines.
+  - Large existing Rust modules remain over the 250 pure-LOC programming guideline (e.g. src/ir/lower.rs, src/codegen/codegen.rs, parser/typecheck/emit), but this is inherited from the book-mirror compiler structure and not a new task-42 bypass/slop blocker for the requested read-only verification.
+
+adversarialClasses:
+  stale_state: PASS. cargo build --release was run immediately before harness verification against current ./target/release/rustcc.
+  dirty_worktree: PASS_WITH_NOTE. Dirty product files are broad task-42 native implementation work; tests are not modified; task 42 checkbox remains unchecked; no commit was made. Existing .omo evidence/state dirt is workflow evidence, not a product bypass.
+  misleading_success_output: PASS. Verdict relies on independently run command exit codes and harness OK lines, not executor prose.
+  malformed_input: PASS. A malformed/invalid array initializer probe returns nonzero with `type error: too many array initializers`.
+  bridge_bypass: PASS. Exact forbidden scan returned no matches; broader scan found only src/toolchain.rs gcc preprocessing/assemble/link functions.
+  skipped_native_pipeline: PASS. Manual --tacky/--codegen probes and executable run exercised rustcc native stages; no host C frontend fallback observed.
+  multi_file_library_only_exception: N/A. Chapter 15 latest-only passed in full, including its library tests; no exception was needed.
+  external_network: N/A. No network evidence required.
+
+commands:
+  - rg "gcc_array_subset_assembly|source\\.contains\\(\"\\[|-std=c17|system_c_to_assembly|compile_with_system_cc_frontend|sanitize_system_assembly" src -> exit 1 (no matches)
+  - cargo build --release -> exit 0
+  - cargo test --release -> exit 0 (10 tests)
+  - ./tests/test_compiler ./target/release/rustcc --chapter 15 --latest-only -> exit 0 (Ran 83 tests, OK)
+  - ./tests/test_compiler ./target/release/rustcc --chapter 14 --latest-only -> exit 0 (Ran 53 tests, OK)
+  - ./tests/test_compiler ./target/release/rustcc --chapter 13 --latest-only --nan -> exit 0 (Ran 51 tests, OK)
+  - ./target/release/rustcc --tacky tests/tests/chapter_15/valid/casts/implicit_and_explicit_conversions.c -> exit 0; AddPtr present
+  - ./target/release/rustcc --codegen tests/tests/chapter_15/valid/subscripting/simple_subscripts.c -> exit 0; native LEA/indexed addressing present
+  - cp tests/tests/chapter_15/valid/initialization/automatic_nested.c /tmp/... && ./target/release/rustcc /tmp/.../automatic_nested.c && /tmp/.../automatic_nested -> compile exit 0, run exit 0
+  - ./target/release/rustcc --validate /tmp/.../bad_array.c -> exit 1 with expected type error
+  - git diff --check -> exit 0
+  - git diff -- tests | wc -l -> 0
+
+confidence: high
+verdict: APPROVE
+
+--- git status --short at review time ---
+ M .omo/boulder.json
+ M .omo/evidence/task-42-code-review.txt
+ M .omo/evidence/task-42-manual-qa.txt
+ M .omo/plans/c-compiler-rust.md
+ M .omo/run-continuation/ses_0c241b468ffeuCkDS36rF8DZEG.json
+ M src/ast/expr.rs
+ M src/ast/operator.rs
+ M src/ast/stmt.rs
+ M src/ast/ty.rs
+ M src/codegen/assembly.rs
+ M src/codegen/assembly_symbols.rs
+ M src/codegen/codegen.rs
+ M src/codegen/emit.rs
+ M src/codegen/frame.rs
+ M src/codegen/mod.rs
+ M src/codegen/regalloc/mod.rs
+ M src/codegen/replace_pseudos.rs
+ M src/compiler.rs
+ M src/ir/lower.rs
+ M src/ir/mod.rs
+ M src/ir/tacky.rs
+ M src/lex/keyword.rs
+ M src/lex/mod.rs
+ M src/parse/parser.rs
+ M src/parse/precedence.rs
+ M src/pipeline.rs
+ M src/semantics/label_loops.rs
+ M src/semantics/resolve.rs
+ M src/semantics/typecheck.rs
+ M src/util/labels.rs
+?? .omo/evidence/task-18-adversarial-verify-2.txt
+?? .omo/evidence/task-18-adversarial-verify-3.txt
+?? .omo/evidence/task-18-adversarial-verify-4.txt
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/evidence/task-37-adversarial-verify-2.txt
+?? .omo/evidence/task-37-adversarial-verify.txt
+?? .omo/evidence/task-38-adversarial-verify.txt
+?? .omo/evidence/task-39-adversarial-verify.txt
+?? .omo/evidence/task-40-adversarial-verify-2.txt
+?? .omo/evidence/task-40-adversarial-verify.txt
+?? .omo/evidence/task-41-adversarial-verify.txt
+?? .omo/evidence/task-42-adversarial-verify-2.txt
+?? .omo/evidence/task-42-adversarial-verify.txt
+?? .omo/evidence/task-42-debugger-diagnosis.txt
+?? .omo/evidence/task-42-executor-fix.txt
+?? .omo/evidence/task-42-native-fix-baseline.txt
+?? .omo/evidence/task-42-native-fix-gate.txt
+?? .omo/evidence/task-42-native-followup-failures.txt
+?? .omo/evidence/task-42-native-stage-probes.txt
+?? .omo/start-work/
+
+--- required command log ---
+
+===== CARGO_BUILD =====
+$ cargo build --release
+    Finished `release` profile [optimized] target(s) in 0.09s
+CARGO_BUILD_STATUS=0
+
+===== CARGO_TEST =====
+$ cargo test --release
+    Finished `release` profile [optimized] target(s) in 0.01s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 10 tests
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test compiler::tests::rejects_unsupported_sizeof_without_panic ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test driver::tests::derives_all_output_paths ... ok
+test driver::tests::parses_default_run_stage ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+CARGO_TEST_STATUS=0
+
+===== CH15 =====
+$ ./tests/test_compiler ./target/release/rustcc --chapter 15 --latest-only
+----------------------------------------------------------------------
+Ran 83 tests in 1.557s
+
+OK
+CH15_STATUS=0
+
+===== CH14 =====
+$ ./tests/test_compiler ./target/release/rustcc --chapter 14 --latest-only
+----------------------------------------------------------------------
+Ran 53 tests in 0.890s
+
+OK
+CH14_STATUS=0
+
+===== CH13_NAN =====
+$ ./tests/test_compiler ./target/release/rustcc --chapter 13 --latest-only --nan
+----------------------------------------------------------------------
+Ran 51 tests in 1.229s
+
+OK
+CH13_NAN_STATUS=0
+
+LOG_PATH=/tmp/task42-required-verify-2.log
+
+--- manual probe log ---
+TMPD=/tmp/task42-probes.qM13b9
+
+===== MANUAL_TACKY_ZEROEXT_DIRECT =====
+$ ./target/release/rustcc --tacky tests/tests/chapter_15/valid/casts/implicit_and_explicit_conversions.c
+TACKY_STATUS=0
+--- ZeroExtend/AddPtr excerpt ---
+12:                AddPtr {
+36:                AddPtr {
+60:                AddPtr {
+84:                AddPtr {
+108:                AddPtr {
+141:                AddPtr {
+174:                AddPtr {
+207:                AddPtr {
+326:                AddPtr {
+378:                AddPtr {
+438:                "tmp.25": ULong,
+446:                "tmp.28": ULong,
+452:                "const.5": ULong,
+456:                "const.4": ULong,
+EXCERPT_STATUS=0
+
+===== MANUAL_CODEGEN_DIRECT =====
+$ ./target/release/rustcc --codegen tests/tests/chapter_15/valid/subscripting/simple_subscripts.c
+CODEGEN_STATUS=0
+--- leaq/static_array excerpt ---
+8:static_array:
+17:    movq %rsp, %rbp
+19:    movq %rdi, -8(%rbp)
+20:    movl %esi, -12(%rbp)
+21:    movq $5, %r11
+22:    movq -8(%rbp), %r10
+23:    leaq (%r10,%r11,4), %r10
+24:    movq %r10, -24(%rbp)
+25:    movq -24(%rbp), %r9
+26:    movl 0(%r9), %r10d
+27:    movl %r10d, -28(%rbp)
+28:    movl -28(%rbp), %r10d
+29:    movl %r10d, -32(%rbp)
+30:    movl $5, -36(%rbp)
+32:    movq -8(%rbp), %r10
+33:    leaq (%r10,%r11,4), %r10
+34:    movq %r10, -48(%rbp)
+35:    movq -48(%rbp), %r9
+36:    movl 0(%r9), %r10d
+37:    movl %r10d, -52(%rbp)
+38:    movl -52(%rbp), %r10d
+39:    movl %r10d, -56(%rbp)
+40:    movq $5, -64(%rbp)
+41:    movq -64(%rbp), %r11
+42:    movq -8(%rbp), %r10
+43:    leaq (%r10,%r11,4), %r10
+44:    movq %r10, -72(%rbp)
+45:    movq -72(%rbp), %r9
+46:    movl 0(%r9), %r10d
+47:    movl %r10d, -76(%rbp)
+48:    movl -76(%rbp), %r10d
+49:    movl %r10d, -80(%rbp)
+50:    movq $5, -88(%rbp)
+51:    movq -88(%rbp), %r11
+52:    movq -8(%rbp), %r10
+53:    leaq (%r10,%r11,4), %r10
+54:    movq %r10, -96(%rbp)
+55:    movq -96(%rbp), %r9
+56:    movl 0(%r9), %r10d
+57:    movl %r10d, -100(%rbp)
+58:    movl -100(%rbp), %r10d
+59:    movl %r10d, -104(%rbp)
+60:    movl -32(%rbp), %r10d
+61:    movl %r10d, -108(%rbp)
+62:    movl -12(%rbp), %r10d
+66:    movl %r10d, -108(%rbp)
+69:    movl $1, %eax
+70:    movq %rbp, %rsp
+74:    movl -56(%rbp), %r10d
+75:    movl %r10d, -112(%rbp)
+76:    movl -12(%rbp), %r10d
+80:    movl %r10d, -112(%rbp)
+83:    movl $2, %eax
+84:    movq %rbp, %rsp
+88:    movl -80(%rbp), %r10d
+89:    movl %r10d, -116(%rbp)
+90:    movl -12(%rbp), %r10d
+94:    movl %r10d, -116(%rbp)
+97:    movl $3, %eax
+98:    movq %rbp, %rsp
+102:    movl -104(%rbp), %r10d
+103:    movl %r10d, -120(%rbp)
+104:    movl -12(%rbp), %r10d
+108:    movl %r10d, -120(%rbp)
+111:    movl $4, %eax
+112:    movq %rbp, %rsp
+116:    movl $0, %eax
+117:    movq %rbp, %rsp
+125:    movq %rsp, %rbp
+127:    movq %rdi, -8(%rbp)
+128:    movq %rsi, -16(%rbp)
+129:    movq $3, %r11
+130:    movq -8(%rbp), %r10
+131:    leaq (%r10,%r11,8), %r10
+132:    movq %r10, -24(%rbp)
+133:    movq -24(%rbp), %r9
+134:    movq 0(%r9), %r10
+135:    movq %r10, -32(%rbp)
+136:    movl -32(%rbp), %r10d
+137:    movl %r10d, -36(%rbp)
+CODEGEN_EXCERPT_STATUS=1
+
+===== MANUAL_EXEC_COPY_OF_CH15_FILE =====
+$ cp tests/tests/chapter_15/valid/initialization/automatic_nested.c $TMPD/automatic_nested.c && ./target/release/rustcc $TMPD/automatic_nested.c && $TMPD/automatic_nested
+MANUAL_EXEC_COMPILE_STATUS=0
+MANUAL_EXEC_RUN_STATUS=0
+
+===== MALFORMED_INPUT_PROBE =====
+$ ./target/release/rustcc --validate /tmp/task42-probes.qM13b9/bad_array.c
+BAD_VALIDATE_STATUS=1
+--- stderr ---
+type error: too many array initializers
+
+LOG_PATH=/tmp/task42-manual-probes-2.log
+
+--- zeroextend scan log ---
+Scanning chapter 15 valid files for TACKY ZeroExtend
+ZEROEXT_FILE=tests/tests/chapter_15/valid/extra_credit/compound_pointer_assignment.c
+12:                AddPtr {
+30:                AddPtr {
+48:                AddPtr {
+66:                AddPtr {
+84:                AddPtr {
+102:                AddPtr {
+120:                AddPtr {
+138:                AddPtr {
+156:                AddPtr {
+174:                AddPtr {
+192:                AddPtr {
+210:                AddPtr {
+298:                AddPtr {
+348:                AddPtr {
+448:                AddPtr {
+498:                AddPtr {
+578:                AddPtr {
+678:                ZeroExtend {
+706:                AddPtr {
+834:                AddPtr {
+949:                "tmp.45": ULong,
+967:                "tmp.44": ULong,
+968:                "tmp.43": UInt,
+977:                "const.0": UInt,
+1067:                AddPtr {
+1123:                AddPtr {
+1229:                AddPtr {
+1285:                AddPtr {
+1365:                AddPtr {
+1471:                ZeroExtend {
+1499:                AddPtr {
+1633:                AddPtr {
+1727:                "tmp.95": ULong,
+1751:                "tmp.93": UInt,
+1775:                "tmp.94": ULong,
+1780:                "const.0": UInt,
+ZEROEXT_MATCH_COUNT=1
+LOG_PATH=/tmp/task42-zeroextend-scan-2.log
+TMPD=/tmp/task42-zeroextend-scan.3120320
+
+--- zeroextend codegen log ---
+SRC=tests/tests/chapter_15/valid/extra_credit/compound_pointer_assignment.c
+
+$ ./target/release/rustcc --tacky tests/tests/chapter_15/valid/extra_credit/compound_pointer_assignment.c
+TACKY_STATUS=0
+--- ZeroExtend TACKY excerpts ---
+674-                        "int_array.ptr.1",
+675-                    ),
+676-                    dst: "tmp.44",
+677-                },
+678:                ZeroExtend {
+679-                    src: Var(
+680-                        "tmp.43",
+681-                    ),
+682-                    dst: "tmp.45",
+--
+1467-                        "double_array.ptr.1",
+1468-                    ),
+1469-                    dst: "tmp.94",
+1470-                },
+1471:                ZeroExtend {
+1472-                    src: Var(
+1473-                        "tmp.93",
+1474-                    ),
+1475-                    dst: "tmp.95",
+
+$ ./target/release/rustcc --codegen tests/tests/chapter_15/valid/extra_credit/compound_pointer_assignment.c
+CODEGEN_STATUS=0
+--- native mov/leaq excerpts ---
+21:    movq %rsp, %rbp
+23:    leaq -32(%rbp), %r10
+24:    movq %r10, -40(%rbp)
+25:    movq $0, %r11
+26:    movq -40(%rbp), %r10
+27:    leaq (%r10,%r11,4), %r10
+28:    movq %r10, -48(%rbp)
+29:    movq -48(%rbp), %r9
+30:    movl $0, 0(%r9)
+31:    movq $1, %r11
+32:    movq -40(%rbp), %r10
+33:    leaq (%r10,%r11,4), %r10
+34:    movq %r10, -56(%rbp)
+35:    movq -56(%rbp), %r9
+36:    movl $0, 0(%r9)
+37:    movq $2, %r11
+38:    movq -40(%rbp), %r10
+39:    leaq (%r10,%r11,4), %r10
+40:    movq %r10, -64(%rbp)
+41:    movq -64(%rbp), %r9
+42:    movl $0, 0(%r9)
+43:    movq $3, %r11
+44:    movq -40(%rbp), %r10
+45:    leaq (%r10,%r11,4), %r10
+46:    movq %r10, -72(%rbp)
+47:    movq -72(%rbp), %r9
+48:    movl $0, 0(%r9)
+49:    movq $4, %r11
+50:    movq -40(%rbp), %r10
+51:    leaq (%r10,%r11,4), %r10
+52:    movq %r10, -80(%rbp)
+53:    movq -80(%rbp), %r9
+54:    movl $0, 0(%r9)
+55:    movq $5, %r11
+56:    movq -40(%rbp), %r10
+57:    leaq (%r10,%r11,4), %r10
+58:    movq %r10, -88(%rbp)
+59:    movq -88(%rbp), %r9
+60:    movl $0, 0(%r9)
+61:    movq $0, %r11
+62:    movq -40(%rbp), %r10
+63:    leaq (%r10,%r11,4), %r10
+64:    movq %r10, -96(%rbp)
+65:    movq -96(%rbp), %r9
+66:    movl $1, 0(%r9)
+67:    movq $1, %r11
+68:    movq -40(%rbp), %r10
+69:    leaq (%r10,%r11,4), %r10
+70:    movq %r10, -104(%rbp)
+71:    movq -104(%rbp), %r9
+72:    movl $2, 0(%r9)
+73:    movq $2, %r11
+74:    movq -40(%rbp), %r10
+75:    leaq (%r10,%r11,4), %r10
+76:    movq %r10, -112(%rbp)
+77:    movq -112(%rbp), %r9
+78:    movl $3, 0(%r9)
+79:    movq $3, %r11
+80:    movq -40(%rbp), %r10
+81:    leaq (%r10,%r11,4), %r10
+82:    movq %r10, -120(%rbp)
+83:    movq -120(%rbp), %r9
+84:    movl $4, 0(%r9)
+85:    movq $4, %r11
+86:    movq -40(%rbp), %r10
+87:    leaq (%r10,%r11,4), %r10
+88:    movq %r10, -128(%rbp)
+89:    movq -128(%rbp), %r9
+90:    movl $5, 0(%r9)
+91:    movq $5, %r11
+92:    movq -40(%rbp), %r10
+93:    leaq (%r10,%r11,4), %r10
+94:    movq %r10, -136(%rbp)
+95:    movq -136(%rbp), %r9
+96:    movl $6, 0(%r9)
+97:    leaq -32(%rbp), %r10
+98:    movq %r10, -144(%rbp)
+99:    movq -144(%rbp), %r10
+100:    movq %r10, -152(%rbp)
+101:    movl $5, %r10d
+
+LOG_PATH=/tmp/task42-zeroextend-codegen-2.log
+TMPD=/tmp/task42-zero-codegen.dmiRA8

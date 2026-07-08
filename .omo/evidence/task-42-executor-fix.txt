@@ -1,0 +1,417 @@
+WORKING: task 42 - diagnosing remaining chapter 15 failures
+
+## Initial bridge scan
+$ rg "gcc_array_subset_assembly|source\\.contains\\(\"\\[|-std=c17|system_c_to_assembly|compile_with_system_cc_frontend|sanitize_system_assembly" src
+
+## Reproduce baseline
+$ cargo build --release
+    Finished `release` profile [optimized] target(s) in 0.02s
+
+BUILD_STATUS=0
+
+$ ./tests/test_compiler ./target/release/rustcc --chapter 15 --latest-only
+======================================================================
+FAIL: test_valid/initialization/automatic (test_framework.basic.TestChapter15.test_valid/initialization/automatic)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 402, in compile_and_run
+    self.validate_runs(source_file, result)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 308, in validate_runs
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        expected_retcode,
+        ^^^^^^^^^^^^^^^^^
+        actual.returncode,
+        ^^^^^^^^^^^^^^^^^^
+        msg=build_error_message(expected_retcode, expected_stdout, actual, exe),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Incorrect behavior in /home/mei/projects/rustcc/tests/tests/chapter_15/valid/initialization/automatic
+* Bad return code: expected 0 and got 4
+
+======================================================================
+FAIL: test_valid/initialization/automatic_nested (test_framework.basic.TestChapter15.test_valid/initialization/automatic_nested)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 402, in compile_and_run
+    self.validate_runs(source_file, result)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 308, in validate_runs
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        expected_retcode,
+        ^^^^^^^^^^^^^^^^^
+        actual.returncode,
+        ^^^^^^^^^^^^^^^^^^
+        msg=build_error_message(expected_retcode, expected_stdout, actual, exe),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Incorrect behavior in /home/mei/projects/rustcc/tests/tests/chapter_15/valid/initialization/automatic_nested
+* Bad return code: expected 0 and got 4
+
+----------------------------------------------------------------------
+Ran 83 tests in 1.655s
+
+FAILED (failures=2)
+
+CH15_BASELINE_STATUS=1
+
+## Fix attempt 1: implement TACKY ZeroExtend in native codegen
+$ cargo build --release
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 2.15s
+
+BUILD_AFTER_ZEROEXT_STATUS=0
+
+$ ./target/release/rustcc tests/tests/chapter_15/valid/initialization/automatic.c && ./tests/tests/chapter_15/valid/initialization/automatic
+
+AUTOMATIC_COMPILE_STATUS=0 RUN_STATUS=0
+
+$ ./target/release/rustcc tests/tests/chapter_15/valid/initialization/automatic_nested.c && ./tests/tests/chapter_15/valid/initialization/automatic_nested
+
+AUTOMATIC_NESTED_COMPILE_STATUS=0 RUN_STATUS=0
+
+$ ./tests/test_compiler ./target/release/rustcc --chapter 15 --latest-only
+----------------------------------------------------------------------
+Ran 83 tests in 1.844s
+
+OK
+
+CH15_AFTER_ZEROEXT_STATUS=0
+
+$ ./tests/test_compiler ./target/release/rustcc --chapter 14 --latest-only
+
+## Required verification
+$ cargo test --release
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+
+$ ./tests/test_compiler ./target/release/rustcc --chapter 13 --latest-only --nan
+----------------------------------------------------------------------
+Ran 53 tests in 1.190s
+
+OK
+
+CH14_STATUS=0
+----------------------------------------------------------------------
+Ran 51 tests in 2.168s
+
+OK
+
+CH13_NAN_STATUS=0
+    Finished `release` profile [optimized] target(s) in 2.63s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 10 tests
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test compiler::tests::rejects_unsupported_sizeof_without_panic ... ok
+test driver::tests::derives_all_output_paths ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test driver::tests::parses_default_run_stage ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+CARGO_TEST_STATUS=0
+
+$ cargo build --release
+    Finished `release` profile [optimized] target(s) in 0.01s
+
+FINAL_BUILD_STATUS=0
+
+$ ./tests/test_compiler ./target/release/rustcc --chapter 15 --latest-only
+
+## Final bridge scan
+$ rg "gcc_array_subset_assembly|source\\.contains\\(\"\\[|-std=c17|system_c_to_assembly|compile_with_system_cc_frontend|sanitize_system_assembly" src
+----------------------------------------------------------------------
+Ran 83 tests in 1.830s
+
+OK
+
+FINAL_CH15_STATUS=0
+
+## Diagnostics
+$ mcp__lsp.diagnostics /home/mei/projects/rustcc/src/codegen/codegen.rs
+No diagnostics found
+
+## Cleanup checks
+$ git diff -- src/codegen/codegen.rs
+diff --git a/src/codegen/codegen.rs b/src/codegen/codegen.rs
+index 81f0aff..e8b6f90 100644
+--- a/src/codegen/codegen.rs
++++ b/src/codegen/codegen.rs
+@@ -504,6 +504,25 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
+                 }],
+             }
+         }
++        Instruction::ZeroExtend { src, dst } => {
++            // Mirrors OCaml `backend/codegen.ml` `Tacky.ZeroExtend`
++            // plus `instruction_fixup.ml`: zero-extending an
++            // unsigned int to a long/ulong is just a 32-bit move into
++            // a register (x86-64 clears the high half), followed by a
++            // 64-bit move into the destination pseudo.  Emitting the
++            // explicit pair here keeps the existing assembly IR's
++            // byte-oriented `MovZeroExtend` for `setcc` results.
++            vec![
++                Instr::Mov {
++                    src: convert_val(src, ctx),
++                    dst: Operand::Reg(Reg::R10),
++                },
++                Instr::Movq {
++                    src: Operand::Reg(Reg::R10),
++                    dst: Operand::Pseudo(dst.clone()),
++                },
++            ]
++        }
+         // Truncate a `long` value to `int` by routing through a
+         // 32-bit move.  `movq src, %r10d` reads the low 32 bits
+         // into %r10d (zero-extends in x86-64); `movl %r10d, dst`
+@@ -1394,6 +1413,56 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
+             src: Operand::Pseudo(src.clone()),
+             dst: Operand::Pseudo(dst.clone()),
+         }],
++        Instruction::AddPtr {
++            ptr,
++            index,
++            scale,
++            dst,
++        } => {
++            let index_op = convert_val(index, ctx);
++            let mut out = Vec::new();
++            match index_op {
++                Operand::Imm(n) => {
++                    out.push(Instr::Movq {
++                        src: Operand::Imm(n),
++                        dst: Operand::Reg(Reg::R11),
++                    });
++                }
++                op => {
++                    let index_ty = type_of_val(index, env);
++                    if index_ty.is_long_word() {
++                        out.push(Instr::Movq {
++                            src: op,
++                            dst: Operand::Reg(Reg::R11),
++                        });
++                    } else {
++                        out.push(Instr::Movsx {
++                            src: op,
++                            dst: Operand::Reg(Reg::R11),
++                        });
++                    }
++                }
++            }
++            let sib_scale = if matches!(*scale, 1 | 2 | 4 | 8) {
++                *scale as i32
++            } else {
++                out.push(Instr::BinaryOp {
++                    op: BinaryOpInstr::MultQ,
++                    src: Operand::Imm(*scale),
++                    dst: Operand::Reg(Reg::R11),
++                });
++                1
++            };
++            out.push(Instr::Movq {
++                src: convert_val(ptr, ctx),
++                dst: Operand::Reg(Reg::R10),
++            });
++            out.push(Instr::Lea {
++                src: Operand::MemoryIndexed(Reg::R10, Reg::R11, sib_scale),
++                dst: Operand::Pseudo(dst.clone()),
++            });
++            out
++        }
+         Instruction::Call { name, args, dst } => lower_call(name, args, dst, env, ctx),
+         _ => Vec::new(),
+     }
+@@ -1495,21 +1564,40 @@ fn generate_function(func: &TackyFunction, globals: &TypeEnv, ctx: &mut CodegenC
+     }
+ }
+
++fn convert_static_init(
++    init: crate::ir::tacky::TackyStaticInit,
++    ty: OperandType,
++) -> Vec<StaticInit> {
++    match (init, ty) {
++        (crate::ir::tacky::TackyStaticInit::Aggregate(items), _) => items
++            .into_iter()
++            .flat_map(|item| convert_static_init(item, OperandType::Int))
++            .collect(),
++        (crate::ir::tacky::TackyStaticInit::Int(n), OperandType::Long | OperandType::ULong) => {
++            vec![StaticInit::Long(n)]
++        }
++        (crate::ir::tacky::TackyStaticInit::Int(n), _) => vec![StaticInit::Int(n)],
++        (crate::ir::tacky::TackyStaticInit::Zero, OperandType::Long | OperandType::ULong) => {
++            vec![StaticInit::Zero(8)]
++        }
++        (crate::ir::tacky::TackyStaticInit::Zero, OperandType::Double) => vec![StaticInit::Zero(8)],
++        (crate::ir::tacky::TackyStaticInit::Zero, OperandType::ByteArray { size }) => {
++            vec![StaticInit::Zero(size as u32)]
++        }
++        (crate::ir::tacky::TackyStaticInit::Zero, _) => vec![StaticInit::Zero(4)],
++        (crate::ir::tacky::TackyStaticInit::Long(n), _) => vec![StaticInit::Long(n)],
++        (crate::ir::tacky::TackyStaticInit::Double(d), _) => vec![StaticInit::Double(d)],
++    }
++}
++
+ pub fn generate(tacky: &TackyProgram, _frames: &[Frame]) -> Result<AsmProgram> {
+     let mut top_level: Vec<TopLevel> = Vec::new();
+     let mut ctx = CodegenCtx::default();
+     for var in &tacky.static_variables {
+-        let init = match (var.init.clone(), var.ty) {
+-            (crate::ir::tacky::TackyStaticInit::Int(n), OperandType::Long) => StaticInit::Long(n),
+-            (crate::ir::tacky::TackyStaticInit::Int(n), _) => StaticInit::Int(n),
+-            (crate::ir::tacky::TackyStaticInit::Zero, OperandType::Long) => StaticInit::Zero(8),
+-            (crate::ir::tacky::TackyStaticInit::Zero, OperandType::Double) => StaticInit::Zero(8),
+-            (crate::ir::tacky::TackyStaticInit::Zero, _) => StaticInit::Zero(4),
+-            (crate::ir::tacky::TackyStaticInit::Long(n), _) => StaticInit::Long(n),
+-            (crate::ir::tacky::TackyStaticInit::Double(d), _) => StaticInit::Double(d),
+-        };
++        let init = convert_static_init(var.init.clone(), var.ty);
+         let alignment = match var.ty {
+             OperandType::Long | OperandType::ULong | OperandType::Double => 8,
++            OperandType::ByteArray { .. } => 16,
+             _ => 4,
+         };
+         top_level.push(TopLevel::StaticVariable {
+
+$ rg "dbg!\\(|TODO DEBUG|HACK|XXX|console\\.log|breakpoint\\(" src/codegen/codegen.rs
+
+$ awk pure LOC src/codegen/codegen.rs
+1355
+
+## Final status
+$ git diff --stat
+ .omo/boulder.json                                  |  256 ++++-
+ .omo/evidence/task-42-code-review.txt              |  169 +--
+ .omo/evidence/task-42-manual-qa.txt                | 1162 +++++++++++++++++++-
+ .omo/plans/c-compiler-rust.md                      |   12 +-
+ .../ses_0c241b468ffeuCkDS36rF8DZEG.json            |    7 +-
+ src/ast/expr.rs                                    |    1 +
+ src/ast/operator.rs                                |    2 +-
+ src/ast/stmt.rs                                    |    2 +-
+ src/ast/ty.rs                                      |   18 +-
+ src/codegen/assembly.rs                            |    2 +-
+ src/codegen/assembly_symbols.rs                    |    2 +-
+ src/codegen/codegen.rs                             |  106 +-
+ src/codegen/emit.rs                                |   59 +-
+ src/codegen/frame.rs                               |    2 +-
+ src/codegen/mod.rs                                 |    2 +-
+ src/codegen/regalloc/mod.rs                        |    2 +-
+ src/codegen/replace_pseudos.rs                     |   19 +-
+ src/compiler.rs                                    |   57 +-
+ src/ir/lower.rs                                    |  528 +++++++--
+ src/ir/mod.rs                                      |    5 +-
+ src/ir/tacky.rs                                    |    7 +-
+ src/lex/keyword.rs                                 |    2 +-
+ src/lex/mod.rs                                     |    2 +-
+ src/parse/parser.rs                                |  234 ++--
+ src/parse/precedence.rs                            |    2 +-
+ src/pipeline.rs                                    |    4 +-
+ src/semantics/label_loops.rs                       |   24 +-
+ src/semantics/resolve.rs                           |   24 +-
+ src/semantics/typecheck.rs                         |  155 ++-
+ src/util/labels.rs                                 |    2 +-
+ 30 files changed, 2368 insertions(+), 501 deletions(-)
+
+$ git status --short
+ M .omo/boulder.json
+ M .omo/evidence/task-42-code-review.txt
+ M .omo/evidence/task-42-manual-qa.txt
+ M .omo/plans/c-compiler-rust.md
+ M .omo/run-continuation/ses_0c241b468ffeuCkDS36rF8DZEG.json
+ M src/ast/expr.rs
+ M src/ast/operator.rs
+ M src/ast/stmt.rs
+ M src/ast/ty.rs
+ M src/codegen/assembly.rs
+ M src/codegen/assembly_symbols.rs
+ M src/codegen/codegen.rs
+ M src/codegen/emit.rs
+ M src/codegen/frame.rs
+ M src/codegen/mod.rs
+ M src/codegen/regalloc/mod.rs
+ M src/codegen/replace_pseudos.rs
+ M src/compiler.rs
+ M src/ir/lower.rs
+ M src/ir/mod.rs
+ M src/ir/tacky.rs
+ M src/lex/keyword.rs
+ M src/lex/mod.rs
+ M src/parse/parser.rs
+ M src/parse/precedence.rs
+ M src/pipeline.rs
+ M src/semantics/label_loops.rs
+ M src/semantics/resolve.rs
+ M src/semantics/typecheck.rs
+ M src/util/labels.rs
+?? .omo/evidence/task-18-adversarial-verify-2.txt
+?? .omo/evidence/task-18-adversarial-verify-3.txt
+?? .omo/evidence/task-18-adversarial-verify-4.txt
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/evidence/task-37-adversarial-verify-2.txt
+?? .omo/evidence/task-37-adversarial-verify.txt
+?? .omo/evidence/task-38-adversarial-verify.txt
+?? .omo/evidence/task-39-adversarial-verify.txt
+?? .omo/evidence/task-40-adversarial-verify-2.txt
+?? .omo/evidence/task-40-adversarial-verify.txt
+?? .omo/evidence/task-41-adversarial-verify.txt
+?? .omo/evidence/task-42-adversarial-verify.txt
+?? .omo/evidence/task-42-executor-fix.txt
+?? .omo/evidence/task-42-native-fix-baseline.txt
+?? .omo/evidence/task-42-native-fix-gate.txt
+?? .omo/evidence/task-42-native-followup-failures.txt
+?? .omo/evidence/task-42-native-stage-probes.txt
+?? .omo/start-work/
+
+## Manual native-stage probe
+$ ./target/release/rustcc --tacky tests/tests/chapter_15/valid/initialization/automatic_nested.c >/tmp/task42-automatic-nested.tacky
+TACKY_PROBE_STATUS=0
+$ rg -n "ZeroExtend|Store|AddPtr" /tmp/task42-automatic-nested.tacky | head
+12:                AddPtr {
+22:                AddPtr {
+32:                Store {
+40:                AddPtr {
+50:                Store {
+58:                AddPtr {
+68:                Store {
+76:                AddPtr {
+86:                AddPtr {
+96:                Store {
+$ ./target/release/rustcc tests/tests/chapter_15/valid/initialization/automatic_nested.c && tests/tests/chapter_15/valid/initialization/automatic_nested
+MANUAL_NESTED_COMPILE_STATUS=0 RUN_STATUS=0
+
+## Pass/fail summary
+bridge_scan: no matches
+cargo build --release: PASS (0)
+cargo test --release: PASS (10 tests)
+chapter 15 latest-only: PASS (83 tests)
+chapter 14 latest-only: PASS (53 tests)
+chapter 13 latest-only --nan: PASS (51 tests)
+manual automatic.c run: PASS (0)
+manual automatic_nested.c run: PASS (0)

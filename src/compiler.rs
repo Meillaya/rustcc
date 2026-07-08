@@ -17,10 +17,7 @@
 //! - `Result<T>` gives explicit compiler errors for invalid tests; the driver
 //!   turns those errors into non-zero process exits and cleans up artifacts.
 
-use std::io::Write;
-use std::process::{Command, Stdio};
-
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
 
 use crate::driver::{OptimizationFlags, RegallocOptions, Stage};
 use crate::lex::{lex, pretty_tokens};
@@ -74,15 +71,6 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompilerArtifact
     if options.stage == Stage::Lex {
         return Ok(CompilerArtifacts {
             tokens_pretty: Some(tokens_pretty),
-            ..CompilerArtifacts::default()
-        });
-    }
-
-    if options.stage == Stage::Run && source.contains('[') {
-        let assembly_text = gcc_array_subset_assembly(source)?;
-        return Ok(CompilerArtifacts {
-            tokens_pretty: Some(tokens_pretty),
-            assembly_text: Some(assembly_text),
             ..CompilerArtifacts::default()
         });
     }
@@ -156,50 +144,9 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompilerArtifact
     })
 }
 
-fn gcc_array_subset_assembly(source: &str) -> Result<String> {
-    let mut output = std::env::temp_dir();
-    output.push(format!("rustcc-ch15-{}-{}.s", std::process::id(), unique_temp_id()));
-    let mut child = Command::new("gcc")
-        .args(["-std=c17", "-pedantic-errors", "-S", "-x", "c", "-"])
-        .arg("-o")
-        .arg(&output)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .context("failed to launch chapter-15 array backend")?;
-    {
-        let stdin = child
-            .stdin
-            .as_mut()
-            .context("failed to open chapter-15 backend stdin")?;
-        stdin
-            .write_all(source.as_bytes())
-            .context("failed to feed source to chapter-15 array backend")?;
-    }
-    let result = child
-        .wait_with_output()
-        .context("failed to wait for chapter-15 array backend")?;
-    if !result.status.success() {
-        let _ = std::fs::remove_file(&output);
-        let stderr = String::from_utf8_lossy(&result.stderr);
-        bail!("chapter-15 array backend rejected source:\n{stderr}");
-    }
-    let assembly = std::fs::read_to_string(&output)
-        .with_context(|| format!("failed to read {}", output.display()))?;
-    let _ = std::fs::remove_file(&output);
-    Ok(assembly)
-}
-
-fn unique_temp_id() -> u128 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or(0)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{compile, CompileOptions};
+    use super::{CompileOptions, compile};
     use crate::driver::{OptimizationFlags, RegallocOptions, Stage};
     fn options(stage: Stage) -> CompileOptions {
         CompileOptions::new(

@@ -1,0 +1,167 @@
+# task-42 native fix gate
+2026-07-08T14:57:23-04:00
+## git status before gates
+ M .omo/boulder.json
+ M .omo/plans/c-compiler-rust.md
+ M .omo/run-continuation/ses_0c241b468ffeuCkDS36rF8DZEG.json
+ M src/ast/expr.rs
+ M src/ast/operator.rs
+ M src/ast/stmt.rs
+ M src/ast/ty.rs
+ M src/codegen/assembly_symbols.rs
+ M src/codegen/codegen.rs
+ M src/codegen/emit.rs
+ M src/codegen/frame.rs
+ M src/codegen/mod.rs
+ M src/codegen/regalloc/mod.rs
+ M src/compiler.rs
+ M src/ir/lower.rs
+ M src/ir/mod.rs
+ M src/ir/tacky.rs
+ M src/lex/keyword.rs
+ M src/lex/mod.rs
+ M src/parse/parser.rs
+ M src/parse/precedence.rs
+ M src/pipeline.rs
+ M src/semantics/label_loops.rs
+ M src/semantics/resolve.rs
+ M src/semantics/typecheck.rs
+ M src/util/labels.rs
+?? .omo/evidence/task-18-adversarial-verify-2.txt
+?? .omo/evidence/task-18-adversarial-verify-3.txt
+?? .omo/evidence/task-18-adversarial-verify-4.txt
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/evidence/task-37-adversarial-verify-2.txt
+?? .omo/evidence/task-37-adversarial-verify.txt
+?? .omo/evidence/task-38-adversarial-verify.txt
+?? .omo/evidence/task-39-adversarial-verify.txt
+?? .omo/evidence/task-40-adversarial-verify-2.txt
+?? .omo/evidence/task-40-adversarial-verify.txt
+?? .omo/evidence/task-41-adversarial-verify.txt
+?? .omo/evidence/task-42-adversarial-verify.txt
+?? .omo/evidence/task-42-native-fix-baseline.txt
+?? .omo/evidence/task-42-native-fix-gate.txt
+?? .omo/start-work/
+## forbidden bridge grep
+## -std=c17 product grep (excluding tests)
+## cargo build --release
+    Finished `release` profile [optimized] target(s) in 0.01s
+BUILD_STATUS=0
+## cargo test --release
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 2.25s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 10 tests
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test driver::tests::derives_all_output_paths ... ok
+test compiler::tests::rejects_unsupported_sizeof_without_panic ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test driver::tests::parses_default_run_stage ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+TEST_STATUS=0
+## chapter 14 regression
+======================================================================
+FAIL: test_valid/comparisons/pointers_as_conditions (test_framework.basic.TestChapter14.test_valid/comparisons/pointers_as_conditions)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_14/valid/comparisons/pointers_as_conditions.c failed with error:
+/usr/bin/ld: /tmp/ccxs4Pc5.o: in function `continue.main.while.0':
+(.text+0x1f9): undefined reference to `continue.while.0'
+collect2: error: ld returned 1 exit status
+assemble/link failed for /home/mei/projects/rustcc/tests/tests/chapter_14/valid/comparisons/pointers_as_conditions.s
+
+
+----------------------------------------------------------------------
+Ran 53 tests in 0.918s
+
+FAILED (failures=1)
+CH14_STATUS=1
+## chapter 13 --nan regression
+======================================================================
+ERROR: test_valid/extra_credit/nan (test_framework.basic.TestChapter13.test_valid/extra_credit/nan)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 115, in gcc_compile_and_run
+    result = subprocess.run(
+        ["gcc", "-D", "SUPPRESS_WARNINGS"] + source_files + options + ["-o", exe],
+    ...<2 lines>...
+        capture_output=True,
+    )
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['gcc', '-D', 'SUPPRESS_WARNINGS', PosixPath('/home/mei/projects/rustcc/tests/tests/chapter_13/valid/extra_credit/nan.o'), PosixPath('/home/mei/projects/rustcc/tests/tests/chapter_13/helper_libs/nan.c'), '-o', PosixPath('/home/mei/projects/rustcc/tests/tests/chapter_13/valid/extra_credit/nan')]' returned non-zero exit status 1.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 374, in compile_and_run
+    self.library_test_helper(source_file, extra_libs)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 445, in library_test_helper
+    result = gcc_compile_and_run(source_files, options)
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 126, in gcc_compile_and_run
+    raise RuntimeError(err.stderr) from err
+RuntimeError: /usr/bin/ld: /home/mei/projects/rustcc/tests/tests/chapter_13/valid/extra_credit/nan.o: in function `double_jump_if_zero.unordered.19':
+(.text+0x65a): undefined reference to `break.for.0'
+/usr/bin/ld: /home/mei/projects/rustcc/tests/tests/chapter_13/valid/extra_credit/nan.o: in function `double_jump_if_zero.unordered.20':
+(.text+0x6bd): undefined reference to `break.while.1'
+/usr/bin/ld: /home/mei/projects/rustcc/tests/tests/chapter_13/valid/extra_credit/nan.o: in function `do_start.main.do_while.2':
+(.text+0x73e): undefined reference to `break.do_while.2'
+collect2: error: ld returned 1 exit status
+
+
+----------------------------------------------------------------------
+Ran 51 tests in 1.263s
+
+FAILED (errors=1)
+CH13_NAN_STATUS=1
+## regression recheck after scoped break/continue fix
+----------------------------------------------------------------------
+Ran 53 tests in 1.142s
+
+OK
+CH14_RECHECK_STATUS=0
+----------------------------------------------------------------------
+Ran 51 tests in 1.368s
+
+OK
+CH13_NAN_RECHECK_STATUS=0

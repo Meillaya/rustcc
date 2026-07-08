@@ -504,6 +504,25 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
                 }],
             }
         }
+        Instruction::ZeroExtend { src, dst } => {
+            // Mirrors OCaml `backend/codegen.ml` `Tacky.ZeroExtend`
+            // plus `instruction_fixup.ml`: zero-extending an
+            // unsigned int to a long/ulong is just a 32-bit move into
+            // a register (x86-64 clears the high half), followed by a
+            // 64-bit move into the destination pseudo.  Emitting the
+            // explicit pair here keeps the existing assembly IR's
+            // byte-oriented `MovZeroExtend` for `setcc` results.
+            vec![
+                Instr::Mov {
+                    src: convert_val(src, ctx),
+                    dst: Operand::Reg(Reg::R10),
+                },
+                Instr::Movq {
+                    src: Operand::Reg(Reg::R10),
+                    dst: Operand::Pseudo(dst.clone()),
+                },
+            ]
+        }
         // Truncate a `long` value to `int` by routing through a
         // 32-bit move.  `movq src, %r10d` reads the low 32 bits
         // into %r10d (zero-extends in x86-64); `movl %r10d, dst`
@@ -1394,6 +1413,56 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
             src: Operand::Pseudo(src.clone()),
             dst: Operand::Pseudo(dst.clone()),
         }],
+        Instruction::AddPtr {
+            ptr,
+            index,
+            scale,
+            dst,
+        } => {
+            let index_op = convert_val(index, ctx);
+            let mut out = Vec::new();
+            match index_op {
+                Operand::Imm(n) => {
+                    out.push(Instr::Movq {
+                        src: Operand::Imm(n),
+                        dst: Operand::Reg(Reg::R11),
+                    });
+                }
+                op => {
+                    let index_ty = type_of_val(index, env);
+                    if index_ty.is_long_word() {
+                        out.push(Instr::Movq {
+                            src: op,
+                            dst: Operand::Reg(Reg::R11),
+                        });
+                    } else {
+                        out.push(Instr::Movsx {
+                            src: op,
+                            dst: Operand::Reg(Reg::R11),
+                        });
+                    }
+                }
+            }
+            let sib_scale = if matches!(*scale, 1 | 2 | 4 | 8) {
+                *scale as i32
+            } else {
+                out.push(Instr::BinaryOp {
+                    op: BinaryOpInstr::MultQ,
+                    src: Operand::Imm(*scale),
+                    dst: Operand::Reg(Reg::R11),
+                });
+                1
+            };
+            out.push(Instr::Movq {
+                src: convert_val(ptr, ctx),
+                dst: Operand::Reg(Reg::R10),
+            });
+            out.push(Instr::Lea {
+                src: Operand::MemoryIndexed(Reg::R10, Reg::R11, sib_scale),
+                dst: Operand::Pseudo(dst.clone()),
+            });
+            out
+        }
         Instruction::Call { name, args, dst } => lower_call(name, args, dst, env, ctx),
         _ => Vec::new(),
     }
@@ -1495,21 +1564,40 @@ fn generate_function(func: &TackyFunction, globals: &TypeEnv, ctx: &mut CodegenC
     }
 }
 
+fn convert_static_init(
+    init: crate::ir::tacky::TackyStaticInit,
+    ty: OperandType,
+) -> Vec<StaticInit> {
+    match (init, ty) {
+        (crate::ir::tacky::TackyStaticInit::Aggregate(items), _) => items
+            .into_iter()
+            .flat_map(|item| convert_static_init(item, OperandType::Int))
+            .collect(),
+        (crate::ir::tacky::TackyStaticInit::Int(n), OperandType::Long | OperandType::ULong) => {
+            vec![StaticInit::Long(n)]
+        }
+        (crate::ir::tacky::TackyStaticInit::Int(n), _) => vec![StaticInit::Int(n)],
+        (crate::ir::tacky::TackyStaticInit::Zero, OperandType::Long | OperandType::ULong) => {
+            vec![StaticInit::Zero(8)]
+        }
+        (crate::ir::tacky::TackyStaticInit::Zero, OperandType::Double) => vec![StaticInit::Zero(8)],
+        (crate::ir::tacky::TackyStaticInit::Zero, OperandType::ByteArray { size }) => {
+            vec![StaticInit::Zero(size as u32)]
+        }
+        (crate::ir::tacky::TackyStaticInit::Zero, _) => vec![StaticInit::Zero(4)],
+        (crate::ir::tacky::TackyStaticInit::Long(n), _) => vec![StaticInit::Long(n)],
+        (crate::ir::tacky::TackyStaticInit::Double(d), _) => vec![StaticInit::Double(d)],
+    }
+}
+
 pub fn generate(tacky: &TackyProgram, _frames: &[Frame]) -> Result<AsmProgram> {
     let mut top_level: Vec<TopLevel> = Vec::new();
     let mut ctx = CodegenCtx::default();
     for var in &tacky.static_variables {
-        let init = match (var.init.clone(), var.ty) {
-            (crate::ir::tacky::TackyStaticInit::Int(n), OperandType::Long) => StaticInit::Long(n),
-            (crate::ir::tacky::TackyStaticInit::Int(n), _) => StaticInit::Int(n),
-            (crate::ir::tacky::TackyStaticInit::Zero, OperandType::Long) => StaticInit::Zero(8),
-            (crate::ir::tacky::TackyStaticInit::Zero, OperandType::Double) => StaticInit::Zero(8),
-            (crate::ir::tacky::TackyStaticInit::Zero, _) => StaticInit::Zero(4),
-            (crate::ir::tacky::TackyStaticInit::Long(n), _) => StaticInit::Long(n),
-            (crate::ir::tacky::TackyStaticInit::Double(d), _) => StaticInit::Double(d),
-        };
+        let init = convert_static_init(var.init.clone(), var.ty);
         let alignment = match var.ty {
             OperandType::Long | OperandType::ULong | OperandType::Double => 8,
+            OperandType::ByteArray { .. } => 16,
             _ => 4,
         };
         top_level.push(TopLevel::StaticVariable {

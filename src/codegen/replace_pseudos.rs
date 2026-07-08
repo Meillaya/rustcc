@@ -32,15 +32,18 @@ impl ReplaceState {
     }
 
     fn resolve(&mut self, name: &str) -> Operand {
-        let size = self
-            .type_env
-            .get(name)
-            .map(|t| t.size())
-            .unwrap_or(OperandType::Int.size()) as i32;
+        let ty = self.type_env.get(name).copied().unwrap_or(OperandType::Int);
+        let size = ty.size() as i32;
+        let alignment = match ty {
+            OperandType::ByteArray { size } if size >= 16 => 16,
+            OperandType::Long | OperandType::ULong | OperandType::Double => 8,
+            _ => 4,
+        };
         let offset = *self.pseudos.entry(name.to_string()).or_insert_with(|| {
-            let current = -(self.stack_size + size);
-            self.stack_size += size;
-            current
+            let needed = self.stack_size + size;
+            let aligned = ((needed + alignment - 1) / alignment) * alignment;
+            self.stack_size = aligned;
+            -aligned
         });
         Operand::Stack(offset)
     }

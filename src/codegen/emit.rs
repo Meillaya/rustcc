@@ -37,7 +37,7 @@
 // with a trailing newline so the file is line-terminated like every
 // other hand-written or book-emitted `.s` source.
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 use crate::codegen::assembly::{
     AsmProgram, BinaryOpInstr, ConditionCode, Instr, Operand, Reg, TopLevel, UnaryOpInstr,
@@ -442,7 +442,7 @@ fn format_static_variable(
     name: &str,
     global: bool,
     alignment: u32,
-    init: &crate::codegen::assembly::StaticInit,
+    init: &[crate::codegen::assembly::StaticInit],
 ) -> Result<String> {
     let mut lines: Vec<String> = Vec::new();
     if global {
@@ -457,40 +457,47 @@ fn format_static_variable(
         lines.push(".data".to_string());
         lines.push(format!(".align {alignment}"));
         lines.push(format!("{name}:"));
-        // Chapter 11: 64-bit statics use `.quad` so the linker
-        // reserves 8 bytes; 32-bit statics keep `.long` (4 bytes).
-        match init {
-            crate::codegen::assembly::StaticInit::Long(n) => {
-                lines.push(format!("    .quad {n}"));
-            }
-            crate::codegen::assembly::StaticInit::Double(d) => {
-                lines.push(format!("    .quad {}", d.to_bits()));
-            }
-            _ => {
-                lines.push(format!("    .long {}", data_value(init)?));
+        for item in init {
+            match item {
+                crate::codegen::assembly::StaticInit::Long(n) => {
+                    lines.push(format!("    .quad {n}"));
+                }
+                crate::codegen::assembly::StaticInit::Double(d) => {
+                    lines.push(format!("    .quad {}", d.to_bits()));
+                }
+                crate::codegen::assembly::StaticInit::Zero(n) => {
+                    lines.push(format!("    .zero {n}"));
+                }
+                _ => {
+                    lines.push(format!("    .long {}", data_value(item)?));
+                }
             }
         }
     }
     Ok(lines.join("\n"))
 }
 
-fn is_zero_init(init: &crate::codegen::assembly::StaticInit) -> bool {
+fn is_zero_init(init: &[crate::codegen::assembly::StaticInit]) -> bool {
     use crate::codegen::assembly::StaticInit;
-    matches!(
-        init,
-        StaticInit::Int(0) | StaticInit::Long(0) | StaticInit::Zero(_)
-    )
+    init.iter().all(|item| {
+        matches!(
+            item,
+            StaticInit::Int(0) | StaticInit::Long(0) | StaticInit::Zero(_)
+        )
+    })
 }
 
-fn zero_size(init: &crate::codegen::assembly::StaticInit) -> u32 {
+fn zero_size(init: &[crate::codegen::assembly::StaticInit]) -> u32 {
     use crate::codegen::assembly::StaticInit;
-    match init {
-        StaticInit::Zero(n) => *n,
-        StaticInit::Double(_) => 8,
-        StaticInit::Long(_) => 8,
-        StaticInit::Int(_) => 4,
-        _ => 4,
-    }
+    init.iter()
+        .map(|item| match item {
+            StaticInit::Zero(n) => *n,
+            StaticInit::Double(_) => 8,
+            StaticInit::Long(_) => 8,
+            StaticInit::Int(_) => 4,
+            _ => 4,
+        })
+        .sum()
 }
 
 fn data_value(init: &crate::codegen::assembly::StaticInit) -> Result<i64> {

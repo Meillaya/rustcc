@@ -7,11 +7,11 @@
 
 use std::collections::HashMap;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 use crate::ast::{
     AssignOp, BinaryOp, BlockItem, Expr, ForInit, GlobalDecl, GlobalVarDecl, Program, Statement,
-    TopLevelItem, Type, UnaryOp, VarDecl,
+    StorageClass, TopLevelItem, Type, UnaryOp, VarDecl,
 };
 
 use super::resolve::ResolvedProgram;
@@ -73,7 +73,21 @@ pub fn typecheck(ast: &ResolvedProgram) -> Result<TypedProgram> {
 }
 
 fn validate_global_var(var: &GlobalVarDecl, ctx: &mut TypeCtx) -> Result<()> {
+    validate_object_type(&var.ty)?;
+    if let Some(existing) = ctx.objects.get(&var.name) {
+        if existing != &var.ty {
+            bail!("type error: conflicting declarations for '{}'", var.name);
+        }
+    }
     if let Some(init) = &var.init {
+        if matches!(var.ty, Type::Array { .. }) {
+            if var.storage == StorageClass::Static && !initializer_is_constant(init) {
+                bail!("type error: static array initializer must be constant");
+            }
+            validate_initializer(init, &var.ty, ctx)?;
+            ctx.objects.insert(var.name.clone(), var.ty.clone());
+            return Ok(());
+        }
         let init_ty = type_of_expr(init, ctx)?;
         if !can_assign(init, &init_ty, &var.ty) {
             bail!("type error: invalid static initializer for '{}'", var.name);
@@ -114,8 +128,16 @@ fn check_block_item(item: &BlockItem, ctx: &mut TypeCtx) -> Result<()> {
 }
 
 fn check_var_decl(decl: &VarDecl, ctx: &mut TypeCtx) -> Result<()> {
+    validate_object_type(&decl.ty)?;
     ctx.objects.insert(decl.name.clone(), decl.ty.clone());
     if let Some(init) = &decl.init {
+        if matches!(decl.ty, Type::Array { .. }) {
+            if decl.storage == StorageClass::Static && !initializer_is_constant(init) {
+                bail!("type error: static array initializer must be constant");
+            }
+            validate_initializer(init, &decl.ty, ctx)?;
+            return Ok(());
+        }
         let init_ty = type_of_expr(init, ctx)?;
         if !can_assign(init, &init_ty, &decl.ty) {
             bail!("type error: invalid initializer for '{}'", decl.name);
@@ -241,8 +263,11 @@ fn type_of_expr(expr: &Expr, ctx: &TypeCtx) -> Result<Type> {
                 bail!("type error: increment/decrement target is not an lvalue");
             }
             let ty = type_of_expr(inner, ctx)?;
-            if !ty.clone().is_integer() && !matches!(ty, Type::Double) {
-                bail!("type error: increment/decrement target must be arithmetic");
+            if !ty.clone().decay().is_pointer()
+                && !ty.clone().is_integer()
+                && !matches!(ty, Type::Double)
+            {
+                bail!("type error: increment/decrement target must be scalar");
             }
             Ok(ty)
         }
@@ -281,12 +306,36 @@ fn type_of_expr(expr: &Expr, ctx: &TypeCtx) -> Result<Type> {
             }
             Ok(Type::Pointer(Box::new(type_of_expr(inner, ctx)?)))
         }
-        Expr::Dereference(inner) => match type_of_expr(inner, ctx)? {
+        Expr::Dereference(inner) => match type_of_expr(inner, ctx)?.decay() {
             Type::Pointer(pointee) if !matches!(*pointee, Type::Void) => Ok(*pointee),
             Type::Pointer(_) => bail!("type error: cannot dereference void pointer"),
             _ => bail!("type error: cannot dereference non-pointer"),
         },
-        Expr::Subscript { .. } => bail!("type error: arrays/subscript are out of chapter-14 scope"),
+        Expr::Subscript { base, index } => {
+            let base_ty = type_of_expr(base, ctx)?.decay();
+            let index_ty = type_of_expr(index, ctx)?.decay();
+            match (base_ty, index_ty) {
+                (Type::Pointer(pointee), index_ty) if index_ty.clone().is_integer() => {
+                    if matches!(*pointee, Type::Void) {
+                        bail!("type error: cannot subscript void pointer");
+                    }
+                    Ok(*pointee)
+                }
+                (base_ty, Type::Pointer(pointee)) if base_ty.clone().is_integer() => {
+                    if matches!(*pointee, Type::Void) {
+                        bail!("type error: cannot subscript void pointer");
+                    }
+                    Ok(*pointee)
+                }
+                (Type::Pointer(_), _) | (_, Type::Pointer(_)) => {
+                    bail!("type error: subscript index must be integer")
+                }
+                _ => bail!("type error: subscript base must be pointer or array"),
+            }
+        }
+        Expr::InitializerList(_) => {
+            bail!("type error: initializer list is only valid in an initializer")
+        }
     }
 }
 
@@ -317,6 +366,9 @@ fn type_assignment(op: AssignOp, target: &Expr, value: &Expr, ctx: &TypeCtx) -> 
     }
     let target_ty = type_of_expr(target, ctx)?;
     let value_ty = type_of_expr(value, ctx)?;
+    if matches!(target_ty, Type::Array { .. }) {
+        bail!("type error: cannot assign to array object");
+    }
     if op == AssignOp::Assign {
         if !can_assign(value, &value_ty, &target_ty) {
             bail!("type error: assignment has incompatible types");
@@ -331,8 +383,8 @@ fn type_assignment(op: AssignOp, target: &Expr, value: &Expr, ctx: &TypeCtx) -> 
 }
 
 fn type_binary(op: BinaryOp, left: &Expr, right: &Expr, ctx: &TypeCtx) -> Result<Type> {
-    let left_ty = type_of_expr(left, ctx)?;
-    let right_ty = type_of_expr(right, ctx)?;
+    let left_ty = type_of_expr(left, ctx)?.decay();
+    let right_ty = type_of_expr(right, ctx)?.decay();
     match op {
         BinaryOp::Equal | BinaryOp::NotEqual => {
             comparable(left, &left_ty, right, &right_ty)?;
@@ -356,7 +408,26 @@ fn type_binary(op: BinaryOp, left: &Expr, right: &Expr, ctx: &TypeCtx) -> Result
             ensure_scalar(&right_ty)?;
             Ok(Type::Int)
         }
-        BinaryOp::Add | BinaryOp::Subtract => common_arithmetic(&left_ty, &right_ty),
+        BinaryOp::Add => match (&left_ty, &right_ty) {
+            (Type::Pointer(_), _) if right_ty.clone().is_integer() => Ok(left_ty),
+            (_, Type::Pointer(_)) if left_ty.clone().is_integer() => Ok(right_ty),
+            (Type::Pointer(_), _) | (_, Type::Pointer(_)) => {
+                bail!("type error: pointer addition requires integer offset")
+            }
+            _ => common_arithmetic(&left_ty, &right_ty),
+        },
+        BinaryOp::Subtract => match (&left_ty, &right_ty) {
+            (Type::Pointer(_), _) if right_ty.clone().is_integer() => Ok(left_ty),
+            (Type::Pointer(left_pointee), Type::Pointer(right_pointee))
+                if left_pointee == right_pointee =>
+            {
+                Ok(Type::Long)
+            }
+            (Type::Pointer(_), _) | (_, Type::Pointer(_)) => {
+                bail!("type error: invalid pointer subtraction")
+            }
+            _ => common_arithmetic(&left_ty, &right_ty),
+        },
         BinaryOp::Multiply | BinaryOp::Divide | BinaryOp::Remainder => {
             if matches!(left_ty, Type::Pointer(_)) || matches!(right_ty, Type::Pointer(_)) {
                 bail!("type error: arithmetic operator cannot be applied to pointer");
@@ -394,6 +465,7 @@ fn compound_to_binary(op: AssignOp) -> Result<BinaryOp> {
 }
 
 fn validate_cast(source: &Type, target: &Type) -> Result<()> {
+    let source = source.clone().decay();
     if matches!(source, Type::Double) && matches!(target, Type::Pointer(_)) {
         bail!("type error: cannot cast double to pointer");
     }
@@ -404,12 +476,56 @@ fn validate_cast(source: &Type, target: &Type) -> Result<()> {
 }
 
 fn can_assign(expr: &Expr, source: &Type, target: &Type) -> bool {
+    let source = source.clone().decay();
+    let target = target.clone();
     source == target
         || (is_null_pointer_constant(expr) && matches!(target, Type::Pointer(_)))
+        || (matches!((&source, &target), (Type::Pointer(a), Type::Pointer(b)) if a == b))
         || (source.clone().is_integer() && target.clone().is_integer())
         || ((source.clone().is_integer() || matches!(source, Type::Double))
             && (target.clone().is_integer() || matches!(target, Type::Double))
             && !matches!(target, Type::Pointer(_)))
+}
+
+fn validate_initializer(init: &Expr, target: &Type, ctx: &TypeCtx) -> Result<()> {
+    match (target, init) {
+        (
+            Type::Array {
+                element,
+                size: Some(size),
+            },
+            Expr::InitializerList(items),
+        ) => {
+            if items.len() > *size {
+                bail!("type error: too many array initializers");
+            }
+            for item in items {
+                validate_initializer(item, element, ctx)?;
+            }
+            Ok(())
+        }
+        (Type::Array { .. }, _) => bail!("type error: scalar initializer for array"),
+        (_, Expr::InitializerList(_)) => bail!("type error: initializer list for scalar"),
+        (target, expr) => {
+            let source = type_of_expr(expr, ctx)?;
+            if can_assign(expr, &source, target) {
+                Ok(())
+            } else {
+                bail!("type error: initializer has incompatible type")
+            }
+        }
+    }
+}
+
+fn initializer_is_constant(init: &Expr) -> bool {
+    match init {
+        Expr::Constant(_)
+        | Expr::LongConstant(_)
+        | Expr::UIntConstant(_, _)
+        | Expr::DoubleConstant(_) => true,
+        Expr::InitializerList(items) => items.iter().all(initializer_is_constant),
+        _ => false,
+    }
 }
 
 fn is_null_pointer_constant(expr: &Expr) -> bool {
@@ -421,6 +537,8 @@ fn is_null_pointer_constant(expr: &Expr) -> bool {
 }
 
 fn comparable(left: &Expr, left_ty: &Type, right: &Expr, right_ty: &Type) -> Result<()> {
+    let left_ty = left_ty.clone().decay();
+    let right_ty = right_ty.clone().decay();
     if left_ty == right_ty {
         return Ok(());
     }
@@ -442,8 +560,10 @@ fn comparable(left: &Expr, left_ty: &Type, right: &Expr, right_ty: &Type) -> Res
 }
 
 fn common_type(left: &Expr, left_ty: &Type, right: &Expr, right_ty: &Type) -> Result<Type> {
+    let left_ty = left_ty.clone().decay();
+    let right_ty = right_ty.clone().decay();
     if left_ty == right_ty {
-        return Ok(left_ty.clone());
+        return Ok(left_ty);
     }
     if matches!(left_ty, Type::Pointer(_)) && is_null_pointer_constant(right) {
         return Ok(left_ty.clone());
@@ -451,7 +571,7 @@ fn common_type(left: &Expr, left_ty: &Type, right: &Expr, right_ty: &Type) -> Re
     if matches!(right_ty, Type::Pointer(_)) && is_null_pointer_constant(left) {
         return Ok(right_ty.clone());
     }
-    common_arithmetic(left_ty, right_ty)
+    common_arithmetic(&left_ty, &right_ty)
 }
 
 fn common_arithmetic(left: &Type, right: &Type) -> Result<Type> {
@@ -476,4 +596,17 @@ fn ensure_scalar(ty: &Type) -> Result<()> {
         bail!("type error: scalar expression expected");
     }
     Ok(())
+}
+
+fn validate_object_type(ty: &Type) -> Result<()> {
+    match ty {
+        Type::Array { element, size } => {
+            if size.is_none() {
+                bail!("type error: array object has incomplete type");
+            }
+            validate_object_type(element)
+        }
+        Type::Void => bail!("type error: object has void type"),
+        _ => Ok(()),
+    }
 }

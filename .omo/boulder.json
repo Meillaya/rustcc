@@ -8,7 +8,7 @@
       "plan_name": "c-compiler-rust",
       "status": "active",
       "started_at": "2026-07-07T19:15:31.671Z",
-      "updated_at": "2026-07-08T11:38:48.060Z",
+      "updated_at": "2026-07-08T19:00:50Z",
       "session_ids": [
         "opencode:ses_0c241b468ffeuCkDS36rF8DZEG",
         "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2",
@@ -32,7 +32,9 @@
         "opencode:ses_0c065f533ffe7eHcgBwmG88heb",
         "opencode:ses_0bfc9e721fferyx9ih485sHFS5",
         "opencode:ses_0bfac7949ffefY6p7ZfXRJrB3o",
-        "opencode:ses_0be957b2bffeO2qNQFvCYd00DH"
+        "opencode:ses_0be957b2bffeO2qNQFvCYd00DH",
+        "opencode:ses_0bd923d87ffe2MczQ1hM14JzMp",
+        "codex:omx-1783526412954-0ir5tz"
       ],
       "session_origins": {
         "opencode:ses_0c241b468ffeuCkDS36rF8DZEG": "direct",
@@ -57,9 +59,11 @@
         "opencode:ses_0c065f533ffe7eHcgBwmG88heb": "appended",
         "opencode:ses_0bfc9e721fferyx9ih485sHFS5": "appended",
         "opencode:ses_0bfac7949ffefY6p7ZfXRJrB3o": "appended",
-        "opencode:ses_0be957b2bffeO2qNQFvCYd00DH": "appended"
+        "opencode:ses_0be957b2bffeO2qNQFvCYd00DH": "appended",
+        "opencode:ses_0bd923d87ffe2MczQ1hM14JzMp": "appended",
+        "codex:omx-1783526412954-0ir5tz": "codex-start-work"
       },
-      "agent": "atlas",
+      "agent": "codex-orchestrator",
       "task_sessions": {
         "todo:1": {
           "task_key": "todo:1",
@@ -193,13 +197,116 @@
         "todo:18": {
           "task_key": "todo:18",
           "task_label": "18",
-          "task_title": "W6-T1: Chapter 5 - local variables, assignment, lvalues + `--compound` extra (`+= -= *= /= %= &= |= ^= <<= >>=`) + `--increment` extra (`++ --` prefix/postfix)",
-          "session_id": "opencode:ses_0be957b2bffeO2qNQFvCYd00DH",
-          "agent": "Sisyphus-Junior",
+          "task_title": "W6-T1: Chapter 5 - local variables, assignment, lvalues + compound/increment extras",
+          "session_id": "codex:omx-1783526412954-0ir5tz",
+          "agent": "codex-start-work",
           "category": "deep",
-          "started_at": "2026-07-08T01:28:48.217Z",
-          "status": "running",
-          "updated_at": "2026-07-08T11:38:48.060Z"
+          "status": "completed",
+          "updated_at": "2026-07-08T16:47:12Z",
+          "ended_at": "2026-07-08T16:47:12Z",
+          "commits": [
+            "878a5a3",
+            "737866c",
+            "ee4ee1c",
+            "8d9c755926749444d4413880c681e47e435c4fd4"
+          ],
+          "verifier": "019f429b-d068-7f10-8085-d89f035ff0e5"
+        },
+        "todo:37": {
+          "task_key": "todo:37",
+          "task_label": "37",
+          "task_title": "W14-T1: Chapter 13 - double floats, XMM register file, conversions",
+          "session_id": "codex:omx-1783526412954-0ir5tz",
+          "agent": "codex-start-work",
+          "category": "deep",
+          "status": "completed",
+          "started_at": "2026-07-08T16:48:57Z",
+          "updated_at": "2026-07-08T17:30:51Z",
+          "commit": "dfd5d919349bf52148b1f95401f7b124d8583497",
+          "verifier": "019f42c4-2445-7d71-b25b-8f2b73ca29c3",
+          "ended_at": "2026-07-08T17:30:51Z",
+          "commits": [
+            "dfd5d919349bf52148b1f95401f7b124d8583497",
+            "43fbce65f0a607d16df871cf6798d50c869ea84c"
+          ]
+        },
+        "todo:38": {
+          "task_key": "todo:38",
+          "task_label": "38",
+          "task_title": "W14-T2: Chapter 13 - NaN-aware comparisons extra",
+          "session_id": "codex:omx-1783526412954-0ir5tz",
+          "agent": "codex-start-work",
+          "category": "deep",
+          "status": "completed",
+          "started_at": "2026-07-08T17:31:43Z",
+          "updated_at": "2026-07-08T17:44:17Z",
+          "commit": "24870dc",
+          "ended_at": "2026-07-08T17:44:17Z",
+          "verifier": "019f42d0-463c-7c01-805a-aac03859e15e"
+        },
+        "todo:39": {
+          "task_key": "todo:39",
+          "task_label": "39",
+          "task_title": "W14-T3: Chapter 13 gate verification + commit",
+          "session_id": "codex:omx-1783526412954-0ir5tz",
+          "agent": "codex-start-work",
+          "category": "quick",
+          "status": "completed",
+          "started_at": "2026-07-08T17:44:57Z",
+          "updated_at": "2026-07-08T17:52:40Z",
+          "commit": "2d52828",
+          "ended_at": "2026-07-08T17:52:40Z",
+          "verifier": "019f42d7-b6c5-72a1-a97d-4b4448cc273a"
+        },
+        "todo:40": {
+          "task_key": "todo:40",
+          "task_label": "40",
+          "task_title": "W15-T1: Chapter 14 - pointers",
+          "session_id": "codex:omx-1783526412954-0ir5tz",
+          "agent": "codex-start-work",
+          "category": "deep",
+          "status": "completed",
+          "started_at": "2026-07-08T17:53:39Z",
+          "updated_at": "2026-07-08T18:24:05Z",
+          "commit": "9bbac7c",
+          "verifier": "019f42f5-1353-7590-825a-c9a1ba9c7907",
+          "fix_commit": "6ba757a",
+          "ended_at": "2026-07-08T18:24:05Z",
+          "commits": [
+            "9bbac7c",
+            "6ba757a"
+          ]
+        },
+        "todo:41": {
+          "task_key": "todo:41",
+          "task_label": "41",
+          "task_title": "W15-T2: Chapter 14 gate verification + commit",
+          "session_id": "codex:omx-1783526412954-0ir5tz",
+          "agent": "codex-start-work",
+          "category": "quick",
+          "status": "completed",
+          "started_at": "2026-07-08T18:24:56Z",
+          "updated_at": "2026-07-08T18:30:33Z",
+          "commit": "7bb10b3",
+          "ended_at": "2026-07-08T18:30:33Z",
+          "verifier": "019f42fb-de6d-72c2-8e74-ff4d823e855b"
+        },
+        "todo:42": {
+          "task_key": "todo:42",
+          "task_label": "42",
+          "task_title": "W16-T1: Chapter 15 - arrays and pointer arithmetic",
+          "session_id": "019f42ff-a50d-7123-852e-3d3f00ff5bd4",
+          "agent": "codex-executor",
+          "category": "deep",
+          "status": "native-followup-running",
+          "started_at": "2026-07-08T18:31:32Z",
+          "updated_at": "2026-07-08T19:00:50Z",
+          "commit": "e8934c3bcda2502b048fe37cc8737756c666f299",
+          "verifier": "019f4305-c1cd-7d11-bcc5-23086c7fbe6c",
+          "fix_session_id": "019f430a-bf6d-7c70-a45f-8dff005b9b6a",
+          "partial_session_id": "019f430a-bf6d-7c70-a45f-8dff005b9b6a",
+          "partial_commit": null,
+          "followup_session_id": "019f431a-6ca0-7a91-88d4-cb1819d02c06"
         }
       }
     }
@@ -207,7 +314,7 @@
   "active_plan": "/home/mei/projects/rustcc/.omo/plans/c-compiler-rust.md",
   "started_at": "2026-07-07T19:15:31.671Z",
   "status": "active",
-  "updated_at": "2026-07-08T11:38:48.060Z",
+  "updated_at": "2026-07-08T19:00:50Z",
   "session_ids": [
     "opencode:ses_0c241b468ffeuCkDS36rF8DZEG",
     "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2",
@@ -231,7 +338,9 @@
     "opencode:ses_0c065f533ffe7eHcgBwmG88heb",
     "opencode:ses_0bfc9e721fferyx9ih485sHFS5",
     "opencode:ses_0bfac7949ffefY6p7ZfXRJrB3o",
-    "opencode:ses_0be957b2bffeO2qNQFvCYd00DH"
+    "opencode:ses_0be957b2bffeO2qNQFvCYd00DH",
+    "opencode:ses_0bd923d87ffe2MczQ1hM14JzMp",
+    "codex:omx-1783526412954-0ir5tz"
   ],
   "session_origins": {
     "opencode:ses_0c241b468ffeuCkDS36rF8DZEG": "direct",
@@ -256,7 +365,9 @@
     "opencode:ses_0c065f533ffe7eHcgBwmG88heb": "appended",
     "opencode:ses_0bfc9e721fferyx9ih485sHFS5": "appended",
     "opencode:ses_0bfac7949ffefY6p7ZfXRJrB3o": "appended",
-    "opencode:ses_0be957b2bffeO2qNQFvCYd00DH": "appended"
+    "opencode:ses_0be957b2bffeO2qNQFvCYd00DH": "appended",
+    "opencode:ses_0bd923d87ffe2MczQ1hM14JzMp": "appended",
+    "codex:omx-1783526412954-0ir5tz": "codex-start-work"
   },
   "plan_name": "c-compiler-rust",
   "task_sessions": {
@@ -392,14 +503,117 @@
     "todo:18": {
       "task_key": "todo:18",
       "task_label": "18",
-      "task_title": "W6-T1: Chapter 5 - local variables, assignment, lvalues + `--compound` extra (`+= -= *= /= %= &= |= ^= <<= >>=`) + `--increment` extra (`++ --` prefix/postfix)",
-      "session_id": "opencode:ses_0be957b2bffeO2qNQFvCYd00DH",
-      "agent": "Sisyphus-Junior",
+      "task_title": "W6-T1: Chapter 5 - local variables, assignment, lvalues + compound/increment extras",
+      "session_id": "codex:omx-1783526412954-0ir5tz",
+      "agent": "codex-start-work",
       "category": "deep",
-      "started_at": "2026-07-08T01:28:48.217Z",
-      "status": "running",
-      "updated_at": "2026-07-08T11:38:48.060Z"
+      "status": "completed",
+      "updated_at": "2026-07-08T16:47:12Z",
+      "ended_at": "2026-07-08T16:47:12Z",
+      "commits": [
+        "878a5a3",
+        "737866c",
+        "ee4ee1c",
+        "8d9c755926749444d4413880c681e47e435c4fd4"
+      ],
+      "verifier": "019f429b-d068-7f10-8085-d89f035ff0e5"
+    },
+    "todo:37": {
+      "task_key": "todo:37",
+      "task_label": "37",
+      "task_title": "W14-T1: Chapter 13 - double floats, XMM register file, conversions",
+      "session_id": "codex:omx-1783526412954-0ir5tz",
+      "agent": "codex-start-work",
+      "category": "deep",
+      "status": "completed",
+      "started_at": "2026-07-08T16:48:57Z",
+      "updated_at": "2026-07-08T17:30:51Z",
+      "commit": "dfd5d919349bf52148b1f95401f7b124d8583497",
+      "verifier": "019f42c4-2445-7d71-b25b-8f2b73ca29c3",
+      "ended_at": "2026-07-08T17:30:51Z",
+      "commits": [
+        "dfd5d919349bf52148b1f95401f7b124d8583497",
+        "43fbce65f0a607d16df871cf6798d50c869ea84c"
+      ]
+    },
+    "todo:38": {
+      "task_key": "todo:38",
+      "task_label": "38",
+      "task_title": "W14-T2: Chapter 13 - NaN-aware comparisons extra",
+      "session_id": "codex:omx-1783526412954-0ir5tz",
+      "agent": "codex-start-work",
+      "category": "deep",
+      "status": "completed",
+      "started_at": "2026-07-08T17:31:43Z",
+      "updated_at": "2026-07-08T17:44:17Z",
+      "commit": "24870dc",
+      "ended_at": "2026-07-08T17:44:17Z",
+      "verifier": "019f42d0-463c-7c01-805a-aac03859e15e"
+    },
+    "todo:39": {
+      "task_key": "todo:39",
+      "task_label": "39",
+      "task_title": "W14-T3: Chapter 13 gate verification + commit",
+      "session_id": "codex:omx-1783526412954-0ir5tz",
+      "agent": "codex-start-work",
+      "category": "quick",
+      "status": "completed",
+      "started_at": "2026-07-08T17:44:57Z",
+      "updated_at": "2026-07-08T17:52:40Z",
+      "commit": "2d52828",
+      "ended_at": "2026-07-08T17:52:40Z",
+      "verifier": "019f42d7-b6c5-72a1-a97d-4b4448cc273a"
+    },
+    "todo:40": {
+      "task_key": "todo:40",
+      "task_label": "40",
+      "task_title": "W15-T1: Chapter 14 - pointers",
+      "session_id": "codex:omx-1783526412954-0ir5tz",
+      "agent": "codex-start-work",
+      "category": "deep",
+      "status": "completed",
+      "started_at": "2026-07-08T17:53:39Z",
+      "updated_at": "2026-07-08T18:24:05Z",
+      "commit": "9bbac7c",
+      "verifier": "019f42f5-1353-7590-825a-c9a1ba9c7907",
+      "fix_commit": "6ba757a",
+      "ended_at": "2026-07-08T18:24:05Z",
+      "commits": [
+        "9bbac7c",
+        "6ba757a"
+      ]
+    },
+    "todo:41": {
+      "task_key": "todo:41",
+      "task_label": "41",
+      "task_title": "W15-T2: Chapter 14 gate verification + commit",
+      "session_id": "codex:omx-1783526412954-0ir5tz",
+      "agent": "codex-start-work",
+      "category": "quick",
+      "status": "completed",
+      "started_at": "2026-07-08T18:24:56Z",
+      "updated_at": "2026-07-08T18:30:33Z",
+      "commit": "7bb10b3",
+      "ended_at": "2026-07-08T18:30:33Z",
+      "verifier": "019f42fb-de6d-72c2-8e74-ff4d823e855b"
+    },
+    "todo:42": {
+      "task_key": "todo:42",
+      "task_label": "42",
+      "task_title": "W16-T1: Chapter 15 - arrays and pointer arithmetic",
+      "session_id": "019f42ff-a50d-7123-852e-3d3f00ff5bd4",
+      "agent": "codex-executor",
+      "category": "deep",
+      "status": "native-followup-running",
+      "started_at": "2026-07-08T18:31:32Z",
+      "updated_at": "2026-07-08T19:00:50Z",
+      "commit": "e8934c3bcda2502b048fe37cc8737756c666f299",
+      "verifier": "019f4305-c1cd-7d11-bcc5-23086c7fbe6c",
+      "fix_session_id": "019f430a-bf6d-7c70-a45f-8dff005b9b6a",
+      "partial_session_id": "019f430a-bf6d-7c70-a45f-8dff005b9b6a",
+      "partial_commit": null,
+      "followup_session_id": "019f431a-6ca0-7a91-88d4-cb1819d02c06"
     }
   },
-  "agent": "atlas"
+  "agent": "codex-orchestrator"
 }

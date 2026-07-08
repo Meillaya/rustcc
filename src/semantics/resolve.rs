@@ -57,7 +57,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 use crate::ast::{
     BlockItem, Expr, ForInit, Function, GlobalDecl, GlobalVarDecl, Program, Statement,
@@ -304,6 +304,12 @@ fn resolve_global_init(expr: &Expr) -> Result<Expr> {
         | Expr::LongConstant(_)
         | Expr::UIntConstant(_, _)
         | Expr::DoubleConstant(_) => Ok(expr.clone()),
+        Expr::InitializerList(items) => Ok(Expr::InitializerList(
+            items
+                .iter()
+                .map(resolve_global_init)
+                .collect::<Result<Vec<_>>>()?,
+        )),
         other => bail!(
             "resolve error: file-scope variable initializer must be a constant expression (got {other:?})"
         ),
@@ -311,7 +317,7 @@ fn resolve_global_init(expr: &Expr) -> Result<Expr> {
 }
 
 fn resolve_function(func: &Function, globals: &GlobalTable) -> Result<Function> {
-    let mut scopes = ScopeStack::new();
+    let mut scopes = ScopeStack::new(&func.name);
     check_duplicate_params(&func.params)?;
     let mut resolved_params: Vec<VarDecl> = Vec::with_capacity(func.params.len());
     for param in &func.params {
@@ -358,16 +364,18 @@ fn resolve_function(func: &Function, globals: &GlobalTable) -> Result<Function> 
 /// The unique name uses a globally monotonic counter so `x.0` / `x.1`
 /// / `x.2` / ... never collide across blocks, mirroring the OCaml
 /// reference's `Unique_ids.make_named_temporary`.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct ScopeStack {
+    function_name: String,
     scopes: Vec<HashMap<String, String>>,
     fun_decls: Vec<HashMap<String, usize>>,
     next_id: u32,
 }
 
 impl ScopeStack {
-    fn new() -> Self {
+    fn new(function_name: &str) -> Self {
         Self {
+            function_name: function_name.to_string(),
             scopes: vec![HashMap::new()],
             fun_decls: vec![HashMap::new()],
             next_id: 0,
@@ -410,7 +418,7 @@ impl ScopeStack {
         if current.contains_key(name) {
             bail!("resolve error: duplicate declaration of '{name}' in the same scope");
         }
-        let unique = format!("{name}.{}", self.next_id);
+        let unique = format!("{}.{name}.{}", self.function_name, self.next_id);
         self.next_id += 1;
         current.insert(name.to_string(), unique.clone());
         Ok(unique)
@@ -810,5 +818,11 @@ fn resolve_expr(expr: &Expr, scopes: &mut ScopeStack, globals: &GlobalTable) -> 
             base: Box::new(resolve_expr(base, scopes, globals)?),
             index: Box::new(resolve_expr(index, scopes, globals)?),
         }),
+        Expr::InitializerList(items) => Ok(Expr::InitializerList(
+            items
+                .iter()
+                .map(|item| resolve_expr(item, scopes, globals))
+                .collect::<Result<Vec<_>>>()?,
+        )),
     }
 }

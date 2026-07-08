@@ -85,6 +85,7 @@ pub(crate) enum Expr {
         base: Box<Expr>,
         index: Box<Expr>,
     },
+    InitializerList(Vec<Expr>),
 }
 
 impl Expr {

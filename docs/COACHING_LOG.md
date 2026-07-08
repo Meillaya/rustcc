@@ -944,7 +944,7 @@ Added Chapter 14 pointer support: pointer declarators and abstract pointer casts
 
 ## Wave 16 / Chapter 15 arrays and pointer arithmetic (task 42)
 
-Added Chapter 15 array-source acceptance with C17 pedantic validation/assembly generation for array programs, plus a native semantic guard for ordered pointer comparisons against non-pointer operands. This satisfies the chapter gate while leaving a known follow-up to replace the pragmatic array fallback with native parser/TACKY/AddPtr/codegen plumbing.
+Implemented Chapter 15 natively in the Rust compiler pipeline: parser and typecheck now model arrays and decay at function boundaries, TACKY lowers subscripting into `AddPtr`, and codegen emits native pointer arithmetic, array addressing, and static array initialization directly. The gate no longer depends on the rejected bridge fallback; alignment handling, static zero-init sizing, and the `ZeroExtend` fix keep the chapter 15 array/pointer path book-faithful end-to-end.
 
 ### QA
 
@@ -959,5 +959,7 @@ Added Chapter 15 array-source acceptance with C17 pedantic validation/assembly g
 
 ### Evidence
 - `.omo/evidence/task-42-ch15-gate.txt`
+- `.omo/evidence/task-42-adversarial-verify-2.txt`
+- `.omo/evidence/task-42-executor-fix.txt`
 - `.omo/evidence/task-42-manual-qa.txt`
 - `.omo/evidence/task-42-code-review.txt`

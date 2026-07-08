@@ -46,6 +46,9 @@ pub enum OperandType {
     ULong,
     /// 64-bit IEEE-754 double (book `Double`).
     Double,
+    ByteArray {
+        size: i64,
+    },
 }
 
 impl OperandType {
@@ -54,6 +57,7 @@ impl OperandType {
         match self {
             OperandType::Int | OperandType::UInt => 4,
             OperandType::Long | OperandType::ULong | OperandType::Double => 8,
+            OperandType::ByteArray { size } => size,
         }
     }
 
@@ -252,7 +256,7 @@ pub enum Instruction {
     AddPtr {
         ptr: Val,
         index: Val,
-        scale: u8,
+        scale: i64,
         dst: Var,
     },
     Call {
@@ -321,6 +325,7 @@ pub enum TackyStaticInit {
     /// Chapter 13: 64-bit IEEE-754 double constant for a file-scope
     /// `static double x = 3.14;` initializer.
     Double(f64),
+    Aggregate(Vec<TackyStaticInit>),
     /// Placeholder so future chapters can extend the IR without changing
     /// the variant set the lowerer / codegen pre-commit to.
     Zero,

@@ -27,8 +27,5 @@ pub mod tacky;
 pub mod temp;
 
 pub use opt::{OptPass, run_opt};
-pub use tacky::{
-    Instruction, TackyFunction, TackyProgram, Val, Var, ast_to_tacky,
-};
+pub use tacky::{Instruction, TackyFunction, TackyProgram, Val, Var, ast_to_tacky};
 pub use temp::{TempId, TempIdGenerator};
-

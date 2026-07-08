@@ -36,8 +36,8 @@ pub mod resolve {
 pub mod label_loops {
     use anyhow::Result;
 
-    use crate::semantics::label_loops as label_loops_pass;
     use crate::semantics::ResolvedProgram;
+    use crate::semantics::label_loops as label_loops_pass;
 
     pub(crate) fn label_loops(mut resolved: ResolvedProgram) -> Result<ResolvedProgram> {
         let program = &mut resolved.program;
@@ -59,7 +59,7 @@ pub mod typecheck {
 pub mod tacky_gen {
     use anyhow::Result;
 
-    use crate::ir::tacky::{ast_to_tacky, TackyProgram};
+    use crate::ir::tacky::{TackyProgram, ast_to_tacky};
     use crate::semantics::TypedProgram;
 
     pub(crate) fn generate_tacky(program: &TypedProgram) -> Result<TackyProgram> {

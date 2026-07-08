@@ -321,7 +321,7 @@ pub enum TopLevel {
         name: String,
         global: bool,
         alignment: u32,
-        init: StaticInit,
+        init: Vec<StaticInit>,
     },
     Constant {
         label: String,

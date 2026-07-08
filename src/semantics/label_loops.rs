@@ -180,9 +180,7 @@ fn check_user_gotos_stmt(stmt: &Statement, labels: &HashSet<String>) -> Result<(
     match stmt {
         Statement::Goto(target) => {
             if !labels.contains(target) {
-                bail!(
-                    "label_loops error: label '{target}' is not defined in the current function"
-                );
+                bail!("label_loops error: label '{target}' is not defined in the current function");
             }
         }
         Statement::Return(expr) => {
@@ -205,8 +203,12 @@ fn check_user_gotos_stmt(stmt: &Statement, labels: &HashSet<String>) -> Result<(
             }
         }
         Statement::Block(items) => check_user_gotos_block(items, labels)?,
-        Statement::While { condition, body, .. }
-        | Statement::DoWhile { body, condition, .. } => {
+        Statement::While {
+            condition, body, ..
+        }
+        | Statement::DoWhile {
+            body, condition, ..
+        } => {
             walk_expr(condition);
             check_user_gotos_stmt(body, labels)?;
         }
@@ -336,7 +338,11 @@ fn rewrite_stmt(stmt: &mut Statement, ctx: &mut LoopCtx) -> Result<()> {
             ctx.break_stack.pop();
             Ok(())
         }
-        Statement::Switch { expr: _, body, label } => {
+        Statement::Switch {
+            expr: _,
+            body,
+            label,
+        } => {
             let id = ctx.mint("switch");
             *label = id.clone();
             ctx.break_stack.push(id);
@@ -368,9 +374,7 @@ fn rewrite_stmt(stmt: &mut Statement, ctx: &mut LoopCtx) -> Result<()> {
         Statement::Continue(target) => {
             if target.is_empty() {
                 let id = ctx.continue_stack.last().ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "label_loops error: 'continue' used outside of any loop"
-                    )
+                    anyhow::anyhow!("label_loops error: 'continue' used outside of any loop")
                 })?;
                 *target = id.clone();
             }

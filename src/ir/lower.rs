@@ -52,11 +52,12 @@ fn type_to_operand_type(ty: Type) -> OperandType {
         Type::UnsignedLong => OperandType::ULong,
         Type::Double => OperandType::Double,
         Type::Pointer(_) => OperandType::Long,
+        Type::Array { size: Some(_), .. } => OperandType::ByteArray { size: ty.size() },
         _ => OperandType::Int,
     }
 }
 
-fn static_init_for(expr: Expr, target_ty: OperandType) -> TackyStaticInit {
+fn scalar_static_init_for(expr: Expr, target_ty: OperandType) -> TackyStaticInit {
     match (expr, target_ty) {
         (Expr::DoubleConstant(d), OperandType::Double) => TackyStaticInit::Double(d),
         (Expr::Constant(n), OperandType::Double)
@@ -68,11 +69,57 @@ fn static_init_for(expr: Expr, target_ty: OperandType) -> TackyStaticInit {
         (Expr::DoubleConstant(d), OperandType::Long) => TackyStaticInit::Long(d as i64),
         (Expr::DoubleConstant(d), _) => TackyStaticInit::Int(d as i64),
         (Expr::LongConstant(n), OperandType::Long | OperandType::ULong) => TackyStaticInit::Long(n),
+        (Expr::UIntConstant(n, _), OperandType::Long | OperandType::ULong) => {
+            TackyStaticInit::Long(n)
+        }
         (Expr::UIntConstant(n, true), _) => TackyStaticInit::Long(n),
         (Expr::Constant(n), OperandType::Long | OperandType::ULong) => TackyStaticInit::Long(n),
         (Expr::Constant(n), _) | (Expr::UIntConstant(n, false), _) => TackyStaticInit::Int(n),
         _ => TackyStaticInit::Zero,
     }
+}
+
+fn zero_static_init_for_type(ty: &Type) -> TackyStaticInit {
+    match ty {
+        Type::Array {
+            element,
+            size: Some(size),
+        } => TackyStaticInit::Aggregate(
+            (0..*size)
+                .map(|_| zero_static_init_for_type(element))
+                .collect(),
+        ),
+        ty => scalar_static_init_for(Expr::Constant(0), type_to_operand_type(ty.clone())),
+    }
+}
+
+fn static_init_for_type(expr: Expr, target_ty: &Type) -> TackyStaticInit {
+    match (expr, target_ty) {
+        (
+            Expr::InitializerList(items),
+            Type::Array {
+                element,
+                size: Some(size),
+            },
+        ) => {
+            let mut inits: Vec<TackyStaticInit> = items
+                .into_iter()
+                .map(|item| static_init_for_type(item, element))
+                .collect();
+            while inits.len() < *size {
+                inits.push(zero_static_init_for_type(element));
+            }
+            TackyStaticInit::Aggregate(inits)
+        }
+        (expr, Type::Array { .. }) => {
+            static_init_for_type(Expr::InitializerList(vec![expr]), target_ty)
+        }
+        (expr, ty) => scalar_static_init_for(expr, type_to_operand_type(ty.clone())),
+    }
+}
+
+fn static_init_for(expr: Expr, target_ty: OperandType) -> TackyStaticInit {
+    scalar_static_init_for(expr, target_ty)
 }
 
 pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
@@ -187,8 +234,8 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
             }
             let global = matches!(storage, StorageClass::Auto);
             let init = match init {
-                Some(expr) => static_init_for(expr, ty),
-                None => TackyStaticInit::Zero,
+                Some(expr) => static_init_for_type(expr, &_ast_ty),
+                None => zero_static_init_for_type(&_ast_ty),
                 // Non-constant initializers rejected by resolve pass.
             };
             Some(TackyStaticVariable {
@@ -425,8 +472,8 @@ fn lower_block_items(items: &[BlockItem], ctx: &mut LowerCtx) -> Result<Vec<Inst
                     let init = decl
                         .init
                         .clone()
-                        .map(|expr| static_init_for(expr, decl_ty))
-                        .unwrap_or(TackyStaticInit::Zero);
+                        .map(|expr| static_init_for_type(expr, &decl.ty))
+                        .unwrap_or_else(|| zero_static_init_for_type(&decl.ty));
                     ctx.local_statics.push(TackyStaticVariable {
                         name: decl.name.clone(),
                         init,
@@ -436,6 +483,10 @@ fn lower_block_items(items: &[BlockItem], ctx: &mut LowerCtx) -> Result<Vec<Inst
                     continue;
                 }
                 if let Some(expr) = &decl.init {
+                    if matches!(decl.ty, Type::Array { .. }) {
+                        out.extend(lower_array_initializer(&decl.name, &decl.ty, expr, ctx)?);
+                        continue;
+                    }
                     let (instrs, val) = lower_expr(expr, ctx)?;
                     out.extend(instrs);
                     let val_ty = type_of_val(&val, ctx);
@@ -507,6 +558,7 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
             body,
             label,
         } => {
+            let label = scoped_loop_id(label, ctx);
             // Mirrors `emit_tacky_for_while_loop` in
             // `nqcc2/lib/tacky_gen.ml`:
             //   Label continue.<id>
@@ -515,8 +567,8 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
             //   <body>
             //   Jump continue.<id>
             //   Label break.<id>
-            let cont = continue_label(label);
-            let br = break_label(label);
+            let cont = continue_label(&label);
+            let br = break_label(&label);
             let (cond_instrs, cond_val) = lower_expr(condition, ctx)?;
             let mut out = Vec::new();
             out.push(Instruction::Label(cont.clone()));
@@ -535,6 +587,7 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
             condition,
             label,
         } => {
+            let label = scoped_loop_id(label, ctx);
             // Mirrors `emit_tacky_for_do_loop`:
             //   Label start_label
             //   <body>
@@ -543,8 +596,8 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
             //   JumpIfNotZero c, start_label
             //   Label break.<id>
             let start = format!("do_start.{label}");
-            let cont = continue_label(label);
-            let br = break_label(label);
+            let cont = continue_label(&label);
+            let br = break_label(&label);
             let (cond_instrs, cond_val) = lower_expr(condition, ctx)?;
             let mut out = Vec::new();
             out.push(Instruction::Label(start.clone()));
@@ -565,6 +618,7 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
             body,
             label,
         } => {
+            let label = scoped_loop_id(label, ctx);
             // Mirrors `emit_tacky_for_for_loop`:
             //   <init>
             //   Label start_label
@@ -574,8 +628,8 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
             //   Jump start_label
             //   Label break.<id>
             let start = format!("for_start.{label}");
-            let cont = continue_label(label);
-            let br = break_label(label);
+            let cont = continue_label(&label);
+            let br = break_label(&label);
             let mut out = Vec::new();
             if let Some(init) = init {
                 match init {
@@ -587,20 +641,26 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
                             .entry(decl.name.clone())
                             .or_insert(decl.ty.clone());
                         if let Some(expr) = &decl.init {
-                            let (instrs, val) = lower_expr(expr, ctx)?;
-                            out.extend(instrs);
-                            let val_ty = type_of_val(&val, ctx);
-                            let val = convert_to_type(
-                                val,
-                                val_ty,
-                                type_to_operand_type(decl.ty.clone()),
-                                &mut out,
-                                ctx,
-                            );
-                            out.push(Instruction::Copy {
-                                src: val,
-                                dst: decl.name.clone(),
-                            });
+                            if matches!(decl.ty, Type::Array { .. }) {
+                                out.extend(lower_array_initializer(
+                                    &decl.name, &decl.ty, expr, ctx,
+                                )?);
+                            } else {
+                                let (instrs, val) = lower_expr(expr, ctx)?;
+                                out.extend(instrs);
+                                let val_ty = type_of_val(&val, ctx);
+                                let val = convert_to_type(
+                                    val,
+                                    val_ty,
+                                    type_to_operand_type(decl.ty.clone()),
+                                    &mut out,
+                                    ctx,
+                                );
+                                out.push(Instruction::Copy {
+                                    src: val,
+                                    dst: decl.name.clone(),
+                                });
+                            }
                         }
                     }
                     ForInit::Expr(expr) => {
@@ -647,13 +707,22 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
             out.extend(lower_statement(statement, ctx)?);
             Ok(out)
         }
-        Statement::Break(target) => Ok(vec![Instruction::Jump {
-            target: break_label(target),
-        }]),
-        Statement::Continue(target) => Ok(vec![Instruction::Jump {
-            target: continue_label(target),
-        }]),
-        Statement::Switch { expr, body, label } => lower_switch(expr, body, label, ctx),
+        Statement::Break(target) => {
+            let target = scoped_loop_id(target, ctx);
+            Ok(vec![Instruction::Jump {
+                target: break_label(&target),
+            }])
+        }
+        Statement::Continue(target) => {
+            let target = scoped_loop_id(target, ctx);
+            Ok(vec![Instruction::Jump {
+                target: continue_label(&target),
+            }])
+        }
+        Statement::Switch { expr, body, label } => {
+            let label = scoped_loop_id(label, ctx);
+            lower_switch(expr, body, &label, ctx)
+        }
         Statement::Case { value, statement } => {
             // `Case` nodes are only ever encountered while
             // lowering a switch body — the outer switch has
@@ -730,7 +799,7 @@ fn lower_switch(
     label: &str,
     ctx: &mut LowerCtx,
 ) -> Result<Vec<Instruction>> {
-    let switch_end = break_label(label);
+    let switch_end = break_label(&label);
     let default_label = format!("default.{label}");
 
     // Phase 1: collect all case values (recursively) and the
@@ -877,6 +946,13 @@ fn collect_switch_dispatch(
     }
 }
 
+fn scoped_loop_id(id: &str, ctx: &LowerCtx) -> String {
+    match &ctx.current_function {
+        Some(function) if !id.is_empty() => format!("{function}.{id}"),
+        _ => id.to_string(),
+    }
+}
+
 fn break_label(id: &str) -> String {
     format!("break.{id}")
 }
@@ -908,7 +984,19 @@ fn lower_expr(expr: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)
             let v = ctx.materialize_long_constant(&mut instrs, *n);
             Ok((instrs, v))
         }
-        Expr::Var(name) => Ok((Vec::new(), Val::Var(name.clone()))),
+        Expr::Var(name) => {
+            if matches!(ctx.ast_type_env.get(name), Some(Type::Array { .. })) {
+                let dst = ctx.fresh_typed_tmp(OperandType::Long);
+                return Ok((
+                    vec![Instruction::GetAddress {
+                        src: name.clone(),
+                        dst: dst.clone(),
+                    }],
+                    Val::Var(dst),
+                ));
+            }
+            Ok((Vec::new(), Val::Var(name.clone())))
+        }
         Expr::Paren(inner) => lower_expr(inner, ctx),
         Expr::Unary { op, expr: inner } => lower_unary(*op, inner, ctx),
         Expr::Assign { op, target, value } => lower_assign(*op, target, value, ctx),
@@ -942,6 +1030,9 @@ fn lower_expr(expr: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)
         Expr::AddressOf(inner) => lower_addr_of(inner, ctx),
         Expr::Dereference(inner) => lower_dereference(inner, ctx),
         Expr::Subscript { base, index } => lower_subscript(base, index, ctx),
+        Expr::InitializerList(_) => Err(anyhow::anyhow!(
+            "lower: initializer list cannot be used as expression"
+        )),
     }
 }
 
@@ -1027,6 +1118,19 @@ fn lower_addr_of(inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, 
     if let Expr::Paren(paren_inner) = inner {
         return lower_addr_of(paren_inner, ctx);
     }
+    if let Some((instrs, ptr, _)) = lower_indirect_lvalue(inner, ctx)? {
+        return Ok((instrs, ptr));
+    }
+    if let Expr::Var(name) = inner {
+        let dst = ctx.fresh_typed_tmp(OperandType::Long);
+        return Ok((
+            vec![Instruction::GetAddress {
+                src: name.clone(),
+                dst: dst.clone(),
+            }],
+            Val::Var(dst),
+        ));
+    }
     let (instrs, inner_val) = lower_expr(inner, ctx)?;
     let dst = ctx.fresh_typed_tmp(OperandType::Long);
     let mut out = instrs;
@@ -1049,11 +1153,14 @@ fn lower_addr_of(inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, 
 /// `emit_dereference` in `nqcc2/lib/tacky_gen.ml:327-329`.
 fn lower_dereference(inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)> {
     let (instrs, ptr) = lower_expr(inner, ctx)?;
-    let dst_ty = match expr_type(inner, ctx) {
-        Type::Pointer(pointee) => type_to_operand_type(*pointee),
-        _ => OperandType::Int,
+    let pointee = match expr_type(inner, ctx) {
+        Type::Pointer(pointee) => *pointee,
+        _ => Type::Int,
     };
-    let dst = ctx.fresh_typed_tmp(dst_ty);
+    if matches!(pointee, Type::Array { .. }) {
+        return Ok((instrs, ptr));
+    }
+    let dst = ctx.fresh_typed_tmp(type_to_operand_type(pointee));
     let mut out = instrs;
     out.push(Instruction::Load {
         src_pointer: ptr,
@@ -1073,26 +1180,159 @@ fn lower_subscript(
     index: &Expr,
     ctx: &mut LowerCtx,
 ) -> Result<(Vec<Instruction>, Val)> {
-    let (mut base_instrs, base_val) = lower_expr(base, ctx)?;
-    let (idx_instrs, index_val) = lower_expr(index, ctx)?;
-    base_instrs.extend(idx_instrs);
-    // The element size is 4 for int (the only case we handle
-    // correctly); the OCaml reference uses `Type_utils.get_size` on
-    // the array's element type.  Chapter 15's `subscript.c` only
-    // tests `int a[10]`, so the fixed scale of 4 is enough.
-    let scale: u8 = 4;
-    let dst = ctx.fresh_typed_tmp(OperandType::Int);
-    base_instrs.push(Instruction::AddPtr {
+    let base_ty = expr_type(base, ctx).decay();
+    let index_ty = expr_type(index, ctx).decay();
+    let (pointer_expr, offset_expr, element_ty) = match (base_ty, index_ty) {
+        (Type::Pointer(pointee), offset_ty) if offset_ty.clone().is_integer() => {
+            (base, index, *pointee)
+        }
+        (offset_ty, Type::Pointer(pointee)) if offset_ty.clone().is_integer() => {
+            (index, base, *pointee)
+        }
+        _ => (base, index, subscript_element_type(base, ctx)),
+    };
+    let (mut instrs, base_val) = lower_expr(pointer_expr, ctx)?;
+    let (idx_instrs, index_val) = lower_expr(offset_expr, ctx)?;
+    instrs.extend(idx_instrs);
+    let scale = element_ty.clone().size();
+    let pointer_tmp = ctx.fresh_typed_tmp(OperandType::Long);
+    instrs.push(Instruction::AddPtr {
         ptr: base_val,
         index: index_val,
         scale,
+        dst: pointer_tmp.clone(),
+    });
+    if matches!(element_ty, Type::Array { .. }) {
+        return Ok((instrs, Val::Var(pointer_tmp)));
+    }
+    let dst_ty = type_to_operand_type(element_ty);
+    let dst = ctx.fresh_typed_tmp(dst_ty);
+    instrs.push(Instruction::Load {
+        src_pointer: Val::Var(pointer_tmp),
         dst: dst.clone(),
     });
-    base_instrs.push(Instruction::Load {
-        src_pointer: Val::Var(dst.clone()),
+    Ok((instrs, Val::Var(dst)))
+}
+
+fn lower_array_initializer(
+    name: &str,
+    ty: &Type,
+    init: &Expr,
+    ctx: &mut LowerCtx,
+) -> Result<Vec<Instruction>> {
+    let mut out = Vec::new();
+    let base = Val::Var({
+        let dst = ctx.fresh_typed_tmp(OperandType::Long);
+        out.push(Instruction::GetAddress {
+            src: name.to_string(),
+            dst: dst.clone(),
+        });
+        dst
+    });
+    zero_initialize_array(base.clone(), ty, &mut out, ctx)?;
+    initialize_array_elements(base, ty, init, &mut out, ctx)?;
+    Ok(out)
+}
+
+fn zero_initialize_array(
+    base: Val,
+    ty: &Type,
+    out: &mut Vec<Instruction>,
+    ctx: &mut LowerCtx,
+) -> Result<()> {
+    if let Type::Array {
+        element,
+        size: Some(size),
+    } = ty
+    {
+        for idx in 0..*size {
+            let ptr = add_const_index(base.clone(), idx, element, out, ctx);
+            if matches!(**element, Type::Array { .. }) {
+                zero_initialize_array(ptr, element, out, ctx)?;
+            } else {
+                let zero = zero_value_for_type(element, out, ctx);
+                out.push(Instruction::Store {
+                    src: zero,
+                    dst_pointer: ptr,
+                });
+            }
+        }
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!(
+            "lower: array initializer target is not array"
+        ))
+    }
+}
+
+fn zero_value_for_type(ty: &Type, out: &mut Vec<Instruction>, ctx: &mut LowerCtx) -> Val {
+    match type_to_operand_type(ty.clone()) {
+        OperandType::Double => Val::ConstantDouble(0.0),
+        OperandType::Long | OperandType::ULong => ctx.materialize_long_constant(out, 0),
+        OperandType::UInt => ctx.materialize_typed_constant(out, 0, OperandType::UInt),
+        _ => Val::Constant(0),
+    }
+}
+
+fn initialize_array_elements(
+    base: Val,
+    ty: &Type,
+    init: &Expr,
+    out: &mut Vec<Instruction>,
+    ctx: &mut LowerCtx,
+) -> Result<()> {
+    let Type::Array {
+        element,
+        size: Some(size),
+    } = ty
+    else {
+        return Err(anyhow::anyhow!("lower: initializer target is not array"));
+    };
+    let Expr::InitializerList(items) = init else {
+        return Err(anyhow::anyhow!("type error: scalar initializer for array"));
+    };
+    if items.len() > *size {
+        return Err(anyhow::anyhow!("type error: too many array initializers"));
+    }
+    for (idx, item) in items.iter().enumerate() {
+        let ptr = add_const_index(base.clone(), idx, element, out, ctx);
+        if matches!(**element, Type::Array { .. }) {
+            initialize_array_elements(ptr, element, item, out, ctx)?;
+        } else {
+            let (instrs, value) = lower_expr(item, ctx)?;
+            out.extend(instrs);
+            let value_ty = type_of_val(&value, ctx);
+            let value = convert_to_type(
+                value,
+                value_ty,
+                type_to_operand_type((**element).clone()),
+                out,
+                ctx,
+            );
+            out.push(Instruction::Store {
+                src: value,
+                dst_pointer: ptr,
+            });
+        }
+    }
+    Ok(())
+}
+
+fn add_const_index(
+    base: Val,
+    index: usize,
+    element: &Type,
+    out: &mut Vec<Instruction>,
+    ctx: &mut LowerCtx,
+) -> Val {
+    let dst = ctx.fresh_typed_tmp(OperandType::Long);
+    out.push(Instruction::AddPtr {
+        ptr: base,
+        index: Val::Constant(index as i64),
+        scale: element.clone().size(),
         dst: dst.clone(),
     });
-    Ok((base_instrs, Val::Var(dst)))
+    Val::Var(dst)
 }
 
 fn lower_unary(op: UnaryOp, inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)> {
@@ -1236,6 +1476,39 @@ fn lower_indirect_lvalue(
                 ty => type_to_operand_type(ty),
             };
             Ok(Some((instrs, ptr, target_ty)))
+        }
+        Expr::Subscript { base, index } => {
+            let base_ty = expr_type(base, ctx).decay();
+            let index_ty = expr_type(index, ctx).decay();
+            let (pointer_expr, offset_expr, element_ty) = match (base_ty, index_ty) {
+                (Type::Pointer(pointee), offset_ty) if offset_ty.clone().is_integer() => {
+                    (base.as_ref(), index.as_ref(), *pointee)
+                }
+                (offset_ty, Type::Pointer(pointee)) if offset_ty.clone().is_integer() => {
+                    (index.as_ref(), base.as_ref(), *pointee)
+                }
+                _ => (
+                    base.as_ref(),
+                    index.as_ref(),
+                    subscript_element_type(base, ctx),
+                ),
+            };
+            let (mut instrs, base_val) = lower_expr(pointer_expr, ctx)?;
+            let (idx_instrs, index_val) = lower_expr(offset_expr, ctx)?;
+            instrs.extend(idx_instrs);
+            let scale = element_ty.clone().size();
+            let pointer_tmp = ctx.fresh_typed_tmp(OperandType::Long);
+            instrs.push(Instruction::AddPtr {
+                ptr: base_val,
+                index: index_val,
+                scale,
+                dst: pointer_tmp.clone(),
+            });
+            Ok(Some((
+                instrs,
+                Val::Var(pointer_tmp),
+                type_to_operand_type(element_ty),
+            )))
         }
         _ => Ok(None),
     }
@@ -1442,6 +1715,11 @@ fn lower_binary(
     match op {
         BinaryOp::LogicalAnd => emit_short_circuit(left, right, false, ctx, "and"),
         BinaryOp::LogicalOr => emit_short_circuit(left, right, true, ctx, "or"),
+        BinaryOp::Add | BinaryOp::Subtract
+            if pointer_binary_result(op, left, right, ctx).is_some() =>
+        {
+            lower_pointer_binary(op, left, right, ctx)
+        }
         _ => {
             let (mut instrs, left_val) = lower_expr(left, ctx)?;
             let (right_instrs, right_val) = lower_expr(right, ctx)?;
@@ -1496,6 +1774,94 @@ fn lower_binary(
     }
 }
 
+fn lower_pointer_binary(
+    op: BinaryOp,
+    left: &Expr,
+    right: &Expr,
+    ctx: &mut LowerCtx,
+) -> Result<(Vec<Instruction>, Val)> {
+    let left_ty = expr_type(left, ctx).decay();
+    let right_ty = expr_type(right, ctx).decay();
+    let (mut left_instrs, left_val) = lower_expr(left, ctx)?;
+    let (right_instrs, right_val) = lower_expr(right, ctx)?;
+    left_instrs.extend(right_instrs);
+    match (op, left_ty, right_ty) {
+        (BinaryOp::Add, Type::Pointer(pointee), right_ty) if right_ty.clone().is_integer() => {
+            let dst = ctx.fresh_typed_tmp(OperandType::Long);
+            left_instrs.push(Instruction::AddPtr {
+                ptr: left_val,
+                index: right_val,
+                scale: pointee.size(),
+                dst: dst.clone(),
+            });
+            Ok((left_instrs, Val::Var(dst)))
+        }
+        (BinaryOp::Add, left_ty, Type::Pointer(pointee)) if left_ty.clone().is_integer() => {
+            let dst = ctx.fresh_typed_tmp(OperandType::Long);
+            left_instrs.push(Instruction::AddPtr {
+                ptr: right_val,
+                index: left_val,
+                scale: pointee.size(),
+                dst: dst.clone(),
+            });
+            Ok((left_instrs, Val::Var(dst)))
+        }
+        (BinaryOp::Subtract, Type::Pointer(pointee), right_ty) if right_ty.clone().is_integer() => {
+            let neg = ctx.fresh_typed_tmp(type_of_val(&right_val, ctx));
+            left_instrs.push(Instruction::Copy {
+                src: right_val,
+                dst: neg.clone(),
+            });
+            left_instrs.push(Instruction::Negate { dst: neg.clone() });
+            let dst = ctx.fresh_typed_tmp(OperandType::Long);
+            left_instrs.push(Instruction::AddPtr {
+                ptr: left_val,
+                index: Val::Var(neg),
+                scale: pointee.size(),
+                dst: dst.clone(),
+            });
+            Ok((left_instrs, Val::Var(dst)))
+        }
+        (BinaryOp::Subtract, Type::Pointer(pointee), Type::Pointer(_)) => {
+            let diff = ctx.fresh_typed_tmp(OperandType::Long);
+            left_instrs.push(Instruction::Copy {
+                src: left_val,
+                dst: diff.clone(),
+            });
+            left_instrs.push(Instruction::Sub {
+                src: right_val,
+                dst: diff.clone(),
+            });
+            let scale_val = ctx.materialize_long_constant(&mut left_instrs, pointee.size());
+            left_instrs.push(Instruction::DivSigned {
+                src: scale_val,
+                dst: diff.clone(),
+            });
+            Ok((left_instrs, Val::Var(diff)))
+        }
+        _ => Err(anyhow::anyhow!("lower: invalid pointer arithmetic")),
+    }
+}
+
+fn pointer_binary_result(
+    op: BinaryOp,
+    left: &Expr,
+    right: &Expr,
+    ctx: &LowerCtx,
+) -> Option<OperandType> {
+    let left_ty = expr_type(left, ctx).decay();
+    let right_ty = expr_type(right, ctx).decay();
+    match (op, left_ty, right_ty) {
+        (BinaryOp::Add, Type::Pointer(_), ty) if ty.clone().is_integer() => Some(OperandType::Long),
+        (BinaryOp::Add, ty, Type::Pointer(_)) if ty.clone().is_integer() => Some(OperandType::Long),
+        (BinaryOp::Subtract, Type::Pointer(_), ty) if ty.clone().is_integer() => {
+            Some(OperandType::Long)
+        }
+        (BinaryOp::Subtract, Type::Pointer(_), Type::Pointer(_)) => Some(OperandType::Long),
+        _ => None,
+    }
+}
+
 /// Return the operand type of a `Val` for the purposes of TACKY
 /// instruction selection.  Constants default to `Int`; named
 /// variables look their type up from the lowerer's `type_env` (the
@@ -1505,7 +1871,13 @@ fn lower_binary(
 /// `Double`.
 fn type_of_val(val: &Val, ctx: &LowerCtx) -> OperandType {
     match val {
-        Val::Constant(_) => OperandType::Int,
+        Val::Constant(n) => {
+            if i32::try_from(*n).is_ok() {
+                OperandType::Int
+            } else {
+                OperandType::Long
+            }
+        }
         Val::ConstantDouble(_) => OperandType::Double,
         Val::Var(name) => ctx.type_env.get(name).copied().unwrap_or(OperandType::Int),
     }
@@ -1563,22 +1935,32 @@ fn expr_type(expr: &Expr, ctx: &LowerCtx) -> Type {
             if is_cmp_op(*op) || matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
                 Type::Int
             } else {
-                let left_ty = expr_type(left, ctx);
-                let right_ty = expr_type(right, ctx);
-                if matches!(left_ty, Type::Double) || matches!(right_ty, Type::Double) {
-                    Type::Double
-                } else if matches!(left_ty, Type::UnsignedLong)
-                    || matches!(right_ty, Type::UnsignedLong)
-                {
-                    Type::UnsignedLong
-                } else if matches!(left_ty, Type::Long) || matches!(right_ty, Type::Long) {
-                    Type::Long
-                } else if matches!(left_ty, Type::UnsignedInt)
-                    || matches!(right_ty, Type::UnsignedInt)
-                {
-                    Type::UnsignedInt
-                } else {
-                    Type::Int
+                let left_ty = expr_type(left, ctx).decay();
+                let right_ty = expr_type(right, ctx).decay();
+                match (*op, &left_ty, &right_ty) {
+                    (BinaryOp::Add, Type::Pointer(_), ty) if ty.clone().is_integer() => left_ty,
+                    (BinaryOp::Add, ty, Type::Pointer(_)) if ty.clone().is_integer() => right_ty,
+                    (BinaryOp::Subtract, Type::Pointer(_), ty) if ty.clone().is_integer() => {
+                        left_ty
+                    }
+                    (BinaryOp::Subtract, Type::Pointer(_), Type::Pointer(_)) => Type::Long,
+                    _ if matches!(left_ty, Type::Double) || matches!(right_ty, Type::Double) => {
+                        Type::Double
+                    }
+                    _ if matches!(left_ty, Type::UnsignedLong)
+                        || matches!(right_ty, Type::UnsignedLong) =>
+                    {
+                        Type::UnsignedLong
+                    }
+                    _ if matches!(left_ty, Type::Long) || matches!(right_ty, Type::Long) => {
+                        Type::Long
+                    }
+                    _ if matches!(left_ty, Type::UnsignedInt)
+                        || matches!(right_ty, Type::UnsignedInt) =>
+                    {
+                        Type::UnsignedInt
+                    }
+                    _ => Type::Int,
                 }
             }
         }
@@ -1592,7 +1974,15 @@ fn expr_type(expr: &Expr, ctx: &LowerCtx) -> Type {
             Type::Pointer(pointee) => *pointee,
             _ => Type::Int,
         },
-        Expr::Subscript { .. } => Type::Int,
+        Expr::Subscript { base, .. } => subscript_element_type(base, ctx),
+        Expr::InitializerList(_) => Type::Int,
+    }
+}
+
+fn subscript_element_type(base: &Expr, ctx: &LowerCtx) -> Type {
+    match expr_type(base, ctx).decay() {
+        Type::Pointer(pointee) => *pointee,
+        _ => Type::Int,
     }
 }
 

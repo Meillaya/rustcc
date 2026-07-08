@@ -41,11 +41,7 @@ impl Type {
     pub fn is_integer(self) -> bool {
         matches!(
             self,
-            Type::Int
-                | Type::Long
-                | Type::UnsignedInt
-                | Type::UnsignedLong
-                | Type::Char
+            Type::Int | Type::Long | Type::UnsignedInt | Type::UnsignedLong | Type::Char
         )
     }
 
@@ -64,6 +60,13 @@ impl Type {
     /// Returns true when the type is a pointer.
     pub fn is_pointer(self) -> bool {
         matches!(self, Type::Pointer(_))
+    }
+
+    pub fn decay(self) -> Type {
+        match self {
+            Type::Array { element, .. } => Type::Pointer(element),
+            other => other,
+        }
     }
 
     /// Returns true when the type is a (complete) array.
@@ -93,7 +96,10 @@ impl Type {
             Type::Long | Type::UnsignedLong => 8,
             Type::Double => 8,
             Type::Pointer(_) => 8,
-            Type::Array { element, size: Some(n) } => element.size() * n as i64,
+            Type::Array {
+                element,
+                size: Some(n),
+            } => element.size() * n as i64,
             Type::Array { size: None, .. } | Type::Void => 0,
         }
     }

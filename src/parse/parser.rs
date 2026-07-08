@@ -15,17 +15,24 @@
 // Mirrors nqcc2/lib/parse.ml chapter 9 grammar (~lines 1-50 of parse_program).
 // Recursive-descent, Result-returning.
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 use crate::ast::{
     AssignOp, BinaryOp, BlockItem, Expr, ForInit, Function, GlobalDecl, GlobalVarDecl, Program,
     Statement, StorageClass, TopLevelItem, Type, UnaryOp, VarDecl,
 };
 use crate::lex::{Token, TokenKind};
-use crate::parse::precedence::{precedence_of, Precedence};
+use crate::parse::precedence::{Precedence, precedence_of};
 
 pub(crate) fn parse_program(tokens: Vec<Token>) -> Result<Program> {
     Parser::new(tokens).parse_program()
+}
+
+fn adjust_param_type(ty: Type) -> Type {
+    match ty {
+        Type::Array { element, .. } => Type::Pointer(element),
+        other => other,
+    }
 }
 
 struct Parser {
@@ -37,6 +44,10 @@ struct Parser {
 enum Declarator {
     Ident(String),
     Pointer(Box<Declarator>),
+    Array {
+        inner: Box<Declarator>,
+        size: usize,
+    },
     Function {
         params: Vec<VarDecl>,
         inner: Box<Declarator>,
@@ -47,6 +58,10 @@ enum Declarator {
 enum AbstractDeclarator {
     Base,
     Pointer(Box<AbstractDeclarator>),
+    Array {
+        inner: Box<AbstractDeclarator>,
+        size: usize,
+    },
 }
 
 enum DeclShape {
@@ -101,7 +116,7 @@ impl Parser {
         // storage class.
         let (base_ty, storage) = self.parse_specifiers_interleaved()?;
         let decl = self.parse_declarator()?;
-        match self.process_declarator(decl, base_ty)? {
+        match Self::process_declarator(decl, base_ty)? {
             DeclShape::Function {
                 name,
                 ret_ty,
@@ -135,7 +150,7 @@ impl Parser {
             }
             DeclShape::Object { name, ty } => {
                 let init = if self.match_exact(&TokenKind::Equal) {
-                    Some(self.parse_expr()?)
+                    Some(self.parse_initializer()?)
                 } else {
                     None
                 };
@@ -370,34 +385,52 @@ impl Parser {
         } else {
             Declarator::Ident(self.expect_identifier("function or variable name")?)
         };
-        if self.check(&TokenKind::OpenParen) {
-            self.current += 1;
-            let params = self.parse_param_list()?;
-            self.expect_exact(&TokenKind::CloseParen, "')' after parameter list")?;
-            decl = Declarator::Function {
-                params,
-                inner: Box::new(decl),
-            };
+        loop {
+            if self.check(&TokenKind::OpenParen) {
+                self.current += 1;
+                let params = self.parse_param_list()?;
+                self.expect_exact(&TokenKind::CloseParen, "')' after parameter list")?;
+                decl = Declarator::Function {
+                    params,
+                    inner: Box::new(decl),
+                };
+            } else if self.match_exact(&TokenKind::OpenBracket) {
+                let size = self.expect_array_size()?;
+                self.expect_exact(&TokenKind::CloseBracket, "']' after array size")?;
+                decl = Declarator::Array {
+                    inner: Box::new(decl),
+                    size,
+                };
+            } else {
+                break;
+            }
         }
         Ok(decl)
     }
 
-    fn process_declarator(&self, decl: Declarator, base_type: Type) -> Result<DeclShape> {
+    fn process_declarator(decl: Declarator, base_type: Type) -> Result<DeclShape> {
         match decl {
             Declarator::Ident(name) => Ok(DeclShape::Object {
                 name,
                 ty: base_type,
             }),
             Declarator::Pointer(inner) => {
-                self.process_declarator(*inner, Type::Pointer(Box::new(base_type)))
+                Self::process_declarator(*inner, Type::Pointer(Box::new(base_type)))
             }
+            Declarator::Array { inner, size } => Self::process_declarator(
+                *inner,
+                Type::Array {
+                    element: Box::new(base_type),
+                    size: Some(size),
+                },
+            ),
             Declarator::Function { params, inner } => match *inner {
                 Declarator::Ident(name) => Ok(DeclShape::Function {
                     name,
                     ret_ty: base_type,
                     params,
                 }),
-                other => match self.process_declarator(other, base_type)? {
+                other => match Self::process_declarator(other, base_type)? {
                     DeclShape::Object { name, ty } => Ok(DeclShape::Function {
                         name,
                         ret_ty: ty,
@@ -420,18 +453,75 @@ impl Parser {
         if self.match_exact(&TokenKind::OpenParen) {
             let inner = self.parse_abstract_declarator()?;
             self.expect_exact(&TokenKind::CloseParen, "')' after abstract declarator")?;
-            return Ok(inner);
+            return self.parse_abstract_suffix(inner);
         }
-        Ok(AbstractDeclarator::Base)
+        self.parse_abstract_suffix(AbstractDeclarator::Base)
     }
 
-    fn process_abstract_declarator(&self, decl: AbstractDeclarator, base_type: Type) -> Type {
+    fn parse_abstract_suffix(
+        &mut self,
+        mut decl: AbstractDeclarator,
+    ) -> Result<AbstractDeclarator> {
+        while self.match_exact(&TokenKind::OpenBracket) {
+            let size = self.expect_array_size()?;
+            self.expect_exact(&TokenKind::CloseBracket, "']' after array size")?;
+            decl = AbstractDeclarator::Array {
+                inner: Box::new(decl),
+                size,
+            };
+        }
+        Ok(decl)
+    }
+
+    fn process_abstract_declarator(decl: AbstractDeclarator, base_type: Type) -> Type {
         match decl {
             AbstractDeclarator::Base => base_type,
             AbstractDeclarator::Pointer(inner) => {
-                self.process_abstract_declarator(*inner, Type::Pointer(Box::new(base_type)))
+                Self::process_abstract_declarator(*inner, Type::Pointer(Box::new(base_type)))
+            }
+            AbstractDeclarator::Array { inner, size } => Self::process_abstract_declarator(
+                *inner,
+                Type::Array {
+                    element: Box::new(base_type),
+                    size: Some(size),
+                },
+            ),
+        }
+    }
+
+    fn expect_array_size(&mut self) -> Result<usize> {
+        let raw = match &self.peek().kind {
+            TokenKind::Constant(value) => i64::from(*value),
+            TokenKind::LongConstant(value) | TokenKind::UIntConstant(value, _) => *value,
+            _ => bail!("parse error: expected constant array size"),
+        };
+        if raw <= 0 {
+            bail!("parse error: array size must be positive");
+        }
+        let size = usize::try_from(raw)
+            .map_err(|_| anyhow::anyhow!("parse error: array size is too large"))?;
+        self.current += 1;
+        Ok(size)
+    }
+
+    fn apply_postfix(&mut self, mut expr: Expr) -> Result<Expr> {
+        loop {
+            if self.match_exact(&TokenKind::OpenBracket) {
+                let index = self.parse_expr()?;
+                self.expect_exact(&TokenKind::CloseBracket, "']' after subscript")?;
+                expr = Expr::Subscript {
+                    base: Box::new(expr),
+                    index: Box::new(index),
+                };
+            } else if self.match_exact(&TokenKind::PlusPlus) {
+                expr = Expr::PostInc(Box::new(expr));
+            } else if self.match_exact(&TokenKind::MinusMinus) {
+                expr = Expr::PostDec(Box::new(expr));
+            } else {
+                break;
             }
         }
+        Ok(expr)
     }
 
     /// If a storage-class specifier follows `int`, combine it with
@@ -470,8 +560,8 @@ impl Parser {
         loop {
             let base_ty = self.parse_type_specifier()?;
             let decl = self.parse_declarator()?;
-            let (name, ty) = match self.process_declarator(decl, base_ty)? {
-                DeclShape::Object { name, ty } => (name, ty),
+            let (name, ty) = match Self::process_declarator(decl, base_ty)? {
+                DeclShape::Object { name, ty } => (name, adjust_param_type(ty)),
                 DeclShape::Function { .. } => {
                     bail!("parse error: function parameters cannot be function declarators")
                 }
@@ -504,7 +594,7 @@ impl Parser {
         {
             let (base_ty, storage) = self.parse_specifiers_interleaved()?;
             let decl = self.parse_declarator()?;
-            match self.process_declarator(decl, base_ty)? {
+            match Self::process_declarator(decl, base_ty)? {
                 DeclShape::Function {
                     name,
                     ret_ty,
@@ -523,7 +613,7 @@ impl Parser {
                 }
                 DeclShape::Object { name, ty } => {
                     let init = if self.match_exact(&TokenKind::Equal) {
-                        Some(self.parse_expr()?)
+                        Some(self.parse_initializer()?)
                     } else {
                         None
                     };
@@ -659,14 +749,14 @@ impl Parser {
         ) {
             let base_ty = self.parse_type_specifier()?;
             let decl = self.parse_declarator()?;
-            let (name, ty) = match self.process_declarator(decl, base_ty)? {
+            let (name, ty) = match Self::process_declarator(decl, base_ty)? {
                 DeclShape::Object { name, ty } => (name, ty),
                 DeclShape::Function { .. } => {
                     bail!("parse error: for-loop initializer cannot declare a function")
                 }
             };
             let init = if self.match_exact(&TokenKind::Equal) {
-                Some(self.parse_expr()?)
+                Some(self.parse_initializer()?)
             } else {
                 None
             };
@@ -766,27 +856,27 @@ impl Parser {
     }
 
     fn parse_unary_expr(&mut self) -> Result<Expr> {
-        match &self.peek().kind {
+        let expr = match &self.peek().kind {
             TokenKind::Constant(value) => {
                 let value = i64::from(*value);
                 self.current += 1;
-                Ok(Expr::Constant(value))
+                Expr::Constant(value)
             }
             TokenKind::LongConstant(value) => {
                 let value = *value;
                 self.current += 1;
-                Ok(Expr::LongConstant(value))
+                Expr::LongConstant(value)
             }
             TokenKind::UIntConstant(value, kind) => {
                 let value = *value;
                 let is_long = matches!(kind, crate::lex::token::UIntKind::ULong);
                 self.current += 1;
-                Ok(Expr::UIntConstant(value, is_long))
+                Expr::UIntConstant(value, is_long)
             }
             TokenKind::DoubleConstant(value) => {
                 let value = *value;
                 self.current += 1;
-                Ok(Expr::DoubleConstant(value))
+                Expr::DoubleConstant(value)
             }
             TokenKind::Identifier(name) => {
                 let name = name.clone();
@@ -802,34 +892,24 @@ impl Parser {
                     self.current += 1;
                     let args = self.parse_arg_list()?;
                     self.expect_exact(&TokenKind::CloseParen, "')' after arguments")?;
-                    Ok(Expr::Call { name, args })
+                    Expr::Call { name, args }
                 } else {
-                    let mut expr = Expr::Var(name);
-                    loop {
-                        if self.match_exact(&TokenKind::PlusPlus) {
-                            expr = Expr::PostInc(Box::new(expr));
-                        } else if self.match_exact(&TokenKind::MinusMinus) {
-                            expr = Expr::PostDec(Box::new(expr));
-                        } else {
-                            break;
-                        }
-                    }
-                    Ok(expr)
+                    Expr::Var(name)
                 }
             }
             TokenKind::Minus => {
                 self.current += 1;
-                Ok(Expr::Unary {
+                return Ok(Expr::Unary {
                     op: UnaryOp::Negate,
                     expr: Box::new(self.parse_unary_expr()?),
-                })
+                });
             }
             TokenKind::Tilde => {
                 self.current += 1;
-                Ok(Expr::Unary {
+                return Ok(Expr::Unary {
                     op: UnaryOp::Complement,
                     expr: Box::new(self.parse_unary_expr()?),
-                })
+                });
             }
             // Chapter-4 logical not (`!e`).  Distinct from `~e` (bitwise
             // complement, handled by the `Tilde` arm above): `!0 == 1` while
@@ -837,26 +917,26 @@ impl Parser {
             // shape and lets the lowerer dispatch on `UnaryOp`.
             TokenKind::Bang => {
                 self.current += 1;
-                Ok(Expr::Unary {
+                return Ok(Expr::Unary {
                     op: UnaryOp::Not,
                     expr: Box::new(self.parse_unary_expr()?),
-                })
+                });
             }
             TokenKind::Ampersand => {
                 self.current += 1;
-                Ok(Expr::AddressOf(Box::new(self.parse_unary_expr()?)))
+                return Ok(Expr::AddressOf(Box::new(self.parse_unary_expr()?)));
             }
             TokenKind::Star => {
                 self.current += 1;
-                Ok(Expr::Dereference(Box::new(self.parse_unary_expr()?)))
+                return Ok(Expr::Dereference(Box::new(self.parse_unary_expr()?)));
             }
             TokenKind::PlusPlus => {
                 self.current += 1;
-                Ok(Expr::PreInc(Box::new(self.parse_unary_expr()?)))
+                return Ok(Expr::PreInc(Box::new(self.parse_unary_expr()?)));
             }
             TokenKind::MinusMinus => {
                 self.current += 1;
-                Ok(Expr::PreDec(Box::new(self.parse_unary_expr()?)))
+                return Ok(Expr::PreDec(Box::new(self.parse_unary_expr()?)));
             }
             TokenKind::OpenParen => {
                 self.current += 1;
@@ -876,45 +956,47 @@ impl Parser {
                         base_type
                     } else {
                         let abstract_decl = self.parse_abstract_declarator()?;
-                        self.process_abstract_declarator(abstract_decl, base_type)
+                        Self::process_abstract_declarator(abstract_decl, base_type)
                     };
                     self.expect_exact(&TokenKind::CloseParen, "')' after cast type")?;
                     let inner = self.parse_unary_expr()?;
-                    let mut expr = Expr::Cast {
+                    return self.apply_postfix(Expr::Cast {
                         target_type,
                         expr: Box::new(inner),
-                    };
-                    loop {
-                        if self.match_exact(&TokenKind::PlusPlus) {
-                            expr = Expr::PostInc(Box::new(expr));
-                        } else if self.match_exact(&TokenKind::MinusMinus) {
-                            expr = Expr::PostDec(Box::new(expr));
-                        } else {
-                            break;
-                        }
-                    }
-                    return Ok(expr);
+                    });
                 }
                 let inner = self.parse_expr()?;
                 self.expect_exact(&TokenKind::CloseParen, "')'")?;
-                let mut expr = Expr::Paren(Box::new(inner));
-                loop {
-                    if self.match_exact(&TokenKind::PlusPlus) {
-                        expr = Expr::PostInc(Box::new(expr));
-                    } else if self.match_exact(&TokenKind::MinusMinus) {
-                        expr = Expr::PostDec(Box::new(expr));
-                    } else {
-                        break;
-                    }
-                }
-                Ok(expr)
+                Expr::Paren(Box::new(inner))
             }
             _ => bail!(
                 "parse error: expected expression, found {:?} ({:?})",
                 self.peek().kind,
                 self.peek().lexeme
             ),
+        };
+        self.apply_postfix(expr)
+    }
+
+    fn parse_initializer(&mut self) -> Result<Expr> {
+        if !self.match_exact(&TokenKind::OpenBrace) {
+            return self.parse_expr();
         }
+        let mut items = Vec::new();
+        if self.check(&TokenKind::CloseBrace) {
+            bail!("parse error: empty initializer list");
+        }
+        loop {
+            items.push(self.parse_initializer()?);
+            if !self.match_exact(&TokenKind::Comma) {
+                break;
+            }
+            if self.check(&TokenKind::CloseBrace) {
+                break;
+            }
+        }
+        self.expect_exact(&TokenKind::CloseBrace, "'}' after initializer list")?;
+        Ok(Expr::InitializerList(items))
     }
 
     /// Parse the argument list inside a function-call's `(...)`.  Returns

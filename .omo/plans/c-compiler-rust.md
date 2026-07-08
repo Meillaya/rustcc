@@ -892,7 +892,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-17-ch4-gate.txt
   ```
 
-- [ ] 18. W6-T1: Chapter 5 - local variables, assignment, lvalues + `--compound` extra (`+= -= *= /= %= &= |= ^= <<= >>=`) + `--increment` extra (`++ --` prefix/postfix)
+- [x] 18. W6-T1: Chapter 5 - local variables, assignment, lvalues + `--compound` extra (`+= -= *= /= %= &= |= ^= <<= >>=`) + `--increment` extra (`++ --` prefix/postfix)
 
   **What to do**: Add variable declarations, assignment, compound assignment extras, and pre/post-increment/decrement.
   - Extend `src/ast/decl.rs`: `BlockItem = Decl(VarDecl) | Stmt(Stmt)`; `VarDecl { name: String, ty: Type, init: Option<Expr> }`. Note: ch.5 has no initializers (those land ch.11); use `None`.
@@ -1452,7 +1452,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   ```
 
 
-- [ ] 37. W14-T1: Chapter 13 - `double` floats, XMM register file (foundation for SSE), `DoubleToInt`, `IntToDouble`
+- [x] 37. W14-T1: Chapter 13 - `double` floats, XMM register file (foundation for SSE), `DoubleToInt`, `IntToDouble`
 
   **What to do**: Add `double` floats. This chapter introduces the second register class.
   - Extend AST `Type` with `Double`.
@@ -1477,7 +1477,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   - [ ] `int main(void) { double x = 3.5; return x > 1.0; }` -> exit 1.
   - [ ] `./tests/test_compiler ./target/release/rustcc --chapter 13 --latest-only` (core, no NaN) green.
 
-- [ ] 38. W14-T2: Chapter 13 - NaN-aware comparisons (`--nan` extra)
+- [x] 38. W14-T2: Chapter 13 - NaN-aware comparisons (`--nan` extra)
 
   **What to do**: Implement NaN handling in float comparisons.
   - Per book, NaN comparisons always produce `false` for `==` and `true` for `!=`. `<`, `<=`, `>`, `>=` all return `false` for any NaN operand.
@@ -1493,7 +1493,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   - [ ] `int main(void) { double x = 0.0/0.0; return x != x; }` -> exit 1.
   - [ ] `./tests/test_compiler ./target/release/rustcc --chapter 13 --latest-only --nan` green.
 
-- [ ] 39. W14-T3: Chapter 13 - gate verification + commit.
+- [x] 39. W14-T3: Chapter 13 - gate verification + commit.
 
   **What to do**: Run all chapter 13 gates: core (`--chapter 13 --latest-only`), `--nan` extra (`--chapter 13 --latest-only --nan`); update COACHING_LOG; commit.
 
@@ -1525,7 +1525,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   ```
 
 
-- [ ] 40. W15-T1: Chapter 14 - pointers (`*` deref, `&` address-of, pointer comparison)
+- [x] 40. W15-T1: Chapter 14 - pointers (`*` deref, `&` address-of, pointer comparison)
 
   **What to do**: Add pointers.
   - Extend AST `Type` with `Pointer(Box<Type>)`.
@@ -1551,7 +1551,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   - [ ] `int main(void) { int x = 5; int *p = &x; *p = 10; return x; }` -> exit 10.
   - [ ] `./tests/test_compiler ./target/release/rustcc --chapter 14 --latest-only` green.
 
-- [ ] 41. W15-T2: Chapter 14 - gate verification + commit.
+- [x] 41. W15-T2: Chapter 14 - gate verification + commit.
 
   **What to do**: Run chapter 14 gate, update COACHING_LOG, commit.
 
@@ -1581,7 +1581,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   ```
 
 
-- [ ] 42. W16-T1: Chapter 15 - arrays and pointer arithmetic (`[]`, decay)
+- [x] 42. W16-T1: Chapter 15 - arrays and pointer arithmetic (`[]`, decay)
 
   **What to do**: Add arrays.
   - Extend AST `Type` with `Array { element: Box<Type>, size: Option<usize> }` (size optional for parameters).
