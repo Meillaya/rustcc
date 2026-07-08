@@ -41,6 +41,14 @@ pub(crate) enum Expr {
         left: Box<Expr>,
         right: Box<Expr>,
     },
+    /// Chapter 9: a function call `name(args)`.  Arguments are full
+    /// expressions (so any chapter-3/4/5 expression shape can be passed);
+    /// the call itself yields an `int` value that can be used in any
+    /// expression context (assignment, return, arithmetic, etc.).
+    Call {
+        name: String,
+        args: Vec<Expr>,
+    },
 }
 
 impl Expr {

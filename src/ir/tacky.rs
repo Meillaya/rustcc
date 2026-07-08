@@ -195,14 +195,18 @@ pub enum Instruction {
     },
 }
 
-/// A TACKY function: a name and a flat list of instructions.
+/// A TACKY function: a name, parameter names, and a flat list of instructions.
 ///
-/// Mirrors `nqcc2/lib/tacky.ml` `function_definition`.  Book chapters keep this
-/// record minimal until later chapters add prologue/epilogue and parameter
-/// handling.
+/// Mirrors `nqcc2/lib/tacky.ml` `Function { name; global; params; body }`.
+/// Chapter 9 widens this with `params: Vec<String>` so the codegen pass
+/// can emit the prologue that moves each parameter from its incoming
+/// register to the function's stack slot.  Earlier chapters left
+/// `params` implicit (the function had no parameters).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TackyFunction {
     pub name: String,
+    pub global: bool,
+    pub params: Vec<String>,
     pub body: Vec<Instruction>,
 }
 

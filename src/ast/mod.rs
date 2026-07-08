@@ -10,8 +10,8 @@ pub mod operator;
 pub mod stmt;
 pub mod ty;
 
-pub(crate) use decl::{BlockItem, ForInit, Function};
+pub(crate) use decl::{BlockItem, ForInit, Function, GlobalDecl, VarDecl};
 pub(crate) use expr::Expr;
-pub(crate) use item::Program;
+pub(crate) use item::{Program, TopLevelItem};
 pub(crate) use operator::{AssignOp, BinaryOp, UnaryOp};
 pub(crate) use stmt::Statement;

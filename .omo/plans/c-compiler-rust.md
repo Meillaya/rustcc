@@ -1078,7 +1078,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
 
   **Recommended Agent Profile**: `quick`.
 
-- [ ] 24. W9-T1: Chapter 8 - loops (`while`, `do`, `for`, `break`, `continue`) + `--switch` extra (`switch`/`case`/`default`/`break`)
+- [x] 24. W9-T1: Chapter 8 - loops (`while`, `do`, `for`, `break`, `continue`) + `--switch` extra (`switch`/`case`/`default`/`break`)
 
   **What to do**: Add loops and switch.
   - Extend `src/ast/stmt.rs`: `While { condition, body, label }`, `Do { body, condition, label }`, `For { init, condition, post, body, label }`, `Break(String)`, `Continue(String)`, `Switch { condition, body, label }`.
@@ -1123,7 +1123,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-24-ch8-gate.txt
   ```
 
-- [ ] 25. W9-T2: Chapter 8 - `break`/`continue` correctness + Duff's device fallthrough with `--switch`. Update code accordingly.
+- [x] 25. W9-T2: Chapter 8 - `break`/`continue` correctness + Duff's device fallthrough with `--switch`. Update code accordingly.
 
   **What to do**: Verify `break` exits the right loop, `continue` jumps to the loop's continue label, and switch-case fallthrough without break is honored.
 
@@ -1133,7 +1133,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
 
   **Acceptance Criteria**: Switch/loops test gates are clean (already covered by W9-T1).
 
-- [ ] 26. W9-T3: Chapter 8 gate rerun + COACHING_LOG + commit.
+- [x] 26. W9-T3: Chapter 8 gate rerun + COACHING_LOG + commit.
 
   **What to do**: Run the full chapter 8 gate with all relevant extras (`--compound --increment --goto --switch`), update `docs/COACHING_LOG.md`, commit.
 

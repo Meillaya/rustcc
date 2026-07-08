@@ -112,8 +112,8 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompilerArtifact
     }
 
     let asm_program = convert_tacky_to_asm(&optimized_tacky, &typed_program)?;
-    let asm_program = fixup_asm(asm_program)?;
     let asm_program = replace_pseudos(asm_program)?;
+    let asm_program = fixup_asm(asm_program)?;
     let assembly_text = emit(&asm_program)?;
     if options.stage == Stage::Codegen {
         return Ok(CompilerArtifacts {

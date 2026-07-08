@@ -137,9 +137,24 @@ fn replace_in_instruction(state: &mut ReplaceState, instr: Instr) -> Vec<Instr> 
             cc,
             dst: replace_operand(state, dst),
         },
+        // Chapter 9: stack-passed arguments are pushed via
+        // `pushq`.  When the argument is a pseudo (e.g. a local
+        // variable being passed to a function), resolve it to its
+        // stack slot.  `pushq stack_slot` is a valid x86-64 form.
+        Instr::Push(src) => Instr::Push(replace_operand(state, src)),
         Instr::AllocateStack(_) => instr,
+        Instr::DeallocateStack(_) => instr,
         Instr::Jmp(_) | Instr::JmpCC { .. } | Instr::Label(_) => instr,
-        other => other,
+        Instr::Call(_) | Instr::Pop(_) | Instr::Ret | Instr::Cdq => instr,
+        Instr::Movsx { src, dst } => Instr::Movsx {
+            src: replace_operand(state, src),
+            dst: replace_operand(state, dst),
+        },
+        Instr::Lea { src, dst } => Instr::Lea {
+            src: replace_operand(state, src),
+            dst: replace_operand(state, dst),
+        },
+        Instr::Comment(_) => instr,
     };
     split_memory_to_memory(instr)
 }
@@ -166,8 +181,21 @@ pub fn replace_pseudos(
                 for instr in instructions {
                     fixed.extend(replace_in_instruction(&mut state, instr));
                 }
-                let prologue = (state.stack_size > 0)
-                    .then(|| Instr::AllocateStack(state.stack_size));
+                // Chapter 9: System V AMD64 requires 16-byte stack
+                // alignment before `call`.  After `pushq %rbp; movq
+                // %rsp, %rbp` the stack is 16-byte aligned, so
+                // subtracting an additional `stack_size` keeps
+                // alignment intact only if `stack_size` is itself a
+                // multiple of 16.  Round up to the next 16-byte
+                // boundary so the prologue stays aligned.
+                let raw_size = state.stack_size;
+                let aligned_size = if raw_size == 0 {
+                    0
+                } else {
+                    ((raw_size + 15) / 16) * 16
+                };
+                let prologue = (aligned_size > 0)
+                    .then(|| Instr::AllocateStack(aligned_size));
                 let mut ordered = Vec::with_capacity(fixed.len() + 1);
                 if let Some(alloc) = prologue {
                     ordered.push(alloc);

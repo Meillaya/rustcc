@@ -31,19 +31,28 @@
 //   BitShiftRight { src; dst }
 //                            -> [ movl src, %ecx; sarl %cl, dst ]
 //
-// The pseudoregisters survive the codegen pass and are resolved into
-// `%rbp`-relative `Stack(offset)` operands by `replace_pseudos` once
-// the function has walked its frame.  Frames stay empty for chapter 3
-// because the only locals we allocate are temporaries; the parameter
-// stays so the pipeline signature remains stable across waves.
+// Chapter 9 adds:
+//   - `Call { name, args, dst }` -> classify each arg via the
+//     System V AMD64 ABI, push the integer args into %rdi..%r9 (or
+//     push the rest on the stack), align the stack to 16 bytes,
+//     emit `call name`, restore the stack pointer, and copy the
+//     return value from %eax into `dst` if `dst` is `Some`.
+//   - A per-function prologue that moves each parameter from its
+//     incoming register into a function-local pseudo slot, so the
+//     replace_pseudos pass can give each parameter its own stack
+//     frame slot.
+//   - Multi-function lowering: each `TackyFunction` becomes one
+//     `TopLevel::Fn` entry; the body is the union of prologue and
+//     per-instruction lowering.
 
 use anyhow::Result;
 
+use crate::codegen::abi::{self, ParamClass};
 use crate::codegen::assembly::{
     AsmProgram, BinaryOpInstr, ConditionCode as AsmCC, Instr, Operand, Reg, TopLevel, UnaryOpInstr,
 };
 use crate::codegen::frame::Frame;
-use crate::ir::tacky::{ConditionCode as TackyCC, Instruction, TackyProgram, Val};
+use crate::ir::tacky::{ConditionCode as TackyCC, Instruction, TackyFunction, TackyProgram, Val};
 
 /// Convert a TACKY [`ConditionCode`] to the equivalent assembly
 /// [`assembly::ConditionCode`].  The two enums carry the same set of
@@ -72,6 +81,117 @@ fn convert_val(val: &Val) -> Operand {
     }
 }
 
+/// Map an ABI register slot to the assembly `Reg` enum.  Mirrors the
+/// first six entries of `INT_PARAM_REGS` in `codegen::abi`.
+fn abi_reg(reg: abi::Reg) -> Reg {
+    match reg {
+        abi::Reg::DI => Reg::DI,
+        abi::Reg::SI => Reg::SI,
+        abi::Reg::DX => Reg::DX,
+        abi::Reg::CX => Reg::CX,
+        abi::Reg::R8 => Reg::R8,
+        abi::Reg::R9 => Reg::R9,
+    }
+}
+
+/// Lower a `Call { name, args, dst }` instruction.
+///
+/// Mirrors `convert_function_call` in
+/// `nqcc2/lib/backend/codegen.ml:339-448`, simplified to the integer
+/// case (no SSE doubles, no struct returns, no struct args).
+///
+/// Steps:
+/// 1. Classify each argument via the ABI plan (first six in regs,
+///    rest on the stack).
+/// 2. Compute stack padding so the call site is 16-byte aligned
+///    *after* the pushes for stack arguments.
+/// 3. Emit `subq $pad, %rsp` if padding is needed.
+/// 4. Emit one `movl arg, %rdi/%rsi/...` per register argument.
+/// 5. Emit `pushq arg` per stack argument (in reverse source order
+///    so the first argument ends up at the lowest stack address).
+/// 6. Emit `call name`.
+/// 7. Emit `addq $total, %rsp` to undo the pushes + padding.
+/// 8. If `dst` is `Some`, emit `movl %eax, dst` so the call site
+///    sees the return value in a pseudo slot.
+fn lower_call(name: &str, args: &[Val], dst: &Option<String>) -> Vec<Instr> {
+    let plan = abi::classify_params(args.len());
+    let mut out: Vec<Instr> = Vec::new();
+
+    // Compute stack padding: we need 16-byte alignment before the
+    // `call` instruction.  On entry to a function call site the
+    // stack is 8-byte aligned (after the `call` itself pushes an
+    // 8-byte return address, the called function sees a 16-byte
+    // aligned stack).  After we push N stack arguments (each 8
+    // bytes), the alignment depends on whether N is even or odd:
+    //   N=0: stack is 8-byte aligned, no padding needed.
+    //   N=2: stack is 24-byte aligned (8 + 16), still 8 mod 16,
+    //        need 8 bytes of padding so that after the call pushes
+    //        the return address, the called function sees 16-byte
+    //        alignment.
+    //   N=1: stack is 16-byte aligned (8 + 8), need 0 bytes of
+    //        padding — the next 8-byte slot is already 16 mod 16.
+    // In general: pad by 8 when N is even.
+    let stack_arg_count: usize = plan
+        .param_classes
+        .iter()
+        .filter(|c| matches!(c, ParamClass::Stack))
+        .count();
+    let padding = if stack_arg_count.is_multiple_of(2) {
+        0
+    } else {
+        8
+    };
+    if padding != 0 {
+        out.push(Instr::AllocateStack(padding));
+    }
+
+    // Register-passed arguments: emit `mov arg, reg`.  Mirrors
+    // `pass_int_reg_arg` in OCaml `convert_function_call:371-381`.
+    for (idx, val) in args.iter().enumerate() {
+        if plan.param_classes[idx] == ParamClass::Int {
+            out.push(Instr::Mov {
+                src: convert_val(val),
+                dst: Operand::Reg(abi_reg(abi::int_param_reg(idx))),
+            });
+        }
+    }
+
+    // Stack-passed arguments: emit `push arg` in reverse source
+    // order so that arg[6] (the first stack arg) ends up at the
+    // lowest stack address.  Mirrors OCaml `pass_stack_arg` +
+    // `List.rev_map` at the bottom of `convert_function_call`.
+    let mut stack_instrs: Vec<Instr> = Vec::new();
+    for (idx, val) in args.iter().enumerate().rev() {
+        if plan.param_classes[idx] == ParamClass::Stack {
+            stack_instrs.push(Instr::Push(convert_val(val)));
+        }
+    }
+    out.extend(stack_instrs);
+
+    // Emit the `call` itself.
+    out.push(Instr::Call(name.to_string()));
+
+    // Restore the stack pointer: total bytes removed = padding +
+    // 8 * stack_arg_count.  Mirrors the `dealloc` block at OCaml
+    // `convert_function_call:411-424`.
+    let bytes_to_remove = padding + 8 * (stack_arg_count as i32);
+    if bytes_to_remove != 0 {
+        out.push(Instr::DeallocateStack(bytes_to_remove));
+    }
+
+    // Capture the return value if the call site expects one.
+    if let Some(dst_name) = dst {
+        out.push(Instr::Mov {
+            src: Operand::Reg(Reg::AX),
+            dst: Operand::Pseudo(dst_name.clone()),
+        });
+    }
+    out
+}
+
+/// Lower a single TACKY instruction into a flat list of assembly
+/// instructions.  Mirrors `convert_instruction` in
+/// `nqcc2/lib/backend/codegen.ml:482-803` (integer subset).
 fn lower_instruction(instr: &Instruction) -> Vec<Instr> {
     match instr {
         Instruction::Return(val) => vec![
@@ -317,7 +437,64 @@ fn lower_instruction(instr: &Instruction) -> Vec<Instr> {
         // Chapter 4 short-circuit `&&` / `||` lowering materialises
         // forward labels for the join point.
         Instruction::Label(name) => vec![Instr::Label(name.clone())],
+        Instruction::Call { name, args, dst } => lower_call(name, args, dst),
         _ => Vec::new(),
+    }
+}
+
+/// Lower a single function definition into a `TopLevel::Fn`.
+///
+/// Mirrors `convert_top_level` in `nqcc2/lib/backend/codegen.ml:858-866`
+/// for the `Function` branch, plus the prologue emitted by the
+/// book's chapter-9 walk (`pass_params` at
+/// `nqcc2/lib/backend/codegen.ml:805-837`).
+///
+/// The prologue emits one `movl %rdi, param.0`-style move per
+/// parameter so the rest of the function can refer to the parameter
+/// by its stack slot (resolved by `replace_pseudos`).  Parameters 7+
+/// are copied from the caller-passed stack slot (`16(%rbp)`, `24(%rbp)`,
+/// ...) by `replace_pseudos` once the frame is laid out.
+fn generate_function(func: &TackyFunction) -> TopLevel {
+    let plan = abi::classify_params(func.params.len());
+    let mut prologue: Vec<Instr> = Vec::new();
+    for (idx, param_name) in func.params.iter().enumerate() {
+        match plan.param_classes[idx] {
+            ParamClass::Int => {
+                prologue.push(Instr::Mov {
+                    src: Operand::Reg(abi_reg(abi::int_param_reg(idx))),
+                    dst: Operand::Pseudo(param_name.clone()),
+                });
+            }
+            ParamClass::Stack => {
+                // Caller-passed argument at `16(%rbp) + 8*(idx-6)`.
+                // We emit a `Mov` from a `Memory(BP, offset)` operand;
+                // `replace_pseudos` resolves the source `Memory`
+                // operand into the actual stack location once the
+                // frame is laid out.  The destination is a pseudo so
+                // the body can reference the parameter by name.
+                let offset = 16 + (8 * (idx - 6)) as i32;
+                prologue.push(Instr::Mov {
+                    src: Operand::Memory(Reg::BP, offset),
+                    dst: Operand::Pseudo(param_name.clone()),
+                });
+            }
+            ParamClass::Sse => {
+                // Chapter 13; not yet emitted in chapter 9.
+            }
+        }
+    }
+    let body = func
+        .body
+        .iter()
+        .flat_map(lower_instruction)
+        .collect::<Vec<_>>();
+    let mut instructions = Vec::with_capacity(prologue.len() + body.len());
+    instructions.extend(prologue);
+    instructions.extend(body);
+    TopLevel::Fn {
+        name: func.name.clone(),
+        global: func.global,
+        instructions,
     }
 }
 
@@ -325,19 +502,7 @@ pub fn generate(tacky: &TackyProgram, _frames: &[Frame]) -> Result<AsmProgram> {
     let top_level = tacky
         .functions
         .iter()
-        .map(|func| {
-            let instructions = func
-                .body
-                .iter()
-                .flat_map(lower_instruction)
-                .collect::<Vec<_>>();
-            TopLevel::Fn {
-                name: func.name.clone(),
-                global: func.name == "main",
-                instructions,
-            }
-        })
+        .map(generate_function)
         .collect();
-
     Ok(AsmProgram { top_level })
 }
