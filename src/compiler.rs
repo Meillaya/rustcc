@@ -111,8 +111,13 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompilerArtifact
         });
     }
 
+    let global_names: std::collections::HashSet<String> = optimized_tacky
+        .static_variables
+        .iter()
+        .map(|v| v.name.clone())
+        .collect();
     let asm_program = convert_tacky_to_asm(&optimized_tacky, &typed_program)?;
-    let asm_program = replace_pseudos(asm_program)?;
+    let asm_program = replace_pseudos(asm_program, &global_names)?;
     let asm_program = fixup_asm(asm_program)?;
     let assembly_text = emit(&asm_program)?;
     if options.stage == Stage::Codegen {

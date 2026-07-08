@@ -18,8 +18,8 @@
 use anyhow::{Result, bail};
 
 use crate::ast::{
-    AssignOp, BinaryOp, BlockItem, Expr, ForInit, Function, GlobalDecl, Program, Statement,
-    TopLevelItem, UnaryOp, VarDecl,
+    AssignOp, BinaryOp, BlockItem, Expr, ForInit, Function, GlobalDecl, GlobalVarDecl, Program,
+    Statement, StorageClass, TopLevelItem, Type, UnaryOp, VarDecl,
 };
 use crate::lex::{Token, TokenKind};
 use crate::parse::precedence::{Precedence, precedence_of};
@@ -56,32 +56,64 @@ impl Parser {
     ///
     /// Chapter 9 only has function definitions and forward declarations of
     /// functions; chapter 10 widens this with file-scope variable
-    /// declarations.  We detect the body-less variant by peeking for
-    /// `;` after the closing `)` of the parameter list.
+    /// declarations (`int g = 5;`, `static int h;`, `extern int k;`).  The
+    /// sequence is:
+    ///
+    ///   `[static | extern] int NAME`
+    ///
+    /// followed by either `(` (function declaration/definition) or `=`/`;`
+    /// (file-scope variable declaration).  Mirrors
+    /// `nqcc2/lib/parse.ml` `parse_function_or_variable_declaration`
+    /// (~lines 798-823) for chapter-10 surface.
     fn parse_top_level_item(&mut self) -> Result<TopLevelItem> {
-        self.expect_exact(&TokenKind::Int, "function return type 'int'")?;
-        let name = self.expect_identifier("function name")?;
-        self.expect_exact(&TokenKind::OpenParen, "'('")?;
-        let params = self.parse_param_list()?;
-        self.expect_exact(&TokenKind::CloseParen, "')' after parameter list")?;
-        if self.match_exact(&TokenKind::Semicolon) {
-            // Forward declaration: `int foo(int x);` (no body).
-            Ok(TopLevelItem::Declaration(GlobalDecl { name, params }))
-        } else {
-            // Function definition: `int foo(int x) { ... }`.
-            self.expect_exact(&TokenKind::OpenBrace, "'{' to start function body")?;
-            let mut body: Vec<BlockItem> = Vec::new();
-            while !self.check(&TokenKind::CloseBrace) {
-                if self.check(&TokenKind::Eof) {
-                    bail!("parse error: expected '}}' to close function body");
+        // Storage-class specifiers may appear on either side of `int`.
+        let mut storage = StorageClass::Auto;
+        if self.match_exact(&TokenKind::Static) {
+            storage = StorageClass::Static;
+        } else if self.match_exact(&TokenKind::Extern) {
+            storage = StorageClass::Extern;
+        }
+        self.expect_exact(&TokenKind::Int, "type 'int' or storage-class specifier")?;
+        if self.match_exact(&TokenKind::Static) {
+            storage = StorageClass::Static;
+        } else if self.match_exact(&TokenKind::Extern) {
+            storage = StorageClass::Extern;
+        }
+        let name = self.expect_identifier("function or variable name")?;
+        if self.check(&TokenKind::OpenParen) {
+            self.current += 1;
+            let params = self.parse_param_list()?;
+            self.expect_exact(&TokenKind::CloseParen, "')' after parameter list")?;
+            if self.match_exact(&TokenKind::Semicolon) {
+                Ok(TopLevelItem::Declaration(GlobalDecl { name, params }))
+            } else {
+                self.expect_exact(&TokenKind::OpenBrace, "'{' to start function body")?;
+                let mut body: Vec<BlockItem> = Vec::new();
+                while !self.check(&TokenKind::CloseBrace) {
+                    if self.check(&TokenKind::Eof) {
+                        bail!("parse error: expected '}}' to close function body");
+                    }
+                    body.push(self.parse_block_item()?);
                 }
-                body.push(self.parse_block_item()?);
+                self.expect_exact(&TokenKind::CloseBrace, "'}' to close function body")?;
+                Ok(TopLevelItem::Function(Function {
+                    name,
+                    params,
+                    body: Some(body),
+                }))
             }
-            self.expect_exact(&TokenKind::CloseBrace, "'}' to close function body")?;
-            Ok(TopLevelItem::Function(Function {
+        } else {
+            let init = if self.match_exact(&TokenKind::Equal) {
+                Some(self.parse_expr()?)
+            } else {
+                None
+            };
+            self.expect_exact(&TokenKind::Semicolon, "';' after file-scope variable declaration")?;
+            Ok(TopLevelItem::Variable(GlobalVarDecl {
                 name,
-                params,
-                body: Some(body),
+                ty: Type::Int,
+                init,
+                storage,
             }))
         }
     }

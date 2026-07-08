@@ -72,6 +72,10 @@ pub fn label_loops(program: &mut Program) -> Result<()> {
             TopLevelItem::Declaration(_) => {
                 // Forward declarations carry no body; nothing to do.
             }
+            TopLevelItem::Variable(_) => {
+                // File-scope variable declarations carry no labels;
+                // the lowerer turns them into a `TackyStaticVariable`.
+            }
         }
     }
     Ok(())

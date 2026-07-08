@@ -144,6 +144,8 @@ pub(crate) enum TokenKind {
     Double,
     Struct,
     Union,
+    Static,
+    Extern,
     While,
     Do,
     For,
@@ -241,8 +243,8 @@ impl TokenKind {
             Keyword::Sizeof => unreachable!("sizeof is not a parser token yet"),
             Keyword::Struct => Self::Struct,
             Keyword::Union => Self::Union,
-            Keyword::Static => unreachable!("static is not a parser token yet"),
-            Keyword::Extern => unreachable!("extern is not a parser token yet"),
+            Keyword::Static => Self::Static,
+            Keyword::Extern => Self::Extern,
         }
     }
 
@@ -313,6 +315,8 @@ impl TokenKind {
             Self::Double => "Double",
             Self::Struct => "Struct",
             Self::Union => "Union",
+            Self::Static => "Static",
+            Self::Extern => "Extern",
             Self::While => "While",
             Self::Do => "Do",
             Self::For => "For",

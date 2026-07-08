@@ -140,6 +140,7 @@ fn format_operand(op: &Operand) -> Result<String> {
             scale
         )),
         Operand::Stack(offset) => Ok(format!("{}(%rbp)", offset)),
+        Operand::Data(name) => Ok(format!("{name}(%rip)")),
         Operand::Pseudo(name) => Err(anyhow!(
             "pseudoregister leaked past replace_pseudos: {name}"
         )),
@@ -160,6 +161,7 @@ fn format_quad_operand(op: &Operand) -> Result<String> {
             scale
         )),
         Operand::Stack(offset) => Ok(format!("{}(%rbp)", offset)),
+        Operand::Data(name) => Ok(format!("{name}(%rip)")),
         Operand::Pseudo(name) => Err(anyhow!(
             "pseudoregister leaked past replace_pseudos: {name}"
         )),
@@ -281,6 +283,10 @@ fn format_instruction(instr: &Instr) -> Result<String> {
 /// is intentionally minimal.
 fn format_function(name: &str, global: bool, instructions: &[Instr]) -> Result<String> {
     let mut lines: Vec<String> = Vec::new();
+    // Switch back to .text after any .bss/.data block the static-
+    // variable emitter may have left in scope.  Mirrors the OCaml
+    // `emit_tl` `Function` arm.
+    lines.push(".text".to_string());
     if global {
         lines.push(format!(".globl {name}"));
     }
@@ -308,11 +314,13 @@ pub fn emit(program: &AsmProgram) -> Result<String> {
                 global,
                 instructions,
             } => format_function(name, *global, instructions)?,
-            TopLevel::StaticVariable { .. } | TopLevel::Constant { .. } => {
-                return Err(anyhow!(
-                    "emit does not yet support data sections; land in W12+"
-                ));
-            }
+            TopLevel::StaticVariable {
+                name,
+                global,
+                alignment,
+                init,
+            } => format_static_variable(name, *global, *alignment, init)?,
+            TopLevel::Constant { label, value } => format_constant(label, value),
         };
         if idx == 0 {
             blocks.push(block);
@@ -322,4 +330,68 @@ pub fn emit(program: &AsmProgram) -> Result<String> {
     }
     blocks.push(String::new());
     Ok(blocks.join("\n"))
+}
+
+/// Emit a `.data` / `.bss` block for a static variable.  Mirrors
+/// `emit_tl` `StaticVariable` arms in `nqcc2/lib/emit.ml:314-336`:
+/// zero initializers go to `.bss` (the linker reserves space without
+/// baking it into the executable image); everything else goes to
+/// `.data`.  Alignment is emitted via `.align` (Linux AT&T syntax).
+fn format_static_variable(
+    name: &str,
+    global: bool,
+    alignment: u32,
+    init: &crate::codegen::assembly::StaticInit,
+) -> Result<String> {
+    let mut lines: Vec<String> = Vec::new();
+    if global {
+        lines.push(format!(".globl {name}"));
+    }
+    if is_zero_init(init) {
+        lines.push(".bss".to_string());
+        lines.push(format!(".align {alignment}"));
+        lines.push(format!("{name}:"));
+        lines.push(format!("    .zero {}", zero_size(init)));
+    } else {
+        lines.push(".data".to_string());
+        lines.push(format!(".align {alignment}"));
+        lines.push(format!("{name}:"));
+        lines.push(format!("    .long {}", data_value(init)?));
+    }
+    Ok(lines.join("\n"))
+}
+
+fn is_zero_init(init: &crate::codegen::assembly::StaticInit) -> bool {
+    use crate::codegen::assembly::StaticInit;
+    matches!(init, StaticInit::Int(0) | StaticInit::Zero(_))
+}
+
+fn zero_size(init: &crate::codegen::assembly::StaticInit) -> u32 {
+    use crate::codegen::assembly::StaticInit;
+    match init {
+        StaticInit::Zero(n) => *n,
+        StaticInit::Int(_) => 4,
+        _ => 4,
+    }
+}
+
+fn data_value(init: &crate::codegen::assembly::StaticInit) -> Result<i64> {
+    use crate::codegen::assembly::StaticInit;
+    match init {
+        StaticInit::Int(n) => Ok(*n),
+        other => Err(anyhow!(
+            "emit chapter-10 does not yet emit non-int static initializer: {other:?}"
+        )),
+    }
+}
+
+/// Emit a `.rodata`-style constant pool entry.  Mirrors the
+/// `StaticConstant` arm of `nqcc2/lib/emit.ml`.
+fn format_constant(label: &str, value: &[u8]) -> String {
+    let bytes = value
+        .iter()
+        .map(|b| format!("{b}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(".section .rodata\n.align 4\n{label}:\n    .byte {bytes}")
 }

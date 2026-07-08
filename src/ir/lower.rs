@@ -31,9 +31,13 @@ use anyhow::Result;
 use std::collections::HashMap;
 
 use crate::ast::{
-    AssignOp, BinaryOp, BlockItem, Expr, ForInit, Program, Statement, TopLevelItem, UnaryOp,
+    AssignOp, BinaryOp, BlockItem, Expr, ForInit, GlobalVarDecl, Program, Statement, StorageClass,
+    TopLevelItem, UnaryOp,
 };
-use crate::ir::tacky::{ConditionCode, Instruction, TackyFunction, TackyProgram, Val};
+use crate::ir::tacky::{
+    ConditionCode, Instruction, TackyFunction, TackyProgram, TackyStaticInit, TackyStaticVariable,
+    Val,
+};
 use crate::ir::temp::TempIdGenerator;
 use crate::util::labels::LabelGenerator;
 
@@ -42,33 +46,18 @@ pub type TypedProgram = Program;
 pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
     let mut ctx = LowerCtx::new();
     let mut functions: Vec<TackyFunction> = Vec::new();
+    let mut globals: HashMap<String, (StorageClass, Option<Expr>)> = HashMap::new();
     for item in &ast.top_level_items {
         match item {
             TopLevelItem::Function(func) => {
-                // `func.body` is `Some(...)` for every function
-                // definition; declarations have already been filtered
-                // out by the parser (they live in
-                // `TopLevelItem::Declaration`).
                 if let Some(body_items) = &func.body {
                     let params: Vec<String> = func.params.iter().map(|p| p.name.clone()).collect();
-                    // Reset per-function lowering state (label map
-                    // and counter) so the same source label can be
-                    // reused in different functions; the chapter-9
-                    // extra-credit `goto_label_multiple_functions`
-                    // test exercises exactly this.
                     ctx.user_labels.clear();
                     ctx.user_label_counter = 0;
                     ctx.current_function = Some(func.name.clone());
                     let body = lower_block_items(body_items, &mut ctx)?;
                     let body = ensure_trailing_return(body);
                     ctx.current_function = None;
-                    // Chapter 9 marks every function as global because
-                    // the codegen pass has no visibility into which
-                    // functions are called from outside the
-                    // translation unit.  Marking them all `.globl` is
-                    // the safe default; chapter 10 will switch to a
-                    // symbol-table-driven answer once `static` /
-                    // `extern` linkage lands.
                     functions.push(TackyFunction {
                         name: func.name.clone(),
                         global: true,
@@ -78,13 +67,54 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
                 }
             }
             TopLevelItem::Declaration(_) => {
-                // Forward declarations produce no TACKY; the
-                // declaration is informational and the function table
-                // already knows about the name from resolve.
+                // Forward declarations produce no TACKY; resolve already
+                // recorded the name in the global function table.
+            }
+            TopLevelItem::Variable(var) => {
+                merge_global_decl(var, &mut globals);
             }
         }
     }
-    Ok(TackyProgram { functions })
+    let mut static_variables: Vec<TackyStaticVariable> = globals
+        .into_iter()
+        .map(|(name, (storage, init))| {
+            let global = matches!(storage, StorageClass::Extern | StorageClass::Auto);
+            let init = match init {
+                Some(Expr::Constant(n)) => TackyStaticInit::Int(i64::from(n)),
+                None => TackyStaticInit::Int(0),
+                // Non-constant initializers rejected by resolve pass.
+                Some(_) => TackyStaticInit::Int(0),
+            };
+            TackyStaticVariable {
+                name,
+                init,
+                global,
+            }
+        })
+        .collect();
+    // Emit static variables in source order so tests read globals in
+    // the order the human reader sees them.
+    static_variables.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(TackyProgram {
+        functions,
+        static_variables,
+    })
+}
+
+/// Merge a file-scope variable declaration into the chapter-10
+/// global table.  Multiple tentative declarations of the same name
+/// are folded into a single entry; the merge keeps the *first*
+/// storage class and only adopts an initializer if the existing
+/// entry has none.  Mirrors the OCaml `Hashtbl.replace`-style
+/// dedup in `nqcc2/lib/symbols.ml`.
+fn merge_global_decl(var: &GlobalVarDecl, globals: &mut HashMap<String, (StorageClass, Option<Expr>)>) {
+    let entry = globals
+        .entry(var.name.clone())
+        .or_insert((var.storage, var.init.clone()));
+    if entry.1.is_none() && var.init.is_some() {
+        entry.0 = var.storage;
+        entry.1 = var.init.clone();
+    }
 }
 
 /// Namespace-prefix user-defined labels so they cannot collide with

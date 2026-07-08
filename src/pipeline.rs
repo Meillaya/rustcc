@@ -124,15 +124,17 @@ pub mod asm_fixup {
 
 pub mod replace_pseudos {
     //! AsmProgram -> AsmProgram.
-    //!
-    //! Wrapper over `crate::codegen::replace_pseudos`. The current body
-    //! is the identity pass; the real implementation lands in W21 (ch.20).
+    use std::collections::HashSet;
+
     use anyhow::Result;
 
     use crate::codegen::{AsmProgram, replace_pseudos as replace_pseudos_pass};
 
-    pub(crate) fn replace_pseudos(asm: AsmProgram) -> Result<AsmProgram> {
-        replace_pseudos_pass(asm, &[])
+    pub(crate) fn replace_pseudos(
+        asm: AsmProgram,
+        globals: &HashSet<String>,
+    ) -> Result<AsmProgram> {
+        replace_pseudos_pass(asm, globals)
     }
 }
 

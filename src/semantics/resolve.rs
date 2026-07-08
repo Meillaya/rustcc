@@ -60,7 +60,8 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, bail};
 
 use crate::ast::{
-    BlockItem, Expr, ForInit, Function, GlobalDecl, Program, Statement, TopLevelItem, VarDecl,
+    BlockItem, Expr, ForInit, Function, GlobalDecl, GlobalVarDecl, Program, Statement, TopLevelItem,
+    VarDecl,
 };
 
 /// Thin wrapper that carries a `Program` after resolution.
@@ -87,7 +88,9 @@ type FunctionTable = HashMap<String, FunctionEntry>;
 /// covers identifier resolution; chapter 7 extends the scope model to nested
 /// blocks and produces a renamed AST so the lowerer naturally maps each
 /// scope to its own stack slot; chapter 9 adds the global function table
-/// with arity tracking and per-scope function declarations).
+/// with arity tracking and per-scope function declarations; chapter 10
+/// adds a file-scope variable table that lets expressions inside a
+/// function body read globals and rejects duplicate definitions).
 ///
 /// Walks the translation unit in a single top-down pass: top-level items
 /// are processed in source order, and the global function table grows as
@@ -97,6 +100,7 @@ type FunctionTable = HashMap<String, FunctionEntry>;
 /// behaviour of the canonical OCaml reference).
 pub fn resolve_program(ast: &Program) -> Result<ResolvedProgram> {
     let mut table: FunctionTable = HashMap::new();
+    let mut globals: HashMap<String, bool> = HashMap::new();
     let mut resolved_items: Vec<TopLevelItem> = Vec::with_capacity(ast.top_level_items.len());
     for item in &ast.top_level_items {
         match item {
@@ -107,7 +111,7 @@ pub fn resolve_program(ast: &Program) -> Result<ResolvedProgram> {
                     func.name.clone(),
                     FunctionEntry { arity, defined: true },
                 );
-                let resolved = resolve_function(func, &table)?;
+                let resolved = resolve_function(func, &table, &globals)?;
                 resolved_items.push(TopLevelItem::Function(resolved));
             }
             TopLevelItem::Declaration(decl) => {
@@ -124,6 +128,15 @@ pub fn resolve_program(ast: &Program) -> Result<ResolvedProgram> {
                 resolved_items.push(TopLevelItem::Declaration(GlobalDecl {
                     name: decl.name.clone(),
                     params: decl.params.clone(),
+                }));
+            }
+            TopLevelItem::Variable(var) => {
+                resolve_global_variable(var, &mut globals)?;
+                resolved_items.push(TopLevelItem::Variable(GlobalVarDecl {
+                    name: var.name.clone(),
+                    ty: var.ty.clone(),
+                    init: var.init.clone(),
+                    storage: var.storage,
                 }));
             }
         }
@@ -176,7 +189,53 @@ fn check_duplicate_params(params: &[VarDecl]) -> Result<()> {
     Ok(())
 }
 
-fn resolve_function(func: &Function, table: &FunctionTable) -> Result<Function> {
+/// Resolve a file-scope variable declaration.  Mirrors
+/// `resolve_file_scope_variable_declaration` in OCaml resolve.ml.
+/// Multiple tentative declarations of the same name are merged by
+/// the lowerer; only an *initialized* second declaration is
+/// rejected.
+fn resolve_global_variable(
+    var: &GlobalVarDecl,
+    globals: &mut HashMap<String, bool>,
+) -> Result<()> {
+    let has_init_now = var.init.is_some();
+    if let Some(&previously_initialized) = globals.get(&var.name) {
+        if previously_initialized && has_init_now {
+            bail!(
+                "resolve error: duplicate definition of file-scope variable '{}' (already initialized)",
+                var.name
+            );
+        }
+    }
+    let resolved_init = match &var.init {
+        Some(expr) => Some(resolve_global_init(expr)?),
+        None => None,
+    };
+    if has_init_now {
+        globals.insert(var.name.clone(), true);
+    } else {
+        globals.entry(var.name.clone()).or_insert(false);
+    }
+    let _ = resolved_init;
+    Ok(())
+}
+
+/// File-scope variable initializers must be constant expressions
+/// for chapter 10.
+fn resolve_global_init(expr: &Expr) -> Result<Expr> {
+    match expr {
+        Expr::Constant(_) => Ok(expr.clone()),
+        other => bail!(
+            "resolve error: file-scope variable initializer must be a constant expression (got {other:?})"
+        ),
+    }
+}
+
+fn resolve_function(
+    func: &Function,
+    table: &FunctionTable,
+    globals: &HashMap<String, bool>,
+) -> Result<Function> {
     let mut scopes = ScopeStack::new();
     check_duplicate_params(&func.params)?;
     let mut resolved_params: Vec<VarDecl> = Vec::with_capacity(func.params.len());
@@ -188,7 +247,7 @@ fn resolve_function(func: &Function, table: &FunctionTable) -> Result<Function> 
         });
     }
     let body = match &func.body {
-        Some(items) => Some(resolve_block(items, &mut scopes, table)?),
+        Some(items) => Some(resolve_block(items, &mut scopes, table, globals)?),
         None => None,
     };
     Ok(Function {
@@ -339,10 +398,11 @@ fn resolve_block(
     items: &[BlockItem],
     scopes: &mut ScopeStack,
     table: &FunctionTable,
+    globals: &HashMap<String, bool>,
 ) -> Result<Vec<BlockItem>> {
     let mut out = Vec::with_capacity(items.len());
     for item in items {
-        out.push(resolve_block_item(item, scopes, table)?);
+        out.push(resolve_block_item(item, scopes, table, globals)?);
     }
     Ok(out)
 }
@@ -351,10 +411,11 @@ fn resolve_block_item(
     item: &BlockItem,
     scopes: &mut ScopeStack,
     table: &FunctionTable,
+    globals: &HashMap<String, bool>,
 ) -> Result<BlockItem> {
     match item {
         BlockItem::Statement(stmt) => Ok(BlockItem::Statement(resolve_statement(
-            stmt, scopes, table,
+            stmt, scopes, table, globals,
         )?)),
         BlockItem::Declaration(var_decl) => {
             // C99 rule: the declarator's scope begins at the end of the
@@ -364,7 +425,7 @@ fn resolve_block_item(
             // ordering.
             let new_name = scopes.declare(&var_decl.name)?;
             let new_init = match &var_decl.init {
-                Some(expr) => Some(resolve_expr(expr, scopes, table)?),
+                Some(expr) => Some(resolve_expr(expr, scopes, table, globals)?),
                 None => None,
             };
             Ok(BlockItem::Declaration(VarDecl {
@@ -387,12 +448,13 @@ fn resolve_for_init(
     init: &ForInit,
     scopes: &mut ScopeStack,
     table: &FunctionTable,
+    globals: &HashMap<String, bool>,
 ) -> Result<ForInit> {
     match init {
         ForInit::Declaration(var_decl) => {
             let new_name = scopes.declare(&var_decl.name)?;
             let new_init = match &var_decl.init {
-                Some(expr) => Some(resolve_expr(expr, scopes, table)?),
+                Some(expr) => Some(resolve_expr(expr, scopes, table, globals)?),
                 None => None,
             };
             Ok(ForInit::Declaration(VarDecl {
@@ -400,7 +462,7 @@ fn resolve_for_init(
                 init: new_init,
             }))
         }
-        ForInit::Expr(expr) => Ok(ForInit::Expr(resolve_expr(expr, scopes, table)?)),
+        ForInit::Expr(expr) => Ok(ForInit::Expr(resolve_expr(expr, scopes, table, globals)?)),
     }
 }
 
@@ -408,19 +470,22 @@ fn resolve_statement(
     stmt: &Statement,
     scopes: &mut ScopeStack,
     table: &FunctionTable,
+    globals: &HashMap<String, bool>,
 ) -> Result<Statement> {
     match stmt {
-        Statement::Return(expr) => Ok(Statement::Return(resolve_expr(expr, scopes, table)?)),
+        Statement::Return(expr) => {
+            Ok(Statement::Return(resolve_expr(expr, scopes, table, globals)?))
+        }
         Statement::If {
             condition,
             then_branch,
             else_branch,
         } => Ok(Statement::If {
-            condition: resolve_expr(condition, scopes, table)?,
-            then_branch: Box::new(resolve_statement(then_branch, scopes, table)?),
+            condition: resolve_expr(condition, scopes, table, globals)?,
+            then_branch: Box::new(resolve_statement(then_branch, scopes, table, globals)?),
             else_branch: match else_branch {
                 Some(else_branch) => {
-                    Some(Box::new(resolve_statement(else_branch, scopes, table)?))
+                    Some(Box::new(resolve_statement(else_branch, scopes, table, globals)?))
                 }
                 None => None,
             },
@@ -432,7 +497,7 @@ fn resolve_statement(
             // references inside the block; once the block exits, the
             // outer scope's binding is visible again.
             scopes.push();
-            let result = resolve_block(items, scopes, table);
+            let result = resolve_block(items, scopes, table, globals);
             scopes.pop();
             Ok(Statement::Block(result?))
         }
@@ -441,8 +506,8 @@ fn resolve_statement(
             body,
             label,
         } => Ok(Statement::While {
-            condition: resolve_expr(condition, scopes, table)?,
-            body: Box::new(resolve_statement(body, scopes, table)?),
+            condition: resolve_expr(condition, scopes, table, globals)?,
+            body: Box::new(resolve_statement(body, scopes, table, globals)?),
             label: label.clone(),
         }),
         Statement::DoWhile {
@@ -450,8 +515,8 @@ fn resolve_statement(
             condition,
             label,
         } => Ok(Statement::DoWhile {
-            body: Box::new(resolve_statement(body, scopes, table)?),
-            condition: resolve_expr(condition, scopes, table)?,
+            body: Box::new(resolve_statement(body, scopes, table, globals)?),
+            condition: resolve_expr(condition, scopes, table, globals)?,
             label: label.clone(),
         }),
         Statement::For {
@@ -461,23 +526,20 @@ fn resolve_statement(
             body,
             label,
         } => {
-            // `for` opens its own scope for the init declaration so a
-            // `for (int i = ...)` doesn't leak the loop variable.  The
-            // body, condition, and post all see the loop variable.
             scopes.push();
             let resolved_init = match init {
-                Some(init) => Some(resolve_for_init(init, scopes, table)?),
+                Some(init) => Some(resolve_for_init(init, scopes, table, globals)?),
                 None => None,
             };
             let resolved_condition = match condition {
-                Some(expr) => Some(resolve_expr(expr, scopes, table)?),
+                Some(expr) => Some(resolve_expr(expr, scopes, table, globals)?),
                 None => None,
             };
             let resolved_post = match post {
-                Some(expr) => Some(resolve_expr(expr, scopes, table)?),
+                Some(expr) => Some(resolve_expr(expr, scopes, table, globals)?),
                 None => None,
             };
-            let body_result = resolve_statement(body, scopes, table);
+            let body_result = resolve_statement(body, scopes, table, globals);
             scopes.pop();
             Ok(Statement::For {
                 init: resolved_init,
@@ -490,25 +552,25 @@ fn resolve_statement(
         Statement::Break(target) => Ok(Statement::Break(target.clone())),
         Statement::Continue(target) => Ok(Statement::Continue(target.clone())),
         Statement::Switch { expr, body, label } => Ok(Statement::Switch {
-            expr: resolve_expr(expr, scopes, table)?,
-            body: Box::new(resolve_statement(body, scopes, table)?),
+            expr: resolve_expr(expr, scopes, table, globals)?,
+            body: Box::new(resolve_statement(body, scopes, table, globals)?),
             label: label.clone(),
         }),
         Statement::Case { value, statement } => Ok(Statement::Case {
-            value: resolve_expr(value, scopes, table)?,
-            statement: Box::new(resolve_statement(statement, scopes, table)?),
+            value: resolve_expr(value, scopes, table, globals)?,
+            statement: Box::new(resolve_statement(statement, scopes, table, globals)?),
         }),
         Statement::Default { statement } => Ok(Statement::Default {
-            statement: Box::new(resolve_statement(statement, scopes, table)?),
+            statement: Box::new(resolve_statement(statement, scopes, table, globals)?),
         }),
         Statement::Goto(target) => Ok(Statement::Goto(target.clone())),
         Statement::Labeled { label, statement } => Ok(Statement::Labeled {
             label: label.clone(),
-            statement: Box::new(resolve_statement(statement, scopes, table)?),
+            statement: Box::new(resolve_statement(statement, scopes, table, globals)?),
         }),
         Statement::Expr(maybe_expr) => {
             let resolved = match maybe_expr {
-                Some(expr) => Some(resolve_expr(expr, scopes, table)?),
+                Some(expr) => Some(resolve_expr(expr, scopes, table, globals)?),
                 None => None,
             };
             Ok(Statement::Expr(resolved))
@@ -516,27 +578,31 @@ fn resolve_statement(
     }
 }
 
-fn resolve_expr(expr: &Expr, scopes: &mut ScopeStack, table: &FunctionTable) -> Result<Expr> {
+fn resolve_expr(
+    expr: &Expr,
+    scopes: &mut ScopeStack,
+    table: &FunctionTable,
+    globals: &HashMap<String, bool>,
+) -> Result<Expr> {
     match expr {
         Expr::Constant(n) => Ok(Expr::Constant(*n)),
-        Expr::Paren(inner) => Ok(Expr::Paren(Box::new(resolve_expr(inner, scopes, table)?))),
+        Expr::Paren(inner) => {
+            Ok(Expr::Paren(Box::new(resolve_expr(inner, scopes, table, globals)?)))
+        }
         Expr::Var(name) => {
-            // Resolve through the scope stack to find the nearest
-            // enclosing declaration's unique name.  An undeclared
-            // reference is rejected with a precise message.
-            let unique = scopes
-                .lookup(name)
-                .ok_or_else(|| anyhow::anyhow!("resolve error: undeclared variable '{name}'"))?;
-            Ok(Expr::Var(unique))
+            // Locals shadow globals; an undeclared local reference
+            // then falls back to the file-scope variable set so
+            // `return g;` inside a function can read `int g = 5;`
+            // declared earlier in the translation unit.
+            if let Some(unique) = scopes.lookup(name) {
+                return Ok(Expr::Var(unique));
+            }
+            if globals.contains_key(name) {
+                return Ok(Expr::Var(name.clone()));
+            }
+            bail!("resolve error: undeclared variable '{name}'")
         }
         Expr::Call { name, args } => {
-            // Function calls are resolved by first looking up the
-            // name in the per-block function-prototype stack (so a
-            // block-scope prototype shadows an outer one), then
-            // falling back to the global function table (which only
-            // contains names that have been declared/defined earlier
-            // in the translation unit).  The argument count is
-            // compared against the recorded arity.
             let arity = if let Some(arity) = scopes.lookup_fun_arity(name) {
                 arity
             } else if let Some(entry) = table.get(name) {
@@ -552,7 +618,7 @@ fn resolve_expr(expr: &Expr, scopes: &mut ScopeStack, table: &FunctionTable) -> 
             }
             let resolved_args = args
                 .iter()
-                .map(|a| resolve_expr(a, scopes, table))
+                .map(|a| resolve_expr(a, scopes, table, globals))
                 .collect::<Result<Vec<_>>>()?;
             Ok(Expr::Call {
                 name: name.clone(),
@@ -561,30 +627,30 @@ fn resolve_expr(expr: &Expr, scopes: &mut ScopeStack, table: &FunctionTable) -> 
         }
         Expr::Unary { op, expr: inner } => Ok(Expr::Unary {
             op: *op,
-            expr: Box::new(resolve_expr(inner, scopes, table)?),
+            expr: Box::new(resolve_expr(inner, scopes, table, globals)?),
         }),
-        Expr::PreInc(inner) => Ok(Expr::PreInc(Box::new(resolve_expr(inner, scopes, table)?))),
-        Expr::PreDec(inner) => Ok(Expr::PreDec(Box::new(resolve_expr(inner, scopes, table)?))),
-        Expr::PostInc(inner) => Ok(Expr::PostInc(Box::new(resolve_expr(inner, scopes, table)?))),
-        Expr::PostDec(inner) => Ok(Expr::PostDec(Box::new(resolve_expr(inner, scopes, table)?))),
+        Expr::PreInc(inner) => Ok(Expr::PreInc(Box::new(resolve_expr(inner, scopes, table, globals)?))),
+        Expr::PreDec(inner) => Ok(Expr::PreDec(Box::new(resolve_expr(inner, scopes, table, globals)?))),
+        Expr::PostInc(inner) => Ok(Expr::PostInc(Box::new(resolve_expr(inner, scopes, table, globals)?))),
+        Expr::PostDec(inner) => Ok(Expr::PostDec(Box::new(resolve_expr(inner, scopes, table, globals)?))),
         Expr::Assign { op, target, value } => Ok(Expr::Assign {
             op: *op,
-            target: Box::new(resolve_expr(target, scopes, table)?),
-            value: Box::new(resolve_expr(value, scopes, table)?),
+            target: Box::new(resolve_expr(target, scopes, table, globals)?),
+            value: Box::new(resolve_expr(value, scopes, table, globals)?),
         }),
         Expr::Conditional {
             condition,
             then_expr,
             else_expr,
         } => Ok(Expr::Conditional {
-            condition: Box::new(resolve_expr(condition, scopes, table)?),
-            then_expr: Box::new(resolve_expr(then_expr, scopes, table)?),
-            else_expr: Box::new(resolve_expr(else_expr, scopes, table)?),
+            condition: Box::new(resolve_expr(condition, scopes, table, globals)?),
+            then_expr: Box::new(resolve_expr(then_expr, scopes, table, globals)?),
+            else_expr: Box::new(resolve_expr(else_expr, scopes, table, globals)?),
         }),
         Expr::Binary { op, left, right } => Ok(Expr::Binary {
             op: *op,
-            left: Box::new(resolve_expr(left, scopes, table)?),
-            right: Box::new(resolve_expr(right, scopes, table)?),
+            left: Box::new(resolve_expr(left, scopes, table, globals)?),
+            right: Box::new(resolve_expr(right, scopes, table, globals)?),
         }),
     }
 }

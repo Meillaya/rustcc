@@ -3,7 +3,7 @@
 //! Rust structs are used for declaration records because the fields are fixed,
 //! while enums are used where the grammar offers a closed set of alternatives.
 
-use super::{expr::Expr, stmt::Statement};
+use super::{expr::Expr, stmt::Statement, ty::Type};
 
 /// A function parameter declaration.  Mirrors `function_declaration`'s
 /// `params : string list` for chapter 9; we carry the parameter name and
@@ -32,6 +32,42 @@ pub(crate) struct Function {
 pub(crate) struct GlobalDecl {
     pub(crate) name: String,
     pub(crate) params: Vec<VarDecl>,
+}
+
+/// Storage-class specifier attached to a file-scope variable declaration.
+///
+/// Chapter 10 only needs to distinguish two outcomes:
+///
+/// - `Static`   — internal linkage, no `.globl` directive emitted.
+/// - `Extern`   — external linkage (default for file-scope vars too),
+///                emits `.globl`.
+/// - `Auto`     — placeholder meaning *no storage class keyword* (the
+///                default for plain `int g = 5;`); behaves like `Extern`
+///                for linkage purposes.
+///
+/// Mirrors `nqcc2/lib/ast.ml` `storage_class = Static | Extern`, extended
+/// with an `Auto` arm so the Rust port can carry the "no keyword" case
+/// explicitly (the OCaml reference uses `option<storage_class>`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StorageClass {
+    Static,
+    Extern,
+    Auto,
+}
+
+/// A file-scope variable declaration, e.g. `int g = 5;` or `static int g;`.
+///
+/// Mirrors `nqcc2/lib/ast.ml` `variable_declaration` — the OCaml shape
+/// carries the type, optional initializer, and optional storage class.
+/// Chapter 10 keeps `ty` to a single variant (`Type::Int`) but the field
+/// is present so later chapters can drop in `long` / `unsigned` without
+/// disturbing call sites.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct GlobalVarDecl {
+    pub(crate) name: String,
+    pub(crate) ty: Type,
+    pub(crate) init: Option<Expr>,
+    pub(crate) storage: StorageClass,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

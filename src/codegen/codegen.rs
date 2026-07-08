@@ -49,7 +49,8 @@ use anyhow::Result;
 
 use crate::codegen::abi::{self, ParamClass};
 use crate::codegen::assembly::{
-    AsmProgram, BinaryOpInstr, ConditionCode as AsmCC, Instr, Operand, Reg, TopLevel, UnaryOpInstr,
+    AsmProgram, BinaryOpInstr, ConditionCode as AsmCC, Instr, Operand, Reg, StaticInit, TopLevel,
+    UnaryOpInstr,
 };
 use crate::codegen::frame::Frame;
 use crate::ir::tacky::{ConditionCode as TackyCC, Instruction, TackyFunction, TackyProgram, Val};
@@ -499,10 +500,21 @@ fn generate_function(func: &TackyFunction) -> TopLevel {
 }
 
 pub fn generate(tacky: &TackyProgram, _frames: &[Frame]) -> Result<AsmProgram> {
-    let top_level = tacky
-        .functions
-        .iter()
-        .map(generate_function)
-        .collect();
+    let mut top_level: Vec<TopLevel> = Vec::new();
+    for var in &tacky.static_variables {
+        let init = match var.init {
+            crate::ir::tacky::TackyStaticInit::Int(n) => StaticInit::Int(n),
+            crate::ir::tacky::TackyStaticInit::Zero => StaticInit::Zero(4),
+        };
+        top_level.push(TopLevel::StaticVariable {
+            name: var.name.clone(),
+            global: var.global,
+            alignment: 4,
+            init,
+        });
+    }
+    for func in &tacky.functions {
+        top_level.push(generate_function(func));
+    }
     Ok(AsmProgram { top_level })
 }

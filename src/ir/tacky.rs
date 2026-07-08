@@ -214,10 +214,35 @@ pub struct TackyFunction {
 ///
 /// Mirrors `nqcc2/lib/tacky.ml` `program`.  The single-function main of
 /// chapters 1-7 fits in a `vec![one_entry]`; multi-function support lands in
-/// chapters 9+ alongside the chapter-9 function declarations.
+/// chapters 9+ alongside the chapter-9 function declarations.  Chapter 10
+/// widens the surface with `static_variables: Vec<TackyStaticVariable>`
+/// (file-scope variable declarations like `int g = 5;`).
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct TackyProgram {
     pub functions: Vec<TackyFunction>,
+    pub static_variables: Vec<TackyStaticVariable>,
+}
+
+/// Static initializer carried by a file-scope variable declaration.
+///
+/// Mirrors `nqcc2/lib/tacky.ml` `initial_value` semantics for the
+/// chapter-10 surface (`StaticVariable { init : StaticInit }`).  Only
+/// integer constants land here today; chapter 11+ adds `Long`, `Double`,
+/// zero-fill, and string bytes via the assembly `StaticInit` enum which
+/// already has the wider surface declared.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TackyStaticVariable {
+    pub name: String,
+    pub init: TackyStaticInit,
+    pub global: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TackyStaticInit {
+    Int(i64),
+    /// Placeholder so future chapters can extend the IR without changing
+    /// the variant set the lowerer / codegen pre-commit to.
+    Zero,
 }
 
 /// Lower the typed AST into a TACKY program.
