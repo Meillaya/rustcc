@@ -45,6 +45,8 @@
 //     `TopLevel::Fn` entry; the body is the union of prologue and
 //     per-instruction lowering.
 
+use std::collections::HashMap;
+
 use anyhow::Result;
 
 use crate::codegen::abi::{self, ParamClass};
@@ -92,17 +94,49 @@ fn map_cc(cc: TackyCC) -> AsmCC {
     }
 }
 
-fn convert_val(val: &Val) -> Operand {
+fn map_integer_cc(cc: TackyCC, is_unsigned: bool) -> AsmCC {
+    if !is_unsigned {
+        return map_cc(cc);
+    }
+    match cc {
+        TackyCC::L => AsmCC::B,
+        TackyCC::LE => AsmCC::BE,
+        TackyCC::G => AsmCC::A,
+        TackyCC::GE => AsmCC::AE,
+        other => map_cc(other),
+    }
+}
+
+#[derive(Default)]
+struct CodegenCtx {
+    double_labels: HashMap<u64, String>,
+    double_constants: Vec<(String, f64)>,
+    label_counter: u32,
+}
+
+impl CodegenCtx {
+    fn double_label(&mut self, value: f64) -> String {
+        let bits = value.to_bits();
+        if let Some(label) = self.double_labels.get(&bits) {
+            return label.clone();
+        }
+        let label = format!("dbl.{}", self.double_labels.len());
+        self.double_labels.insert(bits, label.clone());
+        self.double_constants.push((label.clone(), value));
+        label
+    }
+
+    fn fresh_label(&mut self, prefix: &str) -> String {
+        let id = self.label_counter;
+        self.label_counter += 1;
+        format!("{prefix}.{id}")
+    }
+}
+
+fn convert_val(val: &Val, ctx: &mut CodegenCtx) -> Operand {
     match val {
         Val::Constant(n) => Operand::Imm(*n),
-        Val::ConstantDouble(_) => {
-            // Constant doubles are materialised into a constant-pool
-            // entry by the codegen pass; the lowerer keeps the
-            // `Val::ConstantDouble` form so type info survives, and
-            // the codegen sees it just before the per-instruction
-            // emit phase materialises the pool label.
-            Operand::Pseudo(String::new()) // placeholder; never used
-        }
+        Val::ConstantDouble(d) => Operand::Data(ctx.double_label(*d)),
         Val::Var(name) => Operand::Pseudo(name.clone()),
     }
 }
@@ -147,8 +181,15 @@ fn abi_reg(reg: abi::Reg) -> Reg {
 /// 7. Emit `addq $total, %rsp` to undo the pushes + padding.
 /// 8. If `dst` is `Some`, emit `movl %eax, dst` so the call site
 ///    sees the return value in a pseudo slot.
-fn lower_call(name: &str, args: &[Val], dst: &Option<String>, type_env: &TypeEnv) -> Vec<Instr> {
-    let plan = abi::classify_params(args.len());
+fn lower_call(
+    name: &str,
+    args: &[Val],
+    dst: &Option<String>,
+    type_env: &TypeEnv,
+    ctx: &mut CodegenCtx,
+) -> Vec<Instr> {
+    let arg_tys: Vec<OperandType> = args.iter().map(|v| type_of_val(v, type_env)).collect();
+    let plan = abi::classify_params(&arg_tys);
     let mut out: Vec<Instr> = Vec::new();
 
     // Compute stack padding: we need 16-byte alignment before the
@@ -184,18 +225,24 @@ fn lower_call(name: &str, args: &[Val], dst: &Option<String>, type_env: &TypeEnv
     // Chapter 11: pick `movl` vs `movq` from the argument's
     // type so a long argument isn't silently truncated to 32 bits.
     for (idx, val) in args.iter().enumerate() {
-        if plan.param_classes[idx] == ParamClass::Int {
-            if type_of_val(val, type_env) == OperandType::Long {
+        if let ParamClass::Int(reg_idx) = plan.param_classes[idx] {
+            let ty = type_of_val(val, type_env);
+            if ty.is_long_word() {
                 out.push(Instr::Movq {
-                    src: convert_val(val),
-                    dst: Operand::Reg(abi_reg(abi::int_param_reg(idx))),
+                    src: convert_val(val, ctx),
+                    dst: Operand::Reg(abi_reg(abi::int_param_reg(reg_idx))),
                 });
-            } else {
+            } else if ty != OperandType::Double {
                 out.push(Instr::Mov {
-                    src: convert_val(val),
-                    dst: Operand::Reg(abi_reg(abi::int_param_reg(idx))),
+                    src: convert_val(val, ctx),
+                    dst: Operand::Reg(abi_reg(abi::int_param_reg(reg_idx))),
                 });
             }
+        } else if let ParamClass::Sse(reg_idx) = plan.param_classes[idx] {
+            out.push(Instr::Movsd {
+                src: convert_val(val, ctx),
+                dst: Operand::Reg(Reg::XMM(reg_idx as u8)),
+            });
         }
     }
 
@@ -205,8 +252,8 @@ fn lower_call(name: &str, args: &[Val], dst: &Option<String>, type_env: &TypeEnv
     // `List.rev_map` at the bottom of `convert_function_call`.
     let mut stack_instrs: Vec<Instr> = Vec::new();
     for (idx, val) in args.iter().enumerate().rev() {
-        if plan.param_classes[idx] == ParamClass::Stack {
-            stack_instrs.push(Instr::Push(convert_val(val)));
+        if matches!(plan.param_classes[idx], ParamClass::Stack) {
+            stack_instrs.push(Instr::Push(convert_val(val, ctx)));
         }
     }
     out.extend(stack_instrs);
@@ -229,10 +276,23 @@ fn lower_call(name: &str, args: &[Val], dst: &Option<String>, type_env: &TypeEnv
     // to read the low 32 (e.g. `movl %eax, dst` only writes 4
     // bytes and leaves the high half of the slot undefined).
     if let Some(dst_name) = dst {
-        out.push(Instr::Movq {
-            src: Operand::Reg(Reg::AX),
-            dst: Operand::Pseudo(dst_name.clone()),
-        });
+        let dst_ty = type_of_val(&Val::Var(dst_name.clone()), type_env);
+        if dst_ty == OperandType::Double {
+            out.push(Instr::Movsd {
+                src: Operand::Reg(Reg::XMM(0)),
+                dst: Operand::Pseudo(dst_name.clone()),
+            });
+        } else if dst_ty.is_long_word() {
+            out.push(Instr::Movq {
+                src: Operand::Reg(Reg::AX),
+                dst: Operand::Pseudo(dst_name.clone()),
+            });
+        } else {
+            out.push(Instr::Mov {
+                src: Operand::Reg(Reg::AX),
+                dst: Operand::Pseudo(dst_name.clone()),
+            });
+        }
     }
     out
 }
@@ -246,12 +306,18 @@ fn lower_call(name: &str, args: &[Val], dst: &Option<String>, type_env: &TypeEnv
 /// instruction variants for every operand-width-sensitive op.  When
 /// the env records a variable as `Long`, the codegen emits the
 /// quadword form; otherwise it emits the longword form.
-fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
+fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -> Vec<Instr> {
     match instr {
         Instruction::Return(val) => {
-            let is_long = type_of_val(val, env) == OperandType::Long;
+            let val_ty = type_of_val(val, env);
+            let is_long = val_ty.is_long_word();
             let mut out: Vec<Instr> = Vec::new();
-            if is_long {
+            if val_ty == OperandType::Double {
+                out.push(Instr::Movsd {
+                    src: convert_val(val, ctx),
+                    dst: Operand::Reg(Reg::XMM(0)),
+                });
+            } else if is_long {
                 // A 64-bit immediate that doesn't fit in i32 needs
                 // `movabsq` to %rax (since `movq imm32, %rax` is
                 // the only form that takes a memory-ish immediate).
@@ -266,12 +332,12 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
                     }
                 }
                 out.push(Instr::Movq {
-                    src: convert_val(val),
+                    src: convert_val(val, ctx),
                     dst: Operand::Reg(Reg::AX),
                 });
             } else {
                 out.push(Instr::Mov {
-                    src: convert_val(val),
+                    src: convert_val(val, ctx),
                     dst: Operand::Reg(Reg::AX),
                 });
             }
@@ -282,7 +348,12 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
             // Copying into a `long` slot moves 64 bits even if the
             // source is a narrow int.  The destination's type wins.
             let dst_ty = type_of_val(&Val::Var(dst.clone()), env);
-            if dst_ty == OperandType::Long {
+            if dst_ty == OperandType::Double {
+                vec![Instr::Movsd {
+                    src: convert_val(src, ctx),
+                    dst: Operand::Pseudo(dst.clone()),
+                }]
+            } else if dst_ty.is_long_word() {
                 // 64-bit immediates outside the i32 range need
                 // `movabsq` into a register first; `movq imm32, mem`
                 // is the only direct immediate form.
@@ -301,12 +372,12 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
                     }
                 }
                 vec![Instr::Movq {
-                    src: convert_val(src),
+                    src: convert_val(src, ctx),
                     dst: Operand::Pseudo(dst.clone()),
                 }]
             } else {
                 vec![Instr::Mov {
-                    src: convert_val(src),
+                    src: convert_val(src, ctx),
                     dst: Operand::Pseudo(dst.clone()),
                 }]
             }
@@ -321,7 +392,7 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
             // don't fit in a signed 32-bit value (e.g. `2147483653L`)
             // need `movabsq` so the 64-bit immediate isn't silently
             // truncated by `movl`.
-            let src_op = convert_val(src);
+            let src_op = convert_val(src, ctx);
             match src_op {
                 Operand::Imm(n) => {
                     if n >= i64::from(i32::MIN) && n <= i64::from(i32::MAX) {
@@ -366,7 +437,7 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
         // narrows to 32 bits.
         Instruction::Truncate { src, dst } => vec![
             Instr::Movq {
-                src: convert_val(src),
+                src: convert_val(src, ctx),
                 dst: Operand::Reg(Reg::R10),
             },
             Instr::Mov {
@@ -374,8 +445,224 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
                 dst: Operand::Pseudo(dst.clone()),
             },
         ],
+        Instruction::IntToDouble { src, dst } => {
+            let src_ty = type_of_val(src, env);
+            let src_op = convert_val(src, ctx);
+            let cvt_src = if src_ty == OperandType::Long {
+                src_op
+            } else if matches!(src_op, Operand::Imm(_)) {
+                return vec![
+                    Instr::Mov {
+                        src: src_op,
+                        dst: Operand::Reg(Reg::R10),
+                    },
+                    Instr::Cvtsi2sd {
+                        src: Operand::Reg(Reg::R10),
+                        dst: Operand::Pseudo(dst.clone()),
+                    },
+                ];
+            } else {
+                return vec![
+                    Instr::Movsx {
+                        src: src_op,
+                        dst: Operand::Reg(Reg::R10),
+                    },
+                    Instr::Cvtsi2sd {
+                        src: Operand::Reg(Reg::R10),
+                        dst: Operand::Pseudo(dst.clone()),
+                    },
+                ];
+            };
+            vec![Instr::Cvtsi2sd {
+                src: cvt_src,
+                dst: Operand::Pseudo(dst.clone()),
+            }]
+        }
+        Instruction::UIntToDouble { src, dst } => {
+            let src_ty = type_of_val(src, env);
+            let src_op = convert_val(src, ctx);
+            if src_ty == OperandType::UInt {
+                vec![
+                    Instr::Mov {
+                        src: src_op,
+                        dst: Operand::Reg(Reg::R10),
+                    },
+                    Instr::Cvtsi2sd {
+                        src: Operand::Reg(Reg::R10),
+                        dst: Operand::Pseudo(dst.clone()),
+                    },
+                ]
+            } else if src_ty == OperandType::ULong {
+                let out_of_range = ctx.fresh_label("ulong_to_double.out_of_range");
+                let end = ctx.fresh_label("ulong_to_double.end");
+                vec![
+                    Instr::Movq {
+                        src: src_op,
+                        dst: Operand::Reg(Reg::R10),
+                    },
+                    Instr::Cmpq {
+                        left: Operand::Reg(Reg::R10),
+                        right: Operand::Imm(0),
+                    },
+                    Instr::JmpCC {
+                        cc: AsmCC::L,
+                        label: out_of_range.clone(),
+                    },
+                    Instr::Cvtsi2sd {
+                        src: Operand::Reg(Reg::R10),
+                        dst: Operand::Pseudo(dst.clone()),
+                    },
+                    Instr::Jmp(end.clone()),
+                    Instr::Label(out_of_range),
+                    Instr::Movq {
+                        src: Operand::Reg(Reg::R10),
+                        dst: Operand::Reg(Reg::R11),
+                    },
+                    Instr::BinaryOp {
+                        op: BinaryOpInstr::BitAndQ,
+                        src: Operand::Imm(1),
+                        dst: Operand::Reg(Reg::R10),
+                    },
+                    Instr::UnaryQ {
+                        op: UnaryOpInstr::Shr,
+                        operand: Operand::Reg(Reg::R11),
+                    },
+                    Instr::BinaryOp {
+                        op: BinaryOpInstr::BitOrQ,
+                        src: Operand::Reg(Reg::R10),
+                        dst: Operand::Reg(Reg::R11),
+                    },
+                    Instr::Cvtsi2sd {
+                        src: Operand::Reg(Reg::R11),
+                        dst: Operand::Pseudo(dst.clone()),
+                    },
+                    Instr::Movsd {
+                        src: Operand::Pseudo(dst.clone()),
+                        dst: Operand::Reg(Reg::XMM(14)),
+                    },
+                    Instr::BinaryOp {
+                        op: BinaryOpInstr::AddDouble,
+                        src: Operand::Reg(Reg::XMM(14)),
+                        dst: Operand::Reg(Reg::XMM(14)),
+                    },
+                    Instr::Movsd {
+                        src: Operand::Reg(Reg::XMM(14)),
+                        dst: Operand::Pseudo(dst.clone()),
+                    },
+                    Instr::Label(end),
+                ]
+            } else {
+                vec![Instr::Cvtsi2sd {
+                    src: src_op,
+                    dst: Operand::Pseudo(dst.clone()),
+                }]
+            }
+        }
+        Instruction::DoubleToInt { src, dst } => {
+            let dst_ty = type_of_val(&Val::Var(dst.clone()), env);
+            let mut out = vec![Instr::Cvttsd2si {
+                src: convert_val(src, ctx),
+                dst: Operand::Reg(Reg::R10),
+            }];
+            if dst_ty.is_long_word() {
+                out.push(Instr::Movq {
+                    src: Operand::Reg(Reg::R10),
+                    dst: Operand::Pseudo(dst.clone()),
+                });
+            } else {
+                out.push(Instr::Mov {
+                    src: Operand::Reg(Reg::R10),
+                    dst: Operand::Pseudo(dst.clone()),
+                });
+            }
+            out
+        }
+        Instruction::DoubleToUInt { src, dst } => {
+            let dst_ty = type_of_val(&Val::Var(dst.clone()), env);
+            if dst_ty != OperandType::ULong {
+                return vec![
+                    Instr::Cvttsd2si {
+                        src: convert_val(src, ctx),
+                        dst: Operand::Reg(Reg::R10),
+                    },
+                    Instr::Mov {
+                        src: Operand::Reg(Reg::R10),
+                        dst: Operand::Pseudo(dst.clone()),
+                    },
+                ];
+            }
+            let above = ctx.fresh_label("double_to_ulong.above");
+            let end = ctx.fresh_label("double_to_ulong.end");
+            let threshold = Operand::Data(ctx.double_label(9223372036854775808.0));
+            vec![
+                Instr::Movsd {
+                    src: convert_val(src, ctx),
+                    dst: Operand::Reg(Reg::XMM(14)),
+                },
+                Instr::CmpDouble {
+                    left: Operand::Reg(Reg::XMM(14)),
+                    right: threshold.clone(),
+                },
+                Instr::JmpCC {
+                    cc: AsmCC::AE,
+                    label: above.clone(),
+                },
+                Instr::Cvttsd2si {
+                    src: Operand::Reg(Reg::XMM(14)),
+                    dst: Operand::Reg(Reg::R10),
+                },
+                Instr::Jmp(end.clone()),
+                Instr::Label(above),
+                Instr::BinaryOp {
+                    op: BinaryOpInstr::SubDouble,
+                    src: threshold,
+                    dst: Operand::Reg(Reg::XMM(14)),
+                },
+                Instr::Cvttsd2si {
+                    src: Operand::Reg(Reg::XMM(14)),
+                    dst: Operand::Reg(Reg::R10),
+                },
+                Instr::Movabsq {
+                    src: i64::MIN,
+                    dst: Operand::Reg(Reg::R11),
+                },
+                Instr::BinaryOp {
+                    op: BinaryOpInstr::AddQ,
+                    src: Operand::Reg(Reg::R11),
+                    dst: Operand::Reg(Reg::R10),
+                },
+                Instr::Label(end),
+                Instr::Movq {
+                    src: Operand::Reg(Reg::R10),
+                    dst: Operand::Pseudo(dst.clone()),
+                },
+            ]
+        }
         Instruction::Negate { dst } => {
-            let is_long = type_of_val(&Val::Var(dst.clone()), env) == OperandType::Long;
+            let dst_ty = type_of_val(&Val::Var(dst.clone()), env);
+            if dst_ty == OperandType::Double {
+                let sign_mask = Operand::Data(ctx.double_label(-0.0));
+                return vec![
+                    Instr::Movsd {
+                        src: Operand::Pseudo(dst.clone()),
+                        dst: Operand::Reg(Reg::XMM(1)),
+                    },
+                    Instr::Movsd {
+                        src: sign_mask,
+                        dst: Operand::Reg(Reg::XMM(15)),
+                    },
+                    Instr::BinaryOp {
+                        op: BinaryOpInstr::XorDouble,
+                        src: Operand::Reg(Reg::XMM(15)),
+                        dst: Operand::Reg(Reg::XMM(1)),
+                    },
+                    Instr::Movsd {
+                        src: Operand::Reg(Reg::XMM(1)),
+                        dst: Operand::Pseudo(dst.clone()),
+                    },
+                ];
+            }
+            let is_long = dst_ty.is_long_word();
             vec![if is_long {
                 Instr::UnaryQ {
                     op: UnaryOpInstr::Neg,
@@ -403,33 +690,89 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
             }]
         }
         Instruction::Add { src, dst } => {
-            let is_long = type_of_val(&Val::Var(dst.clone()), env) == OperandType::Long;
-            let op = if is_long {
+            let dst_ty = type_of_val(&Val::Var(dst.clone()), env);
+            if dst_ty == OperandType::Double {
+                return vec![
+                    Instr::Movsd {
+                        src: Operand::Pseudo(dst.clone()),
+                        dst: Operand::Reg(Reg::XMM(14)),
+                    },
+                    Instr::BinaryOp {
+                        op: BinaryOpInstr::AddDouble,
+                        src: convert_val(src, ctx),
+                        dst: Operand::Reg(Reg::XMM(14)),
+                    },
+                    Instr::Movsd {
+                        src: Operand::Reg(Reg::XMM(14)),
+                        dst: Operand::Pseudo(dst.clone()),
+                    },
+                ];
+            }
+            let op = if dst_ty == OperandType::Double {
+                BinaryOpInstr::AddDouble
+            } else if dst_ty.is_long_word() {
                 BinaryOpInstr::AddQ
             } else {
                 BinaryOpInstr::Add
             };
             vec![Instr::BinaryOp {
                 op,
-                src: convert_val(src),
+                src: convert_val(src, ctx),
                 dst: Operand::Pseudo(dst.clone()),
             }]
         }
         Instruction::Sub { src, dst } => {
-            let is_long = type_of_val(&Val::Var(dst.clone()), env) == OperandType::Long;
-            let op = if is_long {
+            let dst_ty = type_of_val(&Val::Var(dst.clone()), env);
+            if dst_ty == OperandType::Double {
+                return vec![
+                    Instr::Movsd {
+                        src: Operand::Pseudo(dst.clone()),
+                        dst: Operand::Reg(Reg::XMM(14)),
+                    },
+                    Instr::BinaryOp {
+                        op: BinaryOpInstr::SubDouble,
+                        src: convert_val(src, ctx),
+                        dst: Operand::Reg(Reg::XMM(14)),
+                    },
+                    Instr::Movsd {
+                        src: Operand::Reg(Reg::XMM(14)),
+                        dst: Operand::Pseudo(dst.clone()),
+                    },
+                ];
+            }
+            let op = if dst_ty == OperandType::Double {
+                BinaryOpInstr::SubDouble
+            } else if dst_ty.is_long_word() {
                 BinaryOpInstr::SubQ
             } else {
                 BinaryOpInstr::Sub
             };
             vec![Instr::BinaryOp {
                 op,
-                src: convert_val(src),
+                src: convert_val(src, ctx),
                 dst: Operand::Pseudo(dst.clone()),
             }]
         }
         Instruction::Mul { src, dst } => {
-            let is_long = type_of_val(&Val::Var(dst.clone()), env) == OperandType::Long;
+            let dst_ty = type_of_val(&Val::Var(dst.clone()), env);
+            if dst_ty == OperandType::Double {
+                return vec![
+                    Instr::Movsd {
+                        src: Operand::Pseudo(dst.clone()),
+                        dst: Operand::Reg(Reg::XMM(14)),
+                    },
+                    Instr::BinaryOp {
+                        op: BinaryOpInstr::MultDouble,
+                        src: convert_val(src, ctx),
+                        dst: Operand::Reg(Reg::XMM(14)),
+                    },
+                    Instr::Movsd {
+                        src: Operand::Reg(Reg::XMM(14)),
+                        dst: Operand::Pseudo(dst.clone()),
+                    },
+                ];
+            }
+            let is_long = dst_ty.is_long_word();
             let op = if is_long {
                 BinaryOpInstr::MultQ
             } else {
@@ -442,7 +785,7 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
                         dst: Operand::Reg(Reg::AX),
                     },
                     Instr::Movq {
-                        src: convert_val(src),
+                        src: convert_val(src, ctx),
                         dst: Operand::Reg(Reg::R10),
                     },
                     Instr::Movq {
@@ -457,7 +800,7 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
                         dst: Operand::Reg(Reg::AX),
                     },
                     Instr::Mov {
-                        src: convert_val(src),
+                        src: convert_val(src, ctx),
                         dst: Operand::Reg(Reg::R10),
                     },
                     Instr::Mov {
@@ -478,7 +821,26 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
             ]
         }
         Instruction::DivSigned { src, dst } => {
-            let is_long = type_of_val(&Val::Var(dst.clone()), env) == OperandType::Long;
+            let dst_ty = type_of_val(&Val::Var(dst.clone()), env);
+            if dst_ty == OperandType::Double {
+                return vec![
+                    Instr::Movsd {
+                        src: Operand::Pseudo(dst.clone()),
+                        dst: Operand::Reg(Reg::XMM(14)),
+                    },
+                    Instr::BinaryOp {
+                        op: BinaryOpInstr::SseDivDouble,
+                        src: convert_val(src, ctx),
+                        dst: Operand::Reg(Reg::XMM(14)),
+                    },
+                    Instr::Movsd {
+                        src: Operand::Reg(Reg::XMM(14)),
+                        dst: Operand::Pseudo(dst.clone()),
+                    },
+                ];
+            }
+            let is_long = dst_ty.is_long_word();
+            let is_unsigned = dst_ty.is_unsigned();
             if is_long {
                 vec![
                     Instr::Movq {
@@ -486,11 +848,22 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
                         dst: Operand::Reg(Reg::AX),
                     },
                     Instr::Movq {
-                        src: convert_val(src),
+                        src: convert_val(src, ctx),
                         dst: Operand::Reg(Reg::R10),
                     },
-                    Instr::Cqo,
-                    Instr::Idivq(Operand::Reg(Reg::R10)),
+                    if is_unsigned {
+                        Instr::Movq {
+                            src: Operand::Imm(0),
+                            dst: Operand::Reg(Reg::DX),
+                        }
+                    } else {
+                        Instr::Cqo
+                    },
+                    if is_unsigned {
+                        Instr::Divq(Operand::Reg(Reg::R10))
+                    } else {
+                        Instr::Idivq(Operand::Reg(Reg::R10))
+                    },
                     Instr::Movq {
                         src: Operand::Reg(Reg::AX),
                         dst: Operand::Pseudo(dst.clone()),
@@ -503,11 +876,22 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
                         dst: Operand::Reg(Reg::AX),
                     },
                     Instr::Mov {
-                        src: convert_val(src),
+                        src: convert_val(src, ctx),
                         dst: Operand::Reg(Reg::R10),
                     },
-                    Instr::Cdq,
-                    Instr::Idiv(Operand::Reg(Reg::R10)),
+                    if is_unsigned {
+                        Instr::Mov {
+                            src: Operand::Imm(0),
+                            dst: Operand::Reg(Reg::DX),
+                        }
+                    } else {
+                        Instr::Cdq
+                    },
+                    if is_unsigned {
+                        Instr::Div(Operand::Reg(Reg::R10))
+                    } else {
+                        Instr::Idiv(Operand::Reg(Reg::R10))
+                    },
                     Instr::Mov {
                         src: Operand::Reg(Reg::AX),
                         dst: Operand::Pseudo(dst.clone()),
@@ -516,7 +900,9 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
             }
         }
         Instruction::RemSigned { src, dst } => {
-            let is_long = type_of_val(&Val::Var(dst.clone()), env) == OperandType::Long;
+            let dst_ty = type_of_val(&Val::Var(dst.clone()), env);
+            let is_long = dst_ty.is_long_word();
+            let is_unsigned = dst_ty.is_unsigned();
             if is_long {
                 vec![
                     Instr::Movq {
@@ -524,11 +910,22 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
                         dst: Operand::Reg(Reg::AX),
                     },
                     Instr::Movq {
-                        src: convert_val(src),
+                        src: convert_val(src, ctx),
                         dst: Operand::Reg(Reg::R10),
                     },
-                    Instr::Cqo,
-                    Instr::Idivq(Operand::Reg(Reg::R10)),
+                    if is_unsigned {
+                        Instr::Movq {
+                            src: Operand::Imm(0),
+                            dst: Operand::Reg(Reg::DX),
+                        }
+                    } else {
+                        Instr::Cqo
+                    },
+                    if is_unsigned {
+                        Instr::Divq(Operand::Reg(Reg::R10))
+                    } else {
+                        Instr::Idivq(Operand::Reg(Reg::R10))
+                    },
                     Instr::Movq {
                         src: Operand::Reg(Reg::DX),
                         dst: Operand::Pseudo(dst.clone()),
@@ -541,11 +938,22 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
                         dst: Operand::Reg(Reg::AX),
                     },
                     Instr::Mov {
-                        src: convert_val(src),
+                        src: convert_val(src, ctx),
                         dst: Operand::Reg(Reg::R10),
                     },
-                    Instr::Cdq,
-                    Instr::Idiv(Operand::Reg(Reg::R10)),
+                    if is_unsigned {
+                        Instr::Mov {
+                            src: Operand::Imm(0),
+                            dst: Operand::Reg(Reg::DX),
+                        }
+                    } else {
+                        Instr::Cdq
+                    },
+                    if is_unsigned {
+                        Instr::Div(Operand::Reg(Reg::R10))
+                    } else {
+                        Instr::Idiv(Operand::Reg(Reg::R10))
+                    },
                     Instr::Mov {
                         src: Operand::Reg(Reg::DX),
                         dst: Operand::Pseudo(dst.clone()),
@@ -555,22 +963,22 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
         }
         Instruction::BitAnd { src, dst } => vec![Instr::BinaryOp {
             op: BinaryOpInstr::BitAnd,
-            src: convert_val(src),
+            src: convert_val(src, ctx),
             dst: Operand::Pseudo(dst.clone()),
         }],
         Instruction::BitOr { src, dst } => vec![Instr::BinaryOp {
             op: BinaryOpInstr::BitOr,
-            src: convert_val(src),
+            src: convert_val(src, ctx),
             dst: Operand::Pseudo(dst.clone()),
         }],
         Instruction::BitXor { src, dst } => vec![Instr::BinaryOp {
             op: BinaryOpInstr::BitXor,
-            src: convert_val(src),
+            src: convert_val(src, ctx),
             dst: Operand::Pseudo(dst.clone()),
         }],
         Instruction::BitShiftLeft { src, dst } => vec![
             Instr::Mov {
-                src: convert_val(src),
+                src: convert_val(src, ctx),
                 dst: Operand::Reg(Reg::CX),
             },
             Instr::BinaryOp {
@@ -581,7 +989,7 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
         ],
         Instruction::BitShiftRight { src, dst } => vec![
             Instr::Mov {
-                src: convert_val(src),
+                src: convert_val(src, ctx),
                 dst: Operand::Reg(Reg::CX),
             },
             Instr::BinaryOp {
@@ -604,11 +1012,24 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
         // (64-bit compare) instead of `cmpl`.  The `SetCC` /
         // `MovZeroExtend` tail still produces a 32-bit int (the
         // comparison result is 0 or 1, regardless of operand width).
-        Instruction::Cmp { left, right, dst, cc } => {
-            let left_op = convert_val(left);
-            let right_op = convert_val(right);
-            let is_long = type_of_val(left, env) == OperandType::Long
-                || type_of_val(right, env) == OperandType::Long;
+        Instruction::Cmp {
+            left,
+            right,
+            dst,
+            cc,
+        } => {
+            let left_op = convert_val(left, ctx);
+            let right_op = convert_val(right, ctx);
+            let left_ty = type_of_val(left, env);
+            let right_ty = type_of_val(right, env);
+            let is_double = left_ty == OperandType::Double || right_ty == OperandType::Double;
+            let is_unsigned = left_ty.is_unsigned() || right_ty.is_unsigned();
+            let is_long = left_ty.is_long_word() || right_ty.is_long_word();
+            let right_op = if is_double && matches!(right_op, Operand::Imm(0)) {
+                Operand::Data(ctx.double_label(0.0))
+            } else {
+                right_op
+            };
             // x86-64 `cmp` requires its destination (the second AT&T
             // operand, which is the `left` operand in our IR) to be
             // a register or memory — never an immediate.  When the
@@ -639,21 +1060,55 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
                 _ => (Vec::new(), left_op),
             };
             let mut out = prelude;
-            if is_long {
+            if is_double {
+                let cc = match cc {
+                    TackyCC::L => AsmCC::B,
+                    TackyCC::LE => AsmCC::BE,
+                    TackyCC::G => AsmCC::A,
+                    TackyCC::GE => AsmCC::AE,
+                    other => map_cc(*other),
+                };
+                out.push(Instr::Movsd {
+                    src: cmp_left,
+                    dst: Operand::Reg(Reg::XMM(14)),
+                });
+                out.push(Instr::CmpDouble {
+                    left: Operand::Reg(Reg::XMM(14)),
+                    right: right_op,
+                });
+                out.push(Instr::SetCC {
+                    cc,
+                    dst: Operand::Pseudo(dst.clone()),
+                });
+            } else if is_long {
+                let right_op = match right_op {
+                    Operand::Imm(n) if immediate_too_wide(n) => {
+                        out.push(Instr::Movabsq {
+                            src: n,
+                            dst: Operand::Reg(Reg::R10),
+                        });
+                        Operand::Reg(Reg::R10)
+                    }
+                    other => other,
+                };
                 out.push(Instr::Cmpq {
                     left: cmp_left,
                     right: right_op,
+                });
+                out.push(Instr::SetCC {
+                    cc: map_integer_cc(*cc, is_unsigned),
+                    dst: Operand::Pseudo(dst.clone()),
                 });
             } else {
                 out.push(Instr::Cmp {
                     left: cmp_left,
                     right: right_op,
                 });
+                out.push(Instr::SetCC {
+                    cc: map_integer_cc(*cc, is_unsigned),
+                    dst: Operand::Pseudo(dst.clone()),
+                });
             }
-            out.push(Instr::SetCC {
-                cc: map_cc(*cc),
-                dst: Operand::Pseudo(dst.clone()),
-            });
             // `sete` only writes the destination's low byte; the upper
             // bytes of the destination are undefined.  Zero-extend the
             // byte through a scratch register, then write the full
@@ -688,10 +1143,12 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
         // Chapter 11: when `condition` is `long`, use `cmpq $0, cond`
         // (64-bit compare) instead of `cmpl $0, cond`.
         Instruction::JumpIfZero { condition, target } => {
-            let cond_op = convert_val(condition);
-            let is_long = type_of_val(condition, env) == OperandType::Long;
+            let cond_op = convert_val(condition, ctx);
+            let cond_ty = type_of_val(condition, env);
+            let is_double = cond_ty == OperandType::Double;
+            let is_long = cond_ty.is_long_word();
             let (prelude, cmp_left) = match &cond_op {
-                Operand::Imm(_) => {
+                Operand::Imm(_) if !is_double => {
                     let mov = if is_long {
                         Instr::Movq {
                             src: cond_op,
@@ -708,7 +1165,17 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
                 _ => (Vec::new(), cond_op),
             };
             let mut out = prelude;
-            if is_long {
+            if is_double {
+                let zero = Operand::Data(ctx.double_label(0.0));
+                out.push(Instr::Movsd {
+                    src: cmp_left,
+                    dst: Operand::Reg(Reg::XMM(14)),
+                });
+                out.push(Instr::CmpDouble {
+                    left: Operand::Reg(Reg::XMM(14)),
+                    right: zero,
+                });
+            } else if is_long {
                 out.push(Instr::Cmpq {
                     left: cmp_left,
                     right: Operand::Imm(0),
@@ -724,7 +1191,7 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
                 label: target.clone(),
             });
             out
-        },
+        }
         // Chapter 4 short-circuit `||` lowering materialises
         // `JumpIfNotZero`.  Codegen turns this into
         //   cmpl $0, cond
@@ -732,10 +1199,12 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
         // Same immediate-handling workaround as `JumpIfZero` above.
         // Chapter 11: when `condition` is `long`, use `cmpq`.
         Instruction::JumpIfNotZero { condition, target } => {
-            let cond_op = convert_val(condition);
-            let is_long = type_of_val(condition, env) == OperandType::Long;
+            let cond_op = convert_val(condition, ctx);
+            let cond_ty = type_of_val(condition, env);
+            let is_double = cond_ty == OperandType::Double;
+            let is_long = cond_ty.is_long_word();
             let (prelude, cmp_left) = match &cond_op {
-                Operand::Imm(_) => {
+                Operand::Imm(_) if !is_double => {
                     let mov = if is_long {
                         Instr::Movq {
                             src: cond_op,
@@ -752,7 +1221,17 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
                 _ => (Vec::new(), cond_op),
             };
             let mut out = prelude;
-            if is_long {
+            if is_double {
+                let zero = Operand::Data(ctx.double_label(0.0));
+                out.push(Instr::Movsd {
+                    src: cmp_left,
+                    dst: Operand::Reg(Reg::XMM(14)),
+                });
+                out.push(Instr::CmpDouble {
+                    left: Operand::Reg(Reg::XMM(14)),
+                    right: zero,
+                });
+            } else if is_long {
                 out.push(Instr::Cmpq {
                     left: cmp_left,
                     right: Operand::Imm(0),
@@ -768,11 +1247,11 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
                 label: target.clone(),
             });
             out
-        },
+        }
         // Chapter 4 short-circuit `&&` / `||` lowering materialises
         // forward labels for the join point.
         Instruction::Label(name) => vec![Instr::Label(name.clone())],
-        Instruction::Call { name, args, dst } => lower_call(name, args, dst, env),
+        Instruction::Call { name, args, dst } => lower_call(name, args, dst, env, ctx),
         _ => Vec::new(),
     }
 }
@@ -789,24 +1268,33 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
 /// by its stack slot (resolved by `replace_pseudos`).  Parameters 7+
 /// are copied from the caller-passed stack slot (`16(%rbp)`, `24(%rbp)`,
 /// ...) by `replace_pseudos` once the frame is laid out.
-fn generate_function(func: &TackyFunction, globals: &TypeEnv) -> TopLevel {
-    let plan = abi::classify_params(func.params.len());
+fn generate_function(func: &TackyFunction, globals: &TypeEnv, ctx: &mut CodegenCtx) -> TopLevel {
+    let param_tys: Vec<OperandType> = func
+        .params
+        .iter()
+        .map(|p| func.type_env.get(p).copied().unwrap_or(OperandType::Int))
+        .collect();
+    let plan = abi::classify_params(&param_tys);
     let mut prologue: Vec<Instr> = Vec::new();
+    let mut stack_param_idx = 0usize;
     for (idx, param_name) in func.params.iter().enumerate() {
         // Chapter 11: long parameters are passed in the same
         // integer registers but occupy 8 bytes.  Emit a `Movq`
         // for them so the stack slot is sized correctly.
-        let is_long = func
+        let param_ty = func
             .type_env
             .get(param_name)
             .copied()
-            .unwrap_or(OperandType::Int)
-            == OperandType::Long;
+            .unwrap_or(OperandType::Int);
+        let is_long = param_ty.is_long_word();
+        let is_double = param_ty == OperandType::Double;
         match plan.param_classes[idx] {
-            ParamClass::Int => {
-                let src = Operand::Reg(abi_reg(abi::int_param_reg(idx)));
+            ParamClass::Int(reg_idx) => {
+                let src = Operand::Reg(abi_reg(abi::int_param_reg(reg_idx)));
                 let dst = Operand::Pseudo(param_name.clone());
-                if is_long {
+                if is_double {
+                    prologue.push(Instr::Movsd { src, dst });
+                } else if is_long {
                     prologue.push(Instr::Movq { src, dst });
                 } else {
                     prologue.push(Instr::Mov { src, dst });
@@ -819,17 +1307,23 @@ fn generate_function(func: &TackyFunction, globals: &TypeEnv) -> TopLevel {
                 // operand into the actual stack location once the
                 // frame is laid out.  The destination is a pseudo so
                 // the body can reference the parameter by name.
-                let offset = 16 + (8 * (idx - 6)) as i32;
+                let offset = 16 + (8 * stack_param_idx) as i32;
+                stack_param_idx += 1;
                 let src = Operand::Memory(Reg::BP, offset);
                 let dst = Operand::Pseudo(param_name.clone());
-                if is_long {
+                if is_double {
+                    prologue.push(Instr::Movsd { src, dst });
+                } else if is_long {
                     prologue.push(Instr::Movq { src, dst });
                 } else {
                     prologue.push(Instr::Mov { src, dst });
                 }
             }
-            ParamClass::Sse => {
-                // Chapter 13; not yet emitted in chapter 9.
+            ParamClass::Sse(reg_idx) => {
+                prologue.push(Instr::Movsd {
+                    src: Operand::Reg(Reg::XMM(reg_idx as u8)),
+                    dst: Operand::Pseudo(param_name.clone()),
+                });
             }
         }
     }
@@ -845,7 +1339,7 @@ fn generate_function(func: &TackyFunction, globals: &TypeEnv) -> TopLevel {
     let body = func
         .body
         .iter()
-        .flat_map(|instr| lower_instruction(instr, &merged))
+        .flat_map(|instr| lower_instruction(instr, &merged, ctx))
         .collect::<Vec<_>>();
     let mut instructions = Vec::with_capacity(prologue.len() + body.len());
     instructions.extend(prologue);
@@ -860,6 +1354,7 @@ fn generate_function(func: &TackyFunction, globals: &TypeEnv) -> TopLevel {
 
 pub fn generate(tacky: &TackyProgram, _frames: &[Frame]) -> Result<AsmProgram> {
     let mut top_level: Vec<TopLevel> = Vec::new();
+    let mut ctx = CodegenCtx::default();
     for var in &tacky.static_variables {
         let init = match (var.init.clone(), var.ty) {
             (crate::ir::tacky::TackyStaticInit::Int(n), OperandType::Long) => StaticInit::Long(n),
@@ -890,7 +1385,13 @@ pub fn generate(tacky: &TackyProgram, _frames: &[Frame]) -> Result<AsmProgram> {
         globals_type_env.insert(var.name.clone(), var.ty);
     }
     for func in &tacky.functions {
-        top_level.push(generate_function(func, &globals_type_env));
+        top_level.push(generate_function(func, &globals_type_env, &mut ctx));
+    }
+    for (label, value) in ctx.double_constants {
+        top_level.push(TopLevel::Constant {
+            label,
+            value: value.to_bits().to_le_bytes().to_vec(),
+        });
     }
     Ok(AsmProgram { top_level })
 }

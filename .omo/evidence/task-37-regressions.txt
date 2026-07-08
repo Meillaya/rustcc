@@ -1,0 +1,318 @@
+=== chapter 5 latest-only bitwise compound increment ===
+----------------------------------------------------------------------
+Ran 82 tests in 1.240s
+
+OK
+chapter5_status=0
+=== chapter 12 latest-only ===
+======================================================================
+FAIL: test_invalid_types/conflicting_signed_unsigned (test_framework.basic.TestChapter12.test_invalid_types/conflicting_signed_unsigned)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 580, in test_invalid
+    self.compile_failure(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 334, in compile_failure
+    with self.assertRaises(
+         ~~~~~~~~~~~~~~~~~^
+        subprocess.CalledProcessError, msg=f"Didn't catch error in {source_file}"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ):
+    ^
+AssertionError: Didn't catch error in /home/mei/projects/rustcc/tests/tests/chapter_12/invalid_types/conflicting_signed_unsigned.c
+
+======================================================================
+FAIL: test_invalid_types/conflicting_uint_ulong (test_framework.basic.TestChapter12.test_invalid_types/conflicting_uint_ulong)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 580, in test_invalid
+    self.compile_failure(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 334, in compile_failure
+    with self.assertRaises(
+         ~~~~~~~~~~~~~~~~~^
+        subprocess.CalledProcessError, msg=f"Didn't catch error in {source_file}"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ):
+    ^
+AssertionError: Didn't catch error in /home/mei/projects/rustcc/tests/tests/chapter_12/invalid_types/conflicting_uint_ulong.c
+
+======================================================================
+FAIL: test_valid/explicit_casts/extension (test_framework.basic.TestChapter12.test_valid/explicit_casts/extension)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 402, in compile_and_run
+    self.validate_runs(source_file, result)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 308, in validate_runs
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        expected_retcode,
+        ^^^^^^^^^^^^^^^^^
+        actual.returncode,
+        ^^^^^^^^^^^^^^^^^^
+        msg=build_error_message(expected_retcode, expected_stdout, actual, exe),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Incorrect behavior in /home/mei/projects/rustcc/tests/tests/chapter_12/valid/explicit_casts/extension
+* Bad return code: expected 0 and got 3
+
+======================================================================
+FAIL: test_valid/explicit_casts/rewrite_movz_regression (test_framework.basic.TestChapter12.test_valid/explicit_casts/rewrite_movz_regression)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 402, in compile_and_run
+    self.validate_runs(source_file, result)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 308, in validate_runs
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        expected_retcode,
+        ^^^^^^^^^^^^^^^^^
+        actual.returncode,
+        ^^^^^^^^^^^^^^^^^^
+        msg=build_error_message(expected_retcode, expected_stdout, actual, exe),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Incorrect behavior in /home/mei/projects/rustcc/tests/tests/chapter_12/valid/explicit_casts/rewrite_movz_regression
+* Bad return code: expected 0 and got 255
+
+======================================================================
+FAIL: test_valid/explicit_casts/round_trip_casts (test_framework.basic.TestChapter12.test_valid/explicit_casts/round_trip_casts)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 402, in compile_and_run
+    self.validate_runs(source_file, result)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 308, in validate_runs
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        expected_retcode,
+        ^^^^^^^^^^^^^^^^^
+        actual.returncode,
+        ^^^^^^^^^^^^^^^^^^
+        msg=build_error_message(expected_retcode, expected_stdout, actual, exe),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Incorrect behavior in /home/mei/projects/rustcc/tests/tests/chapter_12/valid/explicit_casts/round_trip_casts
+* Bad return code: expected 0 and got 1
+
+======================================================================
+FAIL: test_valid/implicit_casts/common_type (test_framework.basic.TestChapter12.test_valid/implicit_casts/common_type)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 402, in compile_and_run
+    self.validate_runs(source_file, result)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 308, in validate_runs
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        expected_retcode,
+        ^^^^^^^^^^^^^^^^^
+        actual.returncode,
+        ^^^^^^^^^^^^^^^^^^
+        msg=build_error_message(expected_retcode, expected_stdout, actual, exe),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Incorrect behavior in /home/mei/projects/rustcc/tests/tests/chapter_12/valid/implicit_casts/common_type
+* Bad return code: expected 0 and got 3
+
+======================================================================
+FAIL: test_valid/implicit_casts/convert_by_assignment (test_framework.basic.TestChapter12.test_valid/implicit_casts/convert_by_assignment)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 402, in compile_and_run
+    self.validate_runs(source_file, result)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 308, in validate_runs
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        expected_retcode,
+        ^^^^^^^^^^^^^^^^^
+        actual.returncode,
+        ^^^^^^^^^^^^^^^^^^
+        msg=build_error_message(expected_retcode, expected_stdout, actual, exe),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Incorrect behavior in /home/mei/projects/rustcc/tests/tests/chapter_12/valid/implicit_casts/convert_by_assignment
+* Bad return code: expected 0 and got 2
+
+======================================================================
+FAIL: test_valid/implicit_casts/promote_constants (test_framework.basic.TestChapter12.test_valid/implicit_casts/promote_constants)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 402, in compile_and_run
+    self.validate_runs(source_file, result)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 308, in validate_runs
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        expected_retcode,
+        ^^^^^^^^^^^^^^^^^
+        actual.returncode,
+        ^^^^^^^^^^^^^^^^^^
+        msg=build_error_message(expected_retcode, expected_stdout, actual, exe),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Incorrect behavior in /home/mei/projects/rustcc/tests/tests/chapter_12/valid/implicit_casts/promote_constants
+* Bad return code: expected 0 and got 2
+
+======================================================================
+FAIL: test_valid/implicit_casts/static_initializers (test_framework.basic.TestChapter12.test_valid/implicit_casts/static_initializers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 402, in compile_and_run
+    self.validate_runs(source_file, result)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 308, in validate_runs
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        expected_retcode,
+        ^^^^^^^^^^^^^^^^^
+        actual.returncode,
+        ^^^^^^^^^^^^^^^^^^
+        msg=build_error_message(expected_retcode, expected_stdout, actual, exe),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Incorrect behavior in /home/mei/projects/rustcc/tests/tests/chapter_12/valid/implicit_casts/static_initializers
+* Bad return code: expected 0 and got 1
+
+======================================================================
+FAIL: test_valid/libraries/unsigned_args (test_framework.basic.TestChapter12.test_valid/libraries/unsigned_args)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 448, in library_test_helper
+    self.validate_runs(validation_key, result)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 308, in validate_runs
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        expected_retcode,
+        ^^^^^^^^^^^^^^^^^
+        actual.returncode,
+        ^^^^^^^^^^^^^^^^^^
+        msg=build_error_message(expected_retcode, expected_stdout, actual, exe),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Incorrect behavior in /home/mei/projects/rustcc/tests/tests/chapter_12/valid/libraries/unsigned_args
+* Bad return code: expected 0 and got 9
+
+======================================================================
+FAIL: test_valid/libraries/unsigned_global_var (test_framework.basic.TestChapter12.test_valid/libraries/unsigned_global_var)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 448, in library_test_helper
+    self.validate_runs(validation_key, result)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 308, in validate_runs
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        expected_retcode,
+        ^^^^^^^^^^^^^^^^^
+        actual.returncode,
+        ^^^^^^^^^^^^^^^^^^
+        msg=build_error_message(expected_retcode, expected_stdout, actual, exe),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Incorrect behavior in /home/mei/projects/rustcc/tests/tests/chapter_12/valid/libraries/unsigned_global_var
+* Bad return code: expected 1 and got 0
+
+======================================================================
+FAIL: test_valid/libraries/unsigned_global_var_client (test_framework.basic.TestChapter12.test_valid/libraries/unsigned_global_var_client)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 612, in test_client
+    self.compile_client_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 455, in compile_client_and_run
+    self.library_test_helper(client_path, [lib_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 448, in library_test_helper
+    self.validate_runs(validation_key, result)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 308, in validate_runs
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        expected_retcode,
+        ^^^^^^^^^^^^^^^^^
+        actual.returncode,
+        ^^^^^^^^^^^^^^^^^^
+        msg=build_error_message(expected_retcode, expected_stdout, actual, exe),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Incorrect behavior in /home/mei/projects/rustcc/tests/tests/chapter_12/valid/libraries/unsigned_global_var_client
+* Bad return code: expected 1 and got 0
+
+======================================================================
+FAIL: test_valid/type_specifiers/signed_type_specifiers (test_framework.basic.TestChapter12.test_valid/type_specifiers/signed_type_specifiers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/type_specifiers/signed_type_specifiers.c failed with error:
+resolve error: conflicting linkage for 'i' (variable declared with both external and internal linkage)
+
+
+----------------------------------------------------------------------
+Ran 29 tests in 0.590s
+
+FAILED (failures=13)
+/home/mei/projects/rustcc/tests/tests/chapter_12/valid/implicit_casts/promote_constants.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_12/valid/implicit_casts/promote_constants.s:24: Warning: 0x1000000000 shortened to 0x0
+
+chapter12_status=1

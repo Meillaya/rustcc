@@ -91,6 +91,8 @@ pub enum BinaryOpInstr {
     MultQ,
     DivQ,
     RemQ,
+    BitAndQ,
+    BitOrQ,
     /// Chapter 13: SSE double-precision arithmetic.  Emitted as
     /// `addsd` / `subsd` / `mulsd` / `divsd` / `xorpd` (the latter is
     /// used for `==` / `!=` zero-comparison).  Operands must be
@@ -217,9 +219,11 @@ pub enum Instr {
         dst: Operand,
     },
     Idiv(Operand),
+    /// Chapter 12: 32-bit unsigned division (pairs with zeroing `%edx`).
+    Div(Operand),
     /// Chapter 11: 64-bit variant of `Idiv`.  Pairs with `Cqo`.
     Idivq(Operand),
-    /// Chapter 13: unsigned 64-bit division (pairs with `Mov $0, %rdx`).
+    /// Chapter 12: unsigned 64-bit division (pairs with zeroing `%rdx`).
     Divq(Operand),
     Cdq,
     /// Chapter 11: sign-extend %rax into %rdx:%rax for 64-bit

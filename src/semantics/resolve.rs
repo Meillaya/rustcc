@@ -263,10 +263,7 @@ fn check_duplicate_params(params: &[VarDecl]) -> Result<()> {
 /// The chapter-10 multi-declaration (tentative-definition) merging
 /// is handled in the lowerer; the resolve pass only blocks
 /// pathological cases.
-fn resolve_global_variable(
-    var: &GlobalVarDecl,
-    globals: &mut GlobalTable,
-) -> Result<()> {
+fn resolve_global_variable(var: &GlobalVarDecl, globals: &mut GlobalTable) -> Result<()> {
     let new_linkage = linkage_of(var.storage);
     if let Some(entry) = globals.get(&var.name).copied() {
         match entry.kind {
@@ -303,17 +300,17 @@ fn resolve_global_variable(
 /// for chapter 10.
 fn resolve_global_init(expr: &Expr) -> Result<Expr> {
     match expr {
-        Expr::Constant(_) | Expr::LongConstant(_) => Ok(expr.clone()),
+        Expr::Constant(_)
+        | Expr::LongConstant(_)
+        | Expr::UIntConstant(_, _)
+        | Expr::DoubleConstant(_) => Ok(expr.clone()),
         other => bail!(
             "resolve error: file-scope variable initializer must be a constant expression (got {other:?})"
         ),
     }
 }
 
-fn resolve_function(
-    func: &Function,
-    globals: &GlobalTable,
-) -> Result<Function> {
+fn resolve_function(func: &Function, globals: &GlobalTable) -> Result<Function> {
     let mut scopes = ScopeStack::new();
     check_duplicate_params(&func.params)?;
     let mut resolved_params: Vec<VarDecl> = Vec::with_capacity(func.params.len());
@@ -411,9 +408,7 @@ impl ScopeStack {
             .last_mut()
             .expect("scope stack missing root scope");
         if current.contains_key(name) {
-            bail!(
-                "resolve error: duplicate declaration of '{name}' in the same scope"
-            );
+            bail!("resolve error: duplicate declaration of '{name}' in the same scope");
         }
         let unique = format!("{name}.{}", self.next_id);
         self.next_id += 1;
@@ -457,10 +452,7 @@ impl ScopeStack {
     /// a second prototype with a different arity is rejected as a
     /// conflicting declaration.
     fn declare_fun(&mut self, name: &str, arity: usize) -> Result<()> {
-        let var_scope = self
-            .scopes
-            .last()
-            .expect("scope stack missing root scope");
+        let var_scope = self.scopes.last().expect("scope stack missing root scope");
         if var_scope.contains_key(name) {
             bail!(
                 "resolve error: function '{name}' conflicts with variable declaration in the same scope"
@@ -532,7 +524,13 @@ fn resolve_block_item(
                         name = var_decl.name
                     );
                 }
-                if !matches!(globals.get(&var_decl.name), Some(GlobalEntry { kind: GlobalKind::Variable, .. })) {
+                if !matches!(
+                    globals.get(&var_decl.name),
+                    Some(GlobalEntry {
+                        kind: GlobalKind::Variable,
+                        ..
+                    })
+                ) {
                     bail!(
                         "resolve error: extern declaration of '{name}' has no prior file-scope variable",
                         name = var_decl.name
@@ -563,9 +561,7 @@ fn resolve_block_item(
         BlockItem::FunctionDecl(fd) => {
             check_duplicate_params(&fd.params)?;
             if fd.storage == StorageClass::Static {
-                bail!(
-                    "resolve error: static keyword not allowed on local function declaration"
-                );
+                bail!("resolve error: static keyword not allowed on local function declaration");
             }
             if let Some(entry) = globals.get(&fd.name) {
                 if !matches!(entry.kind, GlobalKind::Function { .. }) {
@@ -615,9 +611,7 @@ fn resolve_statement(
     globals: &GlobalTable,
 ) -> Result<Statement> {
     match stmt {
-        Statement::Return(expr) => {
-            Ok(Statement::Return(resolve_expr(expr, scopes, globals)?))
-        }
+        Statement::Return(expr) => Ok(Statement::Return(resolve_expr(expr, scopes, globals)?)),
         Statement::If {
             condition,
             then_branch,
@@ -715,30 +709,30 @@ fn resolve_statement(
     }
 }
 
-fn resolve_expr(
-    expr: &Expr,
-    scopes: &mut ScopeStack,
-    globals: &GlobalTable,
-) -> Result<Expr> {
+fn resolve_expr(expr: &Expr, scopes: &mut ScopeStack, globals: &GlobalTable) -> Result<Expr> {
     match expr {
         Expr::Constant(n) => Ok(Expr::Constant(*n)),
         Expr::LongConstant(n) => Ok(Expr::LongConstant(*n)),
-        Expr::UIntConstant(n, _) => Ok(Expr::UIntConstant(*n, false)),
+        Expr::UIntConstant(n, is_long) => Ok(Expr::UIntConstant(*n, *is_long)),
         Expr::DoubleConstant(d) => Ok(Expr::DoubleConstant(*d)),
-        Expr::Cast { target_type, expr: inner } => Ok(Expr::Cast {
+        Expr::Cast {
+            target_type,
+            expr: inner,
+        } => Ok(Expr::Cast {
             target_type: target_type.clone(),
             expr: Box::new(resolve_expr(inner, scopes, globals)?),
         }),
-        Expr::Paren(inner) => {
-            Ok(Expr::Paren(Box::new(resolve_expr(inner, scopes, globals)?)))
-        }
+        Expr::Paren(inner) => Ok(Expr::Paren(Box::new(resolve_expr(inner, scopes, globals)?))),
         Expr::Var(name) => {
             if let Some(unique) = scopes.lookup(name) {
                 return Ok(Expr::Var(unique));
             }
             if matches!(
                 globals.get(name),
-                Some(GlobalEntry { kind: GlobalKind::Variable, .. })
+                Some(GlobalEntry {
+                    kind: GlobalKind::Variable,
+                    ..
+                })
             ) {
                 return Ok(Expr::Var(name.clone()));
             }
@@ -775,10 +769,18 @@ fn resolve_expr(
             op: *op,
             expr: Box::new(resolve_expr(inner, scopes, globals)?),
         }),
-        Expr::PreInc(inner) => Ok(Expr::PreInc(Box::new(resolve_expr(inner, scopes, globals)?))),
-        Expr::PreDec(inner) => Ok(Expr::PreDec(Box::new(resolve_expr(inner, scopes, globals)?))),
-        Expr::PostInc(inner) => Ok(Expr::PostInc(Box::new(resolve_expr(inner, scopes, globals)?))),
-        Expr::PostDec(inner) => Ok(Expr::PostDec(Box::new(resolve_expr(inner, scopes, globals)?))),
+        Expr::PreInc(inner) => Ok(Expr::PreInc(Box::new(resolve_expr(
+            inner, scopes, globals,
+        )?))),
+        Expr::PreDec(inner) => Ok(Expr::PreDec(Box::new(resolve_expr(
+            inner, scopes, globals,
+        )?))),
+        Expr::PostInc(inner) => Ok(Expr::PostInc(Box::new(resolve_expr(
+            inner, scopes, globals,
+        )?))),
+        Expr::PostDec(inner) => Ok(Expr::PostDec(Box::new(resolve_expr(
+            inner, scopes, globals,
+        )?))),
         Expr::Assign { op, target, value } => Ok(Expr::Assign {
             op: *op,
             target: Box::new(resolve_expr(target, scopes, globals)?),

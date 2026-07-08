@@ -15,14 +15,14 @@
 // Mirrors nqcc2/lib/parse.ml chapter 9 grammar (~lines 1-50 of parse_program).
 // Recursive-descent, Result-returning.
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 use crate::ast::{
     AssignOp, BinaryOp, BlockItem, Expr, ForInit, Function, GlobalDecl, GlobalVarDecl, Program,
     Statement, StorageClass, TopLevelItem, Type, UnaryOp, VarDecl,
 };
 use crate::lex::{Token, TokenKind};
-use crate::parse::precedence::{precedence_of, Precedence};
+use crate::parse::precedence::{Precedence, precedence_of};
 
 pub(crate) fn parse_program(tokens: Vec<Token>) -> Result<Program> {
     Parser::new(tokens).parse_program()
@@ -103,11 +103,6 @@ impl Parser {
                 }))
             }
         } else {
-            if matches!(ty, Type::Double) {
-                bail!(
-                    "parse error: file-scope 'double' variables are not supported before chapter 13"
-                );
-            }
             let init = if self.match_exact(&TokenKind::Equal) {
                 Some(self.parse_expr()?)
             } else {
@@ -136,7 +131,9 @@ impl Parser {
         let mut saw_int = false;
         let mut is_long = false;
         let mut is_unsigned = false;
+        let mut saw_unsigned = false;
         let mut saw_signed = false;
+        let mut saw_long = false;
         let mut is_double = false;
         let mut storage = StorageClass::Auto;
         let mut had_storage = false;
@@ -150,17 +147,25 @@ impl Parser {
                     self.current += 1;
                 }
                 TokenKind::Long => {
+                    if saw_long {
+                        bail!("parse error: duplicate 'long' in type specifier");
+                    }
+                    saw_long = true;
                     is_long = true;
                     self.current += 1;
                 }
                 TokenKind::Unsigned => {
+                    if saw_unsigned {
+                        bail!("parse error: duplicate 'unsigned' in type specifier");
+                    }
+                    saw_unsigned = true;
                     is_unsigned = true;
                     self.current += 1;
                 }
                 TokenKind::Signed => {
-                    // `signed` is the default and is ignored; consume
-                    // the token so the rest of the specifier list can
-                    // proceed.
+                    if saw_signed {
+                        bail!("parse error: duplicate 'signed' in type specifier");
+                    }
                     saw_signed = true;
                     self.current += 1;
                 }
@@ -190,11 +195,14 @@ impl Parser {
                 _ => break,
             }
         }
-        if !saw_int && !is_long && !is_unsigned && !is_double {
+        if !saw_int && !is_long && !is_unsigned && !saw_signed && !is_double {
             bail!(
                 "parse error: expected a type specifier ('int' / 'long' / 'double' / 'unsigned' / 'signed'), found {:?}",
                 self.peek().kind
             );
+        }
+        if is_unsigned && saw_signed {
+            bail!("parse error: cannot combine 'signed' and 'unsigned'");
         }
         if is_double && (is_long || is_unsigned || saw_signed || saw_int) {
             bail!("parse error: 'double' cannot be combined with other type specifiers");
@@ -246,6 +254,7 @@ impl Parser {
         let mut saw_long = false;
         let mut saw_double = false;
         let mut is_unsigned = false;
+        let mut saw_unsigned = false;
         let mut saw_signed = false;
         loop {
             match self.peek().kind {
@@ -272,21 +281,31 @@ impl Parser {
                     self.current += 1;
                 }
                 TokenKind::Unsigned => {
+                    if saw_unsigned {
+                        bail!("parse error: duplicate 'unsigned' in type specifier");
+                    }
+                    saw_unsigned = true;
                     is_unsigned = true;
                     self.current += 1;
                 }
                 TokenKind::Signed => {
+                    if saw_signed {
+                        bail!("parse error: duplicate 'signed' in type specifier");
+                    }
                     saw_signed = true;
                     self.current += 1;
                 }
                 _ => break,
             }
         }
-        if !saw_int && !saw_long && !is_unsigned && !saw_double {
+        if !saw_int && !saw_long && !is_unsigned && !saw_signed && !saw_double {
             bail!(
                 "parse error: expected a type specifier ('int' / 'long' / 'double' / 'unsigned' / 'signed'), found {:?}",
                 self.peek().kind
             );
+        }
+        if is_unsigned && saw_signed {
+            bail!("parse error: cannot combine 'signed' and 'unsigned'");
         }
         if saw_double && (is_long || is_unsigned || saw_signed || saw_int) {
             bail!("parse error: 'double' cannot be combined with other type specifiers");
@@ -362,6 +381,7 @@ impl Parser {
             || self.peek().kind == TokenKind::Long
             || self.peek().kind == TokenKind::Unsigned
             || self.peek().kind == TokenKind::Signed
+            || self.peek().kind == TokenKind::Double
             || self.peek().kind == TokenKind::Static
             || self.peek().kind == TokenKind::Extern
         {
@@ -513,7 +533,14 @@ impl Parser {
         self.expect_exact(&TokenKind::OpenParen, "'(' after for")?;
         let init = if self.match_exact(&TokenKind::Semicolon) {
             None
-        } else if matches!(self.peek().kind, TokenKind::Int | TokenKind::Long) {
+        } else if matches!(
+            self.peek().kind,
+            TokenKind::Int
+                | TokenKind::Long
+                | TokenKind::Unsigned
+                | TokenKind::Signed
+                | TokenKind::Double
+        ) {
             let ty = self.parse_type_specifier()?;
             let name = self.expect_identifier("for-loop variable name")?;
             let init = if self.match_exact(&TokenKind::Equal) {
@@ -628,6 +655,17 @@ impl Parser {
                 self.current += 1;
                 Ok(Expr::LongConstant(value))
             }
+            TokenKind::UIntConstant(value, kind) => {
+                let value = *value;
+                let is_long = matches!(kind, crate::lex::token::UIntKind::ULong);
+                self.current += 1;
+                Ok(Expr::UIntConstant(value, is_long))
+            }
+            TokenKind::DoubleConstant(value) => {
+                let value = *value;
+                self.current += 1;
+                Ok(Expr::DoubleConstant(value))
+            }
             TokenKind::Identifier(name) => {
                 let name = name.clone();
                 self.current += 1;
@@ -697,7 +735,11 @@ impl Parser {
                 // closing `)` and the casted expression follow.
                 if matches!(
                     self.peek().kind,
-                    TokenKind::Int | TokenKind::Long | TokenKind::Unsigned | TokenKind::Signed
+                    TokenKind::Int
+                        | TokenKind::Long
+                        | TokenKind::Unsigned
+                        | TokenKind::Signed
+                        | TokenKind::Double
                 ) {
                     let target_type = self.parse_type_specifier()?;
                     self.expect_exact(&TokenKind::CloseParen, "')' after cast type")?;

@@ -121,10 +121,7 @@ fn lex_number(chars: &mut Chars<'_>, tokens: &mut Vec<Token>) -> Result<()> {
     // Detect the `0x` / `0X` hex prefix before consuming the leading zero so
     // we can route the rest of the digits through `is_ascii_hexdigit`.
     let hex_prefix = matches!(chars.peek().copied(), Some((_, '0')))
-        && matches!(
-            chars.clone().nth(1).map(|(_, c)| c),
-            Some('x') | Some('X')
-        );
+        && matches!(chars.clone().nth(1).map(|(_, c)| c), Some('x') | Some('X'));
 
     if hex_prefix {
         // Consume '0' and 'x'.
@@ -155,7 +152,11 @@ fn lex_number(chars: &mut Chars<'_>, tokens: &mut Vec<Token>) -> Result<()> {
             tokens.push(Token {
                 kind: TokenKind::UIntConstant(
                     value as i64,
-                    if is_long { UIntKind::ULong } else { UIntKind::UInt },
+                    if is_long {
+                        UIntKind::ULong
+                    } else {
+                        UIntKind::UInt
+                    },
                 ),
                 lexeme,
             });
@@ -198,18 +199,14 @@ fn lex_number(chars: &mut Chars<'_>, tokens: &mut Vec<Token>) -> Result<()> {
         // `1e308` / `1E-5` is a valid float even without a fractional part.
         is_float = true;
     } else if let Some((_, '.')) = chars.peek().copied() {
-        let mut probe = chars.clone();
-        probe.next();
-        if matches!(probe.peek().copied(), Some((_, c)) if c.is_ascii_digit()) {
-            is_float = true;
-            lexeme.push(chars.next().expect("peeked '.'").1);
-            while let Some((_, c)) = chars.peek().copied() {
-                if c.is_ascii_digit() {
-                    lexeme.push(c);
-                    chars.next();
-                } else {
-                    break;
-                }
+        is_float = true;
+        lexeme.push(chars.next().expect("peeked '.'").1);
+        while let Some((_, c)) = chars.peek().copied() {
+            if c.is_ascii_digit() {
+                lexeme.push(c);
+                chars.next();
+            } else {
+                break;
             }
         }
     }
@@ -273,7 +270,11 @@ fn lex_number(chars: &mut Chars<'_>, tokens: &mut Vec<Token>) -> Result<()> {
         tokens.push(Token {
             kind: TokenKind::UIntConstant(
                 value as i64,
-                if is_long { UIntKind::ULong } else { UIntKind::UInt },
+                if is_long {
+                    UIntKind::ULong
+                } else {
+                    UIntKind::UInt
+                },
             ),
             lexeme,
         });
@@ -313,19 +314,7 @@ fn is_valid_int_suffix(suffix: &str) -> bool {
     // `"lU"` / `"Lu"` / `"LU"`).
     matches!(
         suffix,
-        ""
-            | "l"
-            | "L"
-            | "u"
-            | "U"
-            | "ul"
-            | "uL"
-            | "Ul"
-            | "UL"
-            | "lu"
-            | "lU"
-            | "Lu"
-            | "LU"
+        "" | "l" | "L" | "u" | "U" | "ul" | "uL" | "Ul" | "UL" | "lu" | "lU" | "Lu" | "LU"
     )
 }
 

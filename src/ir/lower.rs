@@ -47,8 +47,30 @@ pub type TypedProgram = Program;
 /// to their TACKY `OperandType` width.
 fn type_to_operand_type(ty: Type) -> OperandType {
     match ty {
-        Type::Long | Type::UnsignedLong => OperandType::Long,
+        Type::Long => OperandType::Long,
+        Type::UnsignedInt => OperandType::UInt,
+        Type::UnsignedLong => OperandType::ULong,
+        Type::Double => OperandType::Double,
         _ => OperandType::Int,
+    }
+}
+
+fn static_init_for(expr: Expr, target_ty: OperandType) -> TackyStaticInit {
+    match (expr, target_ty) {
+        (Expr::DoubleConstant(d), OperandType::Double) => TackyStaticInit::Double(d),
+        (Expr::Constant(n), OperandType::Double)
+        | (Expr::LongConstant(n), OperandType::Double)
+        | (Expr::UIntConstant(n, _), OperandType::Double) => {
+            TackyStaticInit::Double((n as u64) as f64)
+        }
+        (Expr::DoubleConstant(d), OperandType::ULong) => TackyStaticInit::Long((d as u64) as i64),
+        (Expr::DoubleConstant(d), OperandType::Long) => TackyStaticInit::Long(d as i64),
+        (Expr::DoubleConstant(d), _) => TackyStaticInit::Int(d as i64),
+        (Expr::LongConstant(n), OperandType::Long | OperandType::ULong) => TackyStaticInit::Long(n),
+        (Expr::UIntConstant(n, true), _) => TackyStaticInit::Long(n),
+        (Expr::Constant(n), OperandType::Long | OperandType::ULong) => TackyStaticInit::Long(n),
+        (Expr::Constant(n), _) | (Expr::UIntConstant(n, false), _) => TackyStaticInit::Int(n),
+        _ => TackyStaticInit::Zero,
     }
 }
 
@@ -79,7 +101,15 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
             .iter()
             .map(|p| type_to_operand_type(p.ty.clone()))
             .collect();
-        ctx.func_sigs.insert(name, param_tys);
+        ctx.func_sigs.insert(name.clone(), param_tys);
+        ctx.func_returns.insert(
+            name,
+            type_to_operand_type(match item {
+                TopLevelItem::Function(f) => f.ret_ty.clone(),
+                TopLevelItem::Declaration(d) => d.ret_ty.clone(),
+                _ => Type::Int,
+            }),
+        );
     }
     for item in &ast.top_level_items {
         match item {
@@ -89,6 +119,7 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
                     ctx.user_labels.clear();
                     ctx.user_label_counter = 0;
                     ctx.current_function = Some(func.name.clone());
+                    ctx.current_return_ty = type_to_operand_type(func.ret_ty.clone());
                     ctx.type_env.clear();
                     ctx.const_counter = 0;
                     // Seed the env with the parameter types so the
@@ -107,6 +138,7 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
                     let body = lower_block_items(body_items, &mut ctx)?;
                     let body = ensure_trailing_return(body);
                     ctx.current_function = None;
+                    ctx.current_return_ty = OperandType::Int;
                     let type_env = std::mem::take(&mut ctx.type_env);
                     functions.push(TackyFunction {
                         name: func.name.clone(),
@@ -141,11 +173,9 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
             }
             let global = matches!(storage, StorageClass::Auto);
             let init = match init {
-                Some(Expr::Constant(n)) => TackyStaticInit::Int(n),
-                Some(Expr::LongConstant(n)) => TackyStaticInit::Long(n),
-                None => TackyStaticInit::Int(0),
+                Some(expr) => static_init_for(expr, ty),
+                None => TackyStaticInit::Zero,
                 // Non-constant initializers rejected by resolve pass.
-                Some(_) => TackyStaticInit::Int(0),
             };
             Some(TackyStaticVariable {
                 name,
@@ -155,6 +185,7 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
             })
         })
         .collect();
+    static_variables.extend(ctx.local_statics);
     // Emit static variables in source order so tests read globals in
     // the order the human reader sees them.
     static_variables.sort_by(|a, b| a.name.cmp(&b.name));
@@ -273,6 +304,7 @@ struct LowerCtx {
     /// prefix on user-label assembly symbols so cross-function
     /// label name collisions never reach the linker.
     current_function: Option<String>,
+    current_return_ty: OperandType,
     /// Per-function type env tracking the operand width of every
     /// TACKY variable the lowerer creates.  Populated alongside
     /// each `Copy` to a fresh tmp and consulted by the binary /
@@ -292,6 +324,8 @@ struct LowerCtx {
     /// type.  Mirrors the OCaml `Symbols` table of parameter
     /// types used by `typecheck.ml::typecheck_fun_call`.
     func_sigs: HashMap<String, Vec<crate::ir::tacky::OperandType>>,
+    func_returns: HashMap<String, crate::ir::tacky::OperandType>,
+    local_statics: Vec<TackyStaticVariable>,
 }
 
 impl LowerCtx {
@@ -304,9 +338,12 @@ impl LowerCtx {
             user_label_counter: 0,
             user_labels: HashMap::new(),
             current_function: None,
+            current_return_ty: OperandType::Int,
             type_env: HashMap::new(),
             const_counter: 0,
             func_sigs: HashMap::new(),
+            func_returns: HashMap::new(),
+            local_statics: Vec::new(),
         }
     }
 
@@ -326,9 +363,18 @@ impl LowerCtx {
     /// receives the synthetic name as a `Val::Var` so downstream
     /// uses can look up the type from the env.
     fn materialize_long_constant(&mut self, instrs: &mut Vec<Instruction>, value: i64) -> Val {
+        self.materialize_typed_constant(instrs, value, OperandType::Long)
+    }
+
+    fn materialize_typed_constant(
+        &mut self,
+        instrs: &mut Vec<Instruction>,
+        value: i64,
+        ty: OperandType,
+    ) -> Val {
         let name = format!("const.{}", self.const_counter);
         self.const_counter += 1;
-        self.type_env.insert(name.clone(), OperandType::Long);
+        self.type_env.insert(name.clone(), ty);
         instrs.push(Instruction::Copy {
             src: Val::Constant(value),
             dst: name.clone(),
@@ -345,9 +391,25 @@ fn lower_block_items(items: &[BlockItem], ctx: &mut LowerCtx) -> Result<Vec<Inst
             BlockItem::Declaration(decl) => {
                 let decl_ty = type_to_operand_type(decl.ty.clone());
                 ctx.type_env.entry(decl.name.clone()).or_insert(decl_ty);
+                if decl.storage == StorageClass::Static {
+                    let init = decl
+                        .init
+                        .clone()
+                        .map(|expr| static_init_for(expr, decl_ty))
+                        .unwrap_or(TackyStaticInit::Zero);
+                    ctx.local_statics.push(TackyStaticVariable {
+                        name: decl.name.clone(),
+                        init,
+                        global: false,
+                        ty: decl_ty,
+                    });
+                    continue;
+                }
                 if let Some(expr) = &decl.init {
                     let (instrs, val) = lower_expr(expr, ctx)?;
                     out.extend(instrs);
+                    let val_ty = type_of_val(&val, ctx);
+                    let val = convert_to_type(val, val_ty, decl_ty, &mut out, ctx);
                     out.push(Instruction::Copy {
                         src: val,
                         dst: decl.name.clone(),
@@ -365,6 +427,8 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
         Statement::Return(expr) => {
             let (instrs, val) = lower_expr(expr, ctx)?;
             let mut out = instrs;
+            let val_ty = type_of_val(&val, ctx);
+            let val = convert_to_type(val, val_ty, ctx.current_return_ty, &mut out, ctx);
             out.push(Instruction::Return(val));
             Ok(out)
         }
@@ -492,6 +556,14 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
                         if let Some(expr) = &decl.init {
                             let (instrs, val) = lower_expr(expr, ctx)?;
                             out.extend(instrs);
+                            let val_ty = type_of_val(&val, ctx);
+                            let val = convert_to_type(
+                                val,
+                                val_ty,
+                                type_to_operand_type(decl.ty.clone()),
+                                &mut out,
+                                ctx,
+                            );
                             out.push(Instruction::Copy {
                                 src: val,
                                 dst: decl.name.clone(),
@@ -566,7 +638,7 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
                 _ => {
                     return Err(anyhow::anyhow!(
                         "lower: switch case value must be a constant integer"
-                    ))
+                    ));
                 }
             };
             let mut out = vec![Instruction::Label(label)];
@@ -727,7 +799,7 @@ fn collect_switch_dispatch(
                 _ => {
                     return Err(anyhow::anyhow!(
                         "lower: switch case value must be a constant integer"
-                    ))
+                    ));
                 }
             };
             case_values.push(v);
@@ -783,7 +855,16 @@ fn continue_label(id: &str) -> String {
 fn lower_expr(expr: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)> {
     match expr {
         Expr::Constant(n) => Ok((Vec::new(), Val::Constant(*n))),
-        Expr::UIntConstant(n, _is_long) => Ok((Vec::new(), Val::Constant(*n))),
+        Expr::UIntConstant(n, is_long) => {
+            let mut instrs = Vec::new();
+            let ty = if *is_long {
+                OperandType::ULong
+            } else {
+                OperandType::UInt
+            };
+            let v = ctx.materialize_typed_constant(&mut instrs, *n, ty);
+            Ok((instrs, v))
+        }
         Expr::DoubleConstant(d) => Ok((Vec::new(), Val::ConstantDouble(*d))),
         Expr::LongConstant(n) => {
             // The lowerer can't keep `Val::Constant` typed, so it
@@ -822,32 +903,8 @@ fn lower_expr(expr: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)
             if src_ty == dst_ty {
                 return Ok((instrs, src));
             }
-            let dst_name = if dst_ty == OperandType::Long {
-                ctx.fresh_typed_tmp(OperandType::Long)
-            } else {
-                ctx.fresh_typed_tmp(OperandType::Int)
-            };
-            match (src_ty, dst_ty) {
-                (OperandType::Int, OperandType::Long) => {
-                    instrs.push(Instruction::SignExtend {
-                        src: src.clone(),
-                        dst: dst_name.clone(),
-                    });
-                }
-                (OperandType::Long, OperandType::Int) => {
-                    instrs.push(Instruction::Truncate {
-                        src: src.clone(),
-                        dst: dst_name.clone(),
-                    });
-                }
-                _ => {
-                    instrs.push(Instruction::Copy {
-                        src: src.clone(),
-                        dst: dst_name.clone(),
-                    });
-                }
-            }
-            Ok((instrs, Val::Var(dst_name)))
+            let converted = convert_to_type(src, src_ty, dst_ty, &mut instrs, ctx);
+            Ok((instrs, converted))
         }
         Expr::AddressOf(inner) => lower_addr_of(inner, ctx),
         Expr::Dereference(inner) => lower_dereference(inner, ctx),
@@ -884,23 +941,7 @@ fn lower_call(name: &str, args: &[Expr], ctx: &mut LowerCtx) -> Result<(Vec<Inst
         let val = if let Some(ref pts) = param_tys {
             if let Some(&param_ty) = pts.get(idx) {
                 let arg_ty = type_of_val(&val, ctx);
-                if arg_ty == OperandType::Int && param_ty == OperandType::Long {
-                    let tmp = ctx.fresh_typed_tmp(OperandType::Long);
-                    out.push(Instruction::SignExtend {
-                        src: val,
-                        dst: tmp.clone(),
-                    });
-                    Val::Var(tmp)
-                } else if arg_ty == OperandType::Long && param_ty == OperandType::Int {
-                    let tmp = ctx.fresh_typed_tmp(OperandType::Int);
-                    out.push(Instruction::Truncate {
-                        src: val,
-                        dst: tmp.clone(),
-                    });
-                    Val::Var(tmp)
-                } else {
-                    val
-                }
+                convert_to_type(val, arg_ty, param_ty, &mut out, ctx)
             } else {
                 val
             }
@@ -909,7 +950,12 @@ fn lower_call(name: &str, args: &[Expr], ctx: &mut LowerCtx) -> Result<(Vec<Inst
         };
         arg_vals.push(val);
     }
-    let dst_name = ctx.fresh_tmp();
+    let ret_ty = ctx
+        .func_returns
+        .get(name)
+        .copied()
+        .unwrap_or(OperandType::Int);
+    let dst_name = ctx.fresh_typed_tmp(ret_ty);
     out.push(Instruction::Call {
         name: name.to_string(),
         args: arg_vals,
@@ -931,28 +977,8 @@ fn lower_cast(
     let (mut instrs, inner_val) = lower_expr(inner, ctx)?;
     let inner_ty = type_of_val(&inner_val, ctx);
     let target_ty = type_to_operand_type(target_type.clone());
-    let dst = ctx.fresh_typed_tmp(target_ty);
-    match (inner_ty, target_ty) {
-        (OperandType::Int, OperandType::Long) => {
-            instrs.push(Instruction::SignExtend {
-                src: inner_val,
-                dst: dst.clone(),
-            });
-        }
-        (OperandType::Long, OperandType::Int) => {
-            instrs.push(Instruction::Truncate {
-                src: inner_val,
-                dst: dst.clone(),
-            });
-        }
-        _ => {
-            instrs.push(Instruction::Copy {
-                src: inner_val,
-                dst: dst.clone(),
-            });
-        }
-    }
-    Ok((instrs, Val::Var(dst)))
+    let converted = convert_to_type(inner_val, inner_ty, target_ty, &mut instrs, ctx);
+    Ok((instrs, converted))
 }
 
 /// Chapter 14: `&lvalue` — emit a `GetAddress` for the inner lvalue
@@ -1029,32 +1055,41 @@ fn lower_subscript(
 fn lower_unary(op: UnaryOp, inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)> {
     let (mut instrs, inner_val) = lower_expr(inner, ctx)?;
     let inner_ty = type_of_val(&inner_val, ctx);
-    let tmp = ctx.fresh_typed_tmp(inner_ty);
     match op {
         UnaryOp::Negate => {
+            let tmp = ctx.fresh_typed_tmp(inner_ty);
             instrs.push(Instruction::Copy {
                 src: inner_val,
                 dst: tmp.clone(),
             });
             instrs.push(Instruction::Negate { dst: tmp.clone() });
+            Ok((instrs, Val::Var(tmp)))
         }
         UnaryOp::Complement => {
+            if inner_ty == OperandType::Double {
+                return Err(anyhow::anyhow!(
+                    "type error: bitwise complement is invalid for double"
+                ));
+            }
+            let tmp = ctx.fresh_typed_tmp(inner_ty);
             instrs.push(Instruction::Copy {
                 src: inner_val,
                 dst: tmp.clone(),
             });
             instrs.push(Instruction::Complement { dst: tmp.clone() });
+            Ok((instrs, Val::Var(tmp)))
         }
         UnaryOp::Not => {
+            let tmp = ctx.fresh_typed_tmp(OperandType::Int);
             instrs.push(Instruction::Cmp {
                 left: inner_val,
                 right: Val::Constant(0),
                 dst: tmp.clone(),
                 cc: ConditionCode::E,
             });
+            Ok((instrs, Val::Var(tmp)))
         }
     }
-    Ok((instrs, Val::Var(tmp)))
 }
 
 fn lower_assign(
@@ -1123,23 +1158,62 @@ fn narrow_to_target(
     instrs: &mut Vec<Instruction>,
     ctx: &mut LowerCtx,
 ) -> Val {
-    if val_ty == OperandType::Long && target_ty == OperandType::Int {
-        let tmp = ctx.fresh_typed_tmp(OperandType::Int);
-        instrs.push(Instruction::Truncate {
-            src: val,
-            dst: tmp.clone(),
-        });
-        Val::Var(tmp)
-    } else if val_ty == OperandType::Int && target_ty == OperandType::Long {
-        let tmp = ctx.fresh_typed_tmp(OperandType::Long);
-        instrs.push(Instruction::SignExtend {
-            src: val,
-            dst: tmp.clone(),
-        });
-        Val::Var(tmp)
-    } else {
-        val
+    convert_to_type(val, val_ty, target_ty, instrs, ctx)
+}
+
+fn convert_to_type(
+    val: Val,
+    val_ty: OperandType,
+    target_ty: OperandType,
+    instrs: &mut Vec<Instruction>,
+    ctx: &mut LowerCtx,
+) -> Val {
+    if val_ty == target_ty {
+        return val;
     }
+    let tmp = ctx.fresh_typed_tmp(target_ty);
+    let instr = match (val_ty, target_ty) {
+        (OperandType::UInt, OperandType::Long | OperandType::ULong) => Instruction::ZeroExtend {
+            src: val,
+            dst: tmp.clone(),
+        },
+        (OperandType::Int, OperandType::Long | OperandType::ULong) => Instruction::SignExtend {
+            src: val,
+            dst: tmp.clone(),
+        },
+        (OperandType::Long | OperandType::ULong, OperandType::Int | OperandType::UInt) => {
+            Instruction::Truncate {
+                src: val,
+                dst: tmp.clone(),
+            }
+        }
+        (OperandType::Double, OperandType::Int | OperandType::Long) => Instruction::DoubleToInt {
+            src: val,
+            dst: tmp.clone(),
+        },
+        (OperandType::Double, OperandType::UInt | OperandType::ULong) => {
+            Instruction::DoubleToUInt {
+                src: val,
+                dst: tmp.clone(),
+            }
+        }
+        (OperandType::Int | OperandType::Long, OperandType::Double) => Instruction::IntToDouble {
+            src: val,
+            dst: tmp.clone(),
+        },
+        (OperandType::UInt | OperandType::ULong, OperandType::Double) => {
+            Instruction::UIntToDouble {
+                src: val,
+                dst: tmp.clone(),
+            }
+        }
+        _ => Instruction::Copy {
+            src: val,
+            dst: tmp.clone(),
+        },
+    };
+    instrs.push(instr);
+    Val::Var(tmp)
 }
 
 fn lower_prefix_incdec(
@@ -1237,11 +1311,7 @@ fn lower_conditional(
     // surface.
     let then_ty = type_of_val(&then_val, ctx);
     let else_ty = type_of_val(&else_val, ctx);
-    let result_ty = if then_ty == OperandType::Long || else_ty == OperandType::Long {
-        OperandType::Long
-    } else {
-        OperandType::Int
-    };
+    let result_ty = common_operand_type(then_ty, else_ty);
     let result = ctx.fresh_typed_tmp(result_ty);
 
     let mut out = cond_instrs;
@@ -1249,6 +1319,7 @@ fn lower_conditional(
         condition: cond_val,
         target: else_label.clone(),
     });
+    let then_val = convert_to_type(then_val, then_ty, result_ty, &mut then_instrs, ctx);
     then_instrs.push(Instruction::Copy {
         src: then_val,
         dst: result.clone(),
@@ -1258,6 +1329,7 @@ fn lower_conditional(
     });
     out.extend(then_instrs);
     out.push(Instruction::Label(else_label));
+    let else_val = convert_to_type(else_val, else_ty, result_ty, &mut else_instrs, ctx);
     else_instrs.push(Instruction::Copy {
         src: else_val,
         dst: result.clone(),
@@ -1302,6 +1374,21 @@ fn lower_binary(
                 instrs.push(cmp_to_tacky(op, left_val, right_val, tmp.clone()));
                 Ok((instrs, Val::Var(tmp)))
             } else {
+                if dst_ty == OperandType::Double
+                    && matches!(
+                        op,
+                        BinaryOp::Remainder
+                            | BinaryOp::ShiftLeft
+                            | BinaryOp::ShiftRight
+                            | BinaryOp::BitwiseAnd
+                            | BinaryOp::BitwiseXor
+                            | BinaryOp::BitwiseOr
+                    )
+                {
+                    return Err(anyhow::anyhow!(
+                        "type error: operator {op:?} is invalid for double"
+                    ));
+                }
                 let tmp_ty = dst_ty;
                 let tmp = ctx.fresh_typed_tmp(tmp_ty);
                 instrs.push(Instruction::Copy {
@@ -1343,32 +1430,59 @@ fn promote_for_binary(
     instrs: &mut Vec<Instruction>,
     ctx: &mut LowerCtx,
 ) -> (Val, Val, OperandType) {
+    if left_ty == OperandType::Double || right_ty == OperandType::Double {
+        let left = convert_to_type(left_val, left_ty, OperandType::Double, instrs, ctx);
+        let right = convert_to_type(right_val, right_ty, OperandType::Double, instrs, ctx);
+        return (left, right, OperandType::Double);
+    }
     match (left_ty, right_ty) {
-        (OperandType::Int, OperandType::Long) => {
-            let tmp = ctx.fresh_typed_tmp(OperandType::Long);
-            instrs.push(Instruction::SignExtend {
-                src: left_val,
-                dst: tmp.clone(),
-            });
-            (Val::Var(tmp), right_val, OperandType::Long)
+        (OperandType::Int | OperandType::UInt, OperandType::Long | OperandType::ULong) => {
+            let target = common_operand_type(left_ty, right_ty);
+            let left = convert_to_type(left_val, left_ty, target, instrs, ctx);
+            let right = convert_to_type(right_val, right_ty, target, instrs, ctx);
+            (left, right, target)
         }
-        (OperandType::Long, OperandType::Int) => {
-            let tmp = ctx.fresh_typed_tmp(OperandType::Long);
-            instrs.push(Instruction::SignExtend {
-                src: right_val,
-                dst: tmp.clone(),
-            });
-            (left_val, Val::Var(tmp), OperandType::Long)
+        (OperandType::Long | OperandType::ULong, OperandType::Int | OperandType::UInt) => {
+            let target = common_operand_type(left_ty, right_ty);
+            let left = convert_to_type(left_val, left_ty, target, instrs, ctx);
+            let right = convert_to_type(right_val, right_ty, target, instrs, ctx);
+            (left, right, target)
         }
         (a, b) => (
             left_val,
             right_val,
-            if a == OperandType::Long || b == OperandType::Long {
-                OperandType::Long
+            if a == OperandType::ULong || b == OperandType::ULong {
+                OperandType::ULong
+            } else if a == OperandType::Long || b == OperandType::Long {
+                if a.is_unsigned() || b.is_unsigned() {
+                    OperandType::ULong
+                } else {
+                    OperandType::Long
+                }
+            } else if a.is_unsigned() || b.is_unsigned() {
+                OperandType::UInt
             } else {
                 OperandType::Int
             },
         ),
+    }
+}
+
+fn common_operand_type(left: OperandType, right: OperandType) -> OperandType {
+    if left == OperandType::Double || right == OperandType::Double {
+        OperandType::Double
+    } else if left == OperandType::ULong || right == OperandType::ULong {
+        OperandType::ULong
+    } else if left == OperandType::Long || right == OperandType::Long {
+        if left.is_unsigned() || right.is_unsigned() {
+            OperandType::ULong
+        } else {
+            OperandType::Long
+        }
+    } else if left.is_unsigned() || right.is_unsigned() {
+        OperandType::UInt
+    } else {
+        OperandType::Int
     }
 }
 

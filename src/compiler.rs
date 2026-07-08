@@ -111,11 +111,16 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompilerArtifact
         });
     }
 
-    let global_names: std::collections::HashSet<String> = optimized_tacky
+    let mut global_names: std::collections::HashSet<String> = optimized_tacky
         .static_variables
         .iter()
         .map(|v| v.name.clone())
         .collect();
+    for item in &typed_program.program.top_level_items {
+        if let crate::ast::TopLevelItem::Variable(var) = item {
+            global_names.insert(var.name.clone());
+        }
+    }
     let asm_program = convert_tacky_to_asm(&optimized_tacky, &typed_program)?;
     let asm_program = replace_pseudos(asm_program, &global_names)?;
     let asm_program = fixup_asm(asm_program)?;
@@ -169,8 +174,11 @@ mod tests {
         // chain for a precedence-bearing expression and confirms the
         // pipeline reaches the Tacky stage; per-instruction content checks
         // (Add / Mul / Constant) re-enable in W2-T2.
-        let artifacts =
-            compile("int main(void) { return 2 + 3 * 4; }", options(Stage::Tacky)).unwrap();
+        let artifacts = compile(
+            "int main(void) { return 2 + 3 * 4; }",
+            options(Stage::Tacky),
+        )
+        .unwrap();
         let tacky = artifacts.tacky_pretty.unwrap();
         assert!(tacky.contains("TackyProgram"));
     }
@@ -198,8 +206,7 @@ mod tests {
         // the pipeline reaches the Validate stage and returns the typed-AST
         // payload for arbitrary input; the negative "undeclared variable"
         // check re-enables in wave 6+ once real symbol resolution lands.
-        let artifacts =
-            compile("int main(void) { return 0; }", options(Stage::Validate)).unwrap();
+        let artifacts = compile("int main(void) { return 0; }", options(Stage::Validate)).unwrap();
         assert!(artifacts.typed_ast_pretty.is_some());
     }
 }

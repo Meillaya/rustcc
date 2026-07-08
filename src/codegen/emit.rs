@@ -236,6 +236,8 @@ fn format_binary_op(op: BinaryOpInstr) -> &'static str {
         BinaryOpInstr::MultQ => "imulq",
         BinaryOpInstr::DivQ => "idivq",
         BinaryOpInstr::RemQ => "idivq",
+        BinaryOpInstr::BitAndQ => "andq",
+        BinaryOpInstr::BitOrQ => "orq",
         BinaryOpInstr::AddDouble => "addsd",
         BinaryOpInstr::SubDouble => "subsd",
         BinaryOpInstr::MultDouble => "mulsd",
@@ -255,6 +257,8 @@ fn is_wide_binary_op(op: BinaryOpInstr) -> bool {
             | BinaryOpInstr::MultQ
             | BinaryOpInstr::DivQ
             | BinaryOpInstr::RemQ
+            | BinaryOpInstr::BitAndQ
+            | BinaryOpInstr::BitOrQ
     )
 }
 
@@ -270,17 +274,20 @@ fn format_instruction(instr: &Instr) -> Result<String> {
             format_quad_operand(src)?,
             format_quad_operand(dst)?
         )),
-        Instr::Movabsq { src, dst } => Ok(format!(
-            "movabsq ${}, {}",
-            src,
+        Instr::Movsd { src, dst } => Ok(format!(
+            "movsd {}, {}",
+            format_quad_operand(src)?,
             format_quad_operand(dst)?
         )),
+        Instr::Movabsq { src, dst } => {
+            Ok(format!("movabsq ${}, {}", src, format_quad_operand(dst)?))
+        }
         Instr::MovZeroExtend { src, dst } => Ok(format!(
             "movzbl {}, {}",
             format_operand(src)?,
             format_operand(dst)?
         )),
-Instr::Movsx { src, dst } => Ok(format!(
+        Instr::Movsx { src, dst } => Ok(format!(
             "movslq {}, {}",
             format_operand(src)?,
             format_quad_operand(dst)?
@@ -300,20 +307,21 @@ Instr::Movsx { src, dst } => Ok(format!(
             // the quadword register-name table for the operands;
             // 32-bit ops use the longword table.
             let (src_str, dst_str) = if is_wide_binary_op(*op) {
-                (
-                    format_shift_quad(*op, src)?,
-                    format_quad_operand(dst)?,
-                )
+                (format_shift_quad(*op, src)?, format_quad_operand(dst)?)
             } else {
-                (
-                    format_shift_src(*op, src)?,
-                    format_operand(dst)?,
-                )
+                (format_shift_src(*op, src)?, format_operand(dst)?)
             };
-            Ok(format!("{} {}, {}", format_binary_op(*op), src_str, dst_str))
+            Ok(format!(
+                "{} {}, {}",
+                format_binary_op(*op),
+                src_str,
+                dst_str
+            ))
         }
         Instr::Idiv(src) => Ok(format!("idivl {}", format_operand(src)?)),
+        Instr::Div(src) => Ok(format!("divl {}", format_operand(src)?)),
         Instr::Idivq(src) => Ok(format!("idivq {}", format_quad_operand(src)?)),
+        Instr::Divq(src) => Ok(format!("divq {}", format_quad_operand(src)?)),
         Instr::Cdq => Ok("cdq".to_string()),
         Instr::Cqo => Ok("cqo".to_string()),
         Instr::Cltq => Ok("cltq".to_string()),
@@ -332,6 +340,21 @@ Instr::Movsx { src, dst } => Ok(format!(
             "cmpq {}, {}",
             format_quad_operand(right)?,
             format_quad_operand(left)?
+        )),
+        Instr::CmpDouble { left, right } => Ok(format!(
+            "ucomisd {}, {}",
+            format_quad_operand(right)?,
+            format_quad_operand(left)?
+        )),
+        Instr::Cvtsi2sd { src, dst } => Ok(format!(
+            "cvtsi2sdq {}, {}",
+            format_quad_operand(src)?,
+            format_quad_operand(dst)?
+        )),
+        Instr::Cvttsd2si { src, dst } => Ok(format!(
+            "cvttsd2siq {}, {}",
+            format_quad_operand(src)?,
+            format_quad_operand(dst)?
         )),
         Instr::Jmp(label) => Ok(format!("jmp {label}")),
         Instr::JmpCC { cc, label } => Ok(format!("j{} {label}", format_cond_code(*cc))),
@@ -435,6 +458,9 @@ fn format_static_variable(
             crate::codegen::assembly::StaticInit::Long(n) => {
                 lines.push(format!("    .quad {n}"));
             }
+            crate::codegen::assembly::StaticInit::Double(d) => {
+                lines.push(format!("    .quad {}", d.to_bits()));
+            }
             _ => {
                 lines.push(format!("    .long {}", data_value(init)?));
             }
@@ -455,6 +481,7 @@ fn zero_size(init: &crate::codegen::assembly::StaticInit) -> u32 {
     use crate::codegen::assembly::StaticInit;
     match init {
         StaticInit::Zero(n) => *n,
+        StaticInit::Double(_) => 8,
         StaticInit::Long(_) => 8,
         StaticInit::Int(_) => 4,
         _ => 4,
@@ -480,5 +507,5 @@ fn format_constant(label: &str, value: &[u8]) -> String {
         .map(|b| format!("{b}"))
         .collect::<Vec<_>>()
         .join(", ");
-    format!(".section .rodata\n.align 4\n{label}:\n    .byte {bytes}")
+    format!(".section .rodata\n.align 8\n{label}:\n    .byte {bytes}")
 }

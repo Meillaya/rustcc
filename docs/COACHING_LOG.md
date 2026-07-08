@@ -880,3 +880,23 @@ export list are identical.  The new `FunctionEntry` is module-private.
 - `.omo/evidence/task-29-cargo-test.txt`
 - `.omo/evidence/task-29-ch9-fix.txt`
 - `.omo/evidence/task-29-ch9-valid.txt`
+
+## Wave 14 / Chapter 13 core doubles (task 37)
+
+Added the Chapter 13 core `double` foundation: parsing and typed lowering for double constants/declarations, scalar SSE2/XMM codegen for double moves/arithmetic/comparisons, int↔double and unsigned↔double conversions, double constant-pool emission, and basic XMM argument/return ABI handling. NaN-aware comparison extras remain intentionally out of scope for the follow-up task.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `cargo build --release` | exit 0, zero warnings |
+| `cargo test --release` | 9 passed, 0 failed |
+| chapter 13 `--latest-only` | `Ran 50 tests … OK` |
+| manual core double program | compiles and exits 1 as expected |
+| chapter 5 `--latest-only --bitwise --compound --increment` | `Ran 82 tests … OK` |
+| chapter 12 `--latest-only` | checked; still fails 13 pre-existing/adjacent unsigned/linkage cases captured in evidence |
+
+### Evidence
+- `.omo/evidence/task-37-ch13-core-gate.txt`
+- `.omo/evidence/task-37-manual-qa.txt`
+- `.omo/evidence/task-37-regressions.txt`

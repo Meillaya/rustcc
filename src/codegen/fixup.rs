@@ -57,6 +57,19 @@ fn split_mem_to_mem(instr: Instr) -> Vec<Instr> {
                 dst,
             },
         ],
+        Instr::Movsd {
+            src: src @ (Operand::Memory(..) | Operand::Stack(_) | Operand::Data(_)),
+            dst: dst @ (Operand::Memory(..) | Operand::Stack(_) | Operand::Data(_)),
+        } => vec![
+            Instr::Movsd {
+                src,
+                dst: Operand::Reg(Reg::XMM(15)),
+            },
+            Instr::Movsd {
+                src: Operand::Reg(Reg::XMM(15)),
+                dst,
+            },
+        ],
         // `binaryOp op mem, mem` is invalid — route through %r10.
         // Chapter 11: the 64-bit ops (AddQ/SubQ/MultQ/DivQ/RemQ)
         // require a 64-bit scratch move, not the default 32-bit.
@@ -72,6 +85,8 @@ fn split_mem_to_mem(instr: Instr) -> Vec<Instr> {
                     | BinaryOpInstr::MultQ
                     | BinaryOpInstr::DivQ
                     | BinaryOpInstr::RemQ
+                    | BinaryOpInstr::BitAndQ
+                    | BinaryOpInstr::BitOrQ
             );
             let (pre_mov, post_op) = if is_wide {
                 (
@@ -128,6 +143,19 @@ fn split_mem_to_mem(instr: Instr) -> Vec<Instr> {
                 right: Operand::Reg(Reg::R10),
             },
         ],
+        Instr::CmpDouble {
+            left,
+            right: right @ (Operand::Memory(..) | Operand::Stack(_) | Operand::Data(_)),
+        } => vec![
+            Instr::Movsd {
+                src: right,
+                dst: Operand::Reg(Reg::XMM(15)),
+            },
+            Instr::CmpDouble {
+                left,
+                right: Operand::Reg(Reg::XMM(15)),
+            },
+        ],
         // `idivl mem` is invalid — route through %r10.
         Instr::Idiv(src @ (Operand::Memory(..) | Operand::Stack(_))) => vec![
             Instr::Mov {
@@ -136,6 +164,13 @@ fn split_mem_to_mem(instr: Instr) -> Vec<Instr> {
             },
             Instr::Idiv(Operand::Reg(Reg::R10)),
         ],
+        Instr::Div(src @ (Operand::Memory(..) | Operand::Stack(_))) => vec![
+            Instr::Mov {
+                src,
+                dst: Operand::Reg(Reg::R10),
+            },
+            Instr::Div(Operand::Reg(Reg::R10)),
+        ],
         // Chapter 11: same split for `idivq mem`.
         Instr::Idivq(src @ (Operand::Memory(..) | Operand::Stack(_))) => vec![
             Instr::Movq {
@@ -143,6 +178,13 @@ fn split_mem_to_mem(instr: Instr) -> Vec<Instr> {
                 dst: Operand::Reg(Reg::R10),
             },
             Instr::Idivq(Operand::Reg(Reg::R10)),
+        ],
+        Instr::Divq(src @ (Operand::Memory(..) | Operand::Stack(_))) => vec![
+            Instr::Movq {
+                src,
+                dst: Operand::Reg(Reg::R10),
+            },
+            Instr::Divq(Operand::Reg(Reg::R10)),
         ],
         // Anything else passes through unchanged.
         other => vec![other],
@@ -189,10 +231,6 @@ fn fixup_function(func: TopLevel) -> TopLevel {
 ///      form (`movl`, `binaryOp`, `cmpl`, `idivl`) into a
 ///      `movl mem, %r10; op` pair.
 pub fn fixup(asm: AsmProgram, _frames: &[crate::codegen::frame::Frame]) -> Result<AsmProgram> {
-    let top_level = asm
-        .top_level
-        .into_iter()
-        .map(fixup_function)
-        .collect();
+    let top_level = asm.top_level.into_iter().map(fixup_function).collect();
     Ok(AsmProgram { top_level })
 }

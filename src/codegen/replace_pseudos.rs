@@ -91,11 +91,27 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
                 dst,
             },
         ],
+        Instr::Movsd {
+            src: src @ (Operand::Stack(_) | Operand::Data(_)),
+            dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
+        } => vec![
+            Instr::Movsd {
+                src,
+                dst: Operand::Reg(Reg::XMM(15)),
+            },
+            Instr::Movsd {
+                src: Operand::Reg(Reg::XMM(15)),
+                dst,
+            },
+        ],
         // Chapter 11: `movslq` requires a register destination
         // (x86-64 forbids memory destinations for sign-extending
         // moves).  Route through `%r10` whenever the destination is
         // a stack slot or a RIP-relative data reference.
-        Instr::Movsx { src, dst: dst @ (Operand::Stack(_) | Operand::Data(_)) } => vec![
+        Instr::Movsx {
+            src,
+            dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
+        } => vec![
             Instr::Movsx {
                 src,
                 dst: Operand::Reg(Reg::R10),
@@ -122,6 +138,8 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
                     | BinaryOpInstr::MultQ
                     | BinaryOpInstr::DivQ
                     | BinaryOpInstr::RemQ
+                    | BinaryOpInstr::BitAndQ
+                    | BinaryOpInstr::BitOrQ
             );
             let (pre_mov, post_op) = if is_wide {
                 (
@@ -157,12 +175,26 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
             },
             Instr::Idiv(Operand::Reg(Reg::R10)),
         ],
+        Instr::Div(src @ (Operand::Stack(_) | Operand::Data(_))) => vec![
+            Instr::Mov {
+                src,
+                dst: Operand::Reg(Reg::R10),
+            },
+            Instr::Div(Operand::Reg(Reg::R10)),
+        ],
         Instr::Idivq(src @ (Operand::Stack(_) | Operand::Data(_))) => vec![
             Instr::Movq {
                 src,
                 dst: Operand::Reg(Reg::R10),
             },
             Instr::Idivq(Operand::Reg(Reg::R10)),
+        ],
+        Instr::Divq(src @ (Operand::Stack(_) | Operand::Data(_))) => vec![
+            Instr::Movq {
+                src,
+                dst: Operand::Reg(Reg::R10),
+            },
+            Instr::Divq(Operand::Reg(Reg::R10)),
         ],
         // Chapter 4 + 10: `cmpl mem, mem` is invalid; route the
         // right operand through a scratch register.
@@ -191,6 +223,58 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
             Instr::Cmpq {
                 left,
                 right: Operand::Reg(Reg::R10),
+            },
+        ],
+        Instr::CmpDouble {
+            left,
+            right: right @ (Operand::Stack(_) | Operand::Data(_)),
+        } => vec![
+            Instr::Movsd {
+                src: right,
+                dst: Operand::Reg(Reg::XMM(15)),
+            },
+            Instr::CmpDouble {
+                left,
+                right: Operand::Reg(Reg::XMM(15)),
+            },
+        ],
+        Instr::Cvttsd2si {
+            src,
+            dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
+        } => vec![
+            Instr::Cvttsd2si {
+                src,
+                dst: Operand::Reg(Reg::R10),
+            },
+            Instr::Movq {
+                src: Operand::Reg(Reg::R10),
+                dst,
+            },
+        ],
+        Instr::Cvtsi2sd {
+            src: src @ Operand::Imm(_),
+            dst: dst @ Operand::Reg(_),
+        } => vec![
+            Instr::Movq {
+                src,
+                dst: Operand::Reg(Reg::R10),
+            },
+            Instr::Cvtsi2sd {
+                src: Operand::Reg(Reg::R10),
+                dst,
+            },
+        ],
+        Instr::Cvtsi2sd {
+            src,
+            dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
+        } => vec![
+            Instr::Cvtsi2sd {
+                src,
+                dst: Operand::Reg(Reg::XMM(15)),
+            },
+            Instr::Movsd {
+                src: Operand::Reg(Reg::XMM(15)),
+                dst,
             },
         ],
         other => vec![other],
@@ -233,7 +317,9 @@ fn replace_in_instruction(
             dst: replace_operand(state, dst, globals),
         },
         Instr::Idiv(src) => Instr::Idiv(replace_operand(state, src, globals)),
+        Instr::Div(src) => Instr::Div(replace_operand(state, src, globals)),
         Instr::Idivq(src) => Instr::Idivq(replace_operand(state, src, globals)),
+        Instr::Divq(src) => Instr::Divq(replace_operand(state, src, globals)),
         Instr::Cmp { left, right } => Instr::Cmp {
             left: replace_operand(state, left, globals),
             right: replace_operand(state, right, globals),
@@ -281,7 +367,6 @@ fn replace_in_instruction(
             src: replace_operand(state, src, globals),
             dst: replace_operand(state, dst, globals),
         },
-        Instr::Divq(src) => Instr::Divq(replace_operand(state, src, globals)),
         Instr::Comment(_) => instr,
     };
     split_memory_to_memory(instr)
@@ -293,10 +378,7 @@ fn replace_in_instruction(
 /// `AllocateStack` that reserves the temporary area and split any
 /// memory-to-memory `mov` into two scratch-register moves so the
 /// output is assembler-valid.
-pub fn replace_pseudos(
-    asm: AsmProgram,
-    globals: &HashSet<String>,
-) -> Result<AsmProgram> {
+pub fn replace_pseudos(asm: AsmProgram, globals: &HashSet<String>) -> Result<AsmProgram> {
     let AsmProgram { top_level } = asm;
     let top_level = top_level
         .into_iter()
@@ -318,8 +400,7 @@ pub fn replace_pseudos(
                 } else {
                     ((raw_size + 15) / 16) * 16
                 };
-                let prologue = (aligned_size > 0)
-                    .then(|| Instr::AllocateStack(aligned_size));
+                let prologue = (aligned_size > 0).then(|| Instr::AllocateStack(aligned_size));
                 let mut ordered = Vec::with_capacity(fixed.len() + 1);
                 if let Some(alloc) = prologue {
                     ordered.push(alloc);
