@@ -6,12 +6,21 @@
 //! methods can build nested expressions and statements directly.  `Result` is
 //! propagated with `?` so phase-specific parse failures retain the same driver
 //! behavior as before extraction.
+//!
+//! Chapter 9 widens the surface from a single `int main(void) { ... }` shape
+//! to a translation unit of multiple top-level function definitions and
+//! declarations (forward declarations like `int foo(int x);`).  Mirrors
+//! `nqcc2/lib/parse.ml` `parse_translation_unit` / `parse_program` for chapter 9.
 
-// Mirrors nqcc2/lib/parse.ml chapter 1 grammar (~lines 1-80). Recursive-descent, Result-returning.
+// Mirrors nqcc2/lib/parse.ml chapter 9 grammar (~lines 1-50 of parse_program).
+// Recursive-descent, Result-returning.
 
 use anyhow::{Result, bail};
 
-use crate::ast::{AssignOp, BinaryOp, BlockItem, Expr, ForInit, Function, Program, Statement, UnaryOp};
+use crate::ast::{
+    AssignOp, BinaryOp, BlockItem, Expr, ForInit, Function, GlobalDecl, Program, Statement,
+    TopLevelItem, UnaryOp, VarDecl,
+};
 use crate::lex::{Token, TokenKind};
 use crate::parse::precedence::{Precedence, precedence_of};
 
@@ -29,44 +38,133 @@ impl Parser {
         Self { tokens, current: 0 }
     }
 
+    /// Chapter 9: parse a translation unit as a sequence of top-level
+    /// function definitions and declarations.  Mirrors
+    /// `nqcc2/lib/parse.ml` `parse_program` ~lines 952-961, which loops
+    /// `parse_declaration` until EOF and wraps the result in
+    /// `Ast.Program fun_decls`.
     fn parse_program(&mut self) -> Result<Program> {
-        self.expect_exact(&TokenKind::Int, "function return type 'int'")?;
-        let function_name = self.expect_identifier("function identifier")?;
-        self.expect_exact(&TokenKind::OpenParen, "'('")?;
-        self.expect_exact(&TokenKind::Void, "parameter list 'void'")?;
-        self.expect_exact(&TokenKind::CloseParen, "')'")?;
-        self.expect_exact(&TokenKind::OpenBrace, "'{'")?;
-        let mut body: Vec<BlockItem> = Vec::new();
-        while !self.check(&TokenKind::CloseBrace) {
-            if self.check(&TokenKind::Eof) {
-                bail!("parse error: expected '}}'");
-            }
-            body.push(self.parse_block_item()?);
+        let mut top_level_items: Vec<TopLevelItem> = Vec::new();
+        while !self.check(&TokenKind::Eof) {
+            top_level_items.push(self.parse_top_level_item()?);
         }
-        self.expect_exact(&TokenKind::CloseBrace, "'}'")?;
-        self.expect_exact(&TokenKind::Eof, "end of file")?;
-        Ok(Program {
-            function: Function {
-                name: function_name,
-                body,
-            },
-        })
+        // Single trailing newline equivalent: consume EOF (already there).
+        Ok(Program { top_level_items })
     }
 
-    fn parse_block_item(&mut self) -> Result<BlockItem> {
-        if self.check(&TokenKind::Int) {
-            self.current += 1;
-            let name = self.expect_identifier("variable name")?;
-            let init = if self.match_exact(&TokenKind::Equal) {
-                Some(self.parse_expr()?)
-            } else {
-                None
-            };
-            self.expect_exact(&TokenKind::Semicolon, "';'")?;
-            Ok(BlockItem::Declaration { name, init })
+    /// Parse a single top-level item.
+    ///
+    /// Chapter 9 only has function definitions and forward declarations of
+    /// functions; chapter 10 widens this with file-scope variable
+    /// declarations.  We detect the body-less variant by peeking for
+    /// `;` after the closing `)` of the parameter list.
+    fn parse_top_level_item(&mut self) -> Result<TopLevelItem> {
+        self.expect_exact(&TokenKind::Int, "function return type 'int'")?;
+        let name = self.expect_identifier("function name")?;
+        self.expect_exact(&TokenKind::OpenParen, "'('")?;
+        let params = self.parse_param_list()?;
+        self.expect_exact(&TokenKind::CloseParen, "')' after parameter list")?;
+        if self.match_exact(&TokenKind::Semicolon) {
+            // Forward declaration: `int foo(int x);` (no body).
+            Ok(TopLevelItem::Declaration(GlobalDecl { name, params }))
         } else {
-            Ok(BlockItem::Statement(self.parse_statement()?))
+            // Function definition: `int foo(int x) { ... }`.
+            self.expect_exact(&TokenKind::OpenBrace, "'{' to start function body")?;
+            let mut body: Vec<BlockItem> = Vec::new();
+            while !self.check(&TokenKind::CloseBrace) {
+                if self.check(&TokenKind::Eof) {
+                    bail!("parse error: expected '}}' to close function body");
+                }
+                body.push(self.parse_block_item()?);
+            }
+            self.expect_exact(&TokenKind::CloseBrace, "'}' to close function body")?;
+            Ok(TopLevelItem::Function(Function {
+                name,
+                params,
+                body: Some(body),
+            }))
         }
+    }
+
+    /// Parse the parameter list inside `(...)` after the function name.
+    ///
+    /// The grammar allows either `(void)` (no parameters) or a comma-
+    /// separated list of `int` parameters (`int x, int y, ...`).  Chapter 9
+    /// supports up to 6 register-passed args (the rest go on the stack).
+    fn parse_param_list(&mut self) -> Result<Vec<VarDecl>> {
+        if self.match_exact(&TokenKind::Void) {
+            // `(void)` means no parameters; empty list.
+            return Ok(Vec::new());
+        }
+        let mut params = Vec::new();
+        loop {
+            self.expect_exact(&TokenKind::Int, "parameter type 'int'")?;
+            let name = self.expect_identifier("parameter name")?;
+            params.push(VarDecl { name, init: None });
+            if !self.match_exact(&TokenKind::Comma) {
+                break;
+            }
+        }
+        Ok(params)
+    }
+
+fn parse_block_item(&mut self) -> Result<BlockItem> {
+        // Chapter 9: a block-level `int foo(int x);` is a local
+        // function declaration (no body, only a prototype).  The
+        // name becomes visible to subsequent expressions in this
+        // scope, even though it has no runtime effect.  We parse
+        // the prototype here (consuming the trailing `;`) and
+        // surface it as a `BlockItem::FunctionDecl` so the resolve
+        // pass can register it in the per-block scope alongside
+        // the variable declarations.
+        if self.check(&TokenKind::Int) {
+            // Peek ahead: after `int NAME ( params )` is there a
+            // `;` (declaration) or a `{` (definition)?
+            let save = self.current;
+            self.current += 1; // consume `int`
+            if let TokenKind::Identifier(_) = self.peek().kind {
+                let name = self.expect_identifier("function or variable name")?;
+                if self.check(&TokenKind::OpenParen) {
+                    self.current += 1; // consume `(`
+                    let params = self.parse_param_list()?;
+                    self.expect_exact(&TokenKind::CloseParen, "')' after parameter list")?;
+                    if self.match_exact(&TokenKind::Semicolon) {
+                        return Ok(BlockItem::FunctionDecl(GlobalDecl { name, params }));
+                    }
+                    // Not a declaration — fall through to definition.
+                    self.expect_exact(&TokenKind::OpenBrace, "'{' to start function body")?;
+                    let mut body: Vec<BlockItem> = Vec::new();
+                    while !self.check(&TokenKind::CloseBrace) {
+                        if self.check(&TokenKind::Eof) {
+                            bail!("parse error: expected '}}' to close nested function body");
+                        }
+                        body.push(self.parse_block_item()?);
+                    }
+                    self.expect_exact(&TokenKind::CloseBrace, "'}' to close function body")?;
+                    // Nested function definitions are illegal in C.
+                    bail!("parse error: nested function definitions are not allowed");
+                }
+                // Not a function — fall through to plain
+                // declaration.  Reset to the saved position.
+                self.current = save;
+                self.current += 1; // consume `int`
+                let name = self.expect_identifier("variable name")?;
+                let init = if self.match_exact(&TokenKind::Equal) {
+                    Some(self.parse_expr()?)
+                } else {
+                    None
+                };
+                self.expect_exact(&TokenKind::Semicolon, "';'")?;
+                return Ok(BlockItem::Declaration(VarDecl { name, init }));
+            }
+            // No identifier after `int` — error.
+            self.current = save;
+            bail!(
+                "parse error: expected identifier after 'int', found {:?}",
+                self.peek().kind
+            );
+        }
+        Ok(BlockItem::Statement(self.parse_statement()?))
     }
 
     fn parse_statement(&mut self) -> Result<Statement> {
@@ -119,10 +217,12 @@ impl Parser {
             self.expect_exact(&TokenKind::OpenParen, "'(' after while")?;
             let condition = self.parse_expr()?;
             self.expect_exact(&TokenKind::CloseParen, "')' after while condition")?;
+            let body = Box::new(self.parse_statement()?);
+            let label = String::new();
             Ok(Statement::While {
                 condition,
-                body: Box::new(self.parse_statement()?),
-                label: String::new(),
+                body,
+                label,
             })
         } else if self.match_exact(&TokenKind::Do) {
             let body = Box::new(self.parse_statement()?);
@@ -131,10 +231,11 @@ impl Parser {
             let condition = self.parse_expr()?;
             self.expect_exact(&TokenKind::CloseParen, "')' after do-while condition")?;
             self.expect_exact(&TokenKind::Semicolon, "';' after do-while")?;
+            let label = String::new();
             Ok(Statement::DoWhile {
                 body,
                 condition,
-                label: String::new(),
+                label,
             })
         } else if self.match_exact(&TokenKind::For) {
             self.parse_for_statement()
@@ -150,23 +251,22 @@ impl Parser {
             self.expect_exact(&TokenKind::OpenParen, "'(' after switch")?;
             let expr = self.parse_expr()?;
             self.expect_exact(&TokenKind::CloseParen, "')' after switch expression")?;
+            let body = Box::new(self.parse_statement()?);
+            let label = String::new();
             Ok(Statement::Switch {
                 expr,
-                body: Box::new(self.parse_statement()?),
-                label: String::new(),
+                body,
+                label,
             })
         } else if self.match_exact(&TokenKind::Case) {
             let value = self.parse_expr()?;
             self.expect_exact(&TokenKind::Colon, "':' after case value")?;
-            Ok(Statement::Case {
-                value,
-                statement: Box::new(self.parse_statement()?),
-            })
+            let statement = Box::new(self.parse_statement()?);
+            Ok(Statement::Case { value, statement })
         } else if self.match_exact(&TokenKind::Default) {
             self.expect_exact(&TokenKind::Colon, "':' after default")?;
-            Ok(Statement::Default {
-                statement: Box::new(self.parse_statement()?),
-            })
+            let statement = Box::new(self.parse_statement()?);
+            Ok(Statement::Default { statement })
         } else if self.match_exact(&TokenKind::Semicolon) {
             Ok(Statement::Expr(None))
         } else {
@@ -188,7 +288,7 @@ impl Parser {
                 None
             };
             self.expect_exact(&TokenKind::Semicolon, "';' after for declaration")?;
-            Some(ForInit::Declaration { name, init })
+            Some(ForInit::Declaration(VarDecl { name, init }))
         } else {
             let expr = self.parse_expr()?;
             self.expect_exact(&TokenKind::Semicolon, "';' after for init")?;
@@ -209,12 +309,14 @@ impl Parser {
             Some(self.parse_expr()?)
         };
         self.expect_exact(&TokenKind::CloseParen, "')' after for header")?;
+        let body = Box::new(self.parse_statement()?);
+        let label = String::new();
         Ok(Statement::For {
             init,
             condition,
             post,
-            body: Box::new(self.parse_statement()?),
-            label: String::new(),
+            body,
+            label,
         })
     }
 
@@ -285,17 +387,34 @@ impl Parser {
             TokenKind::Identifier(name) => {
                 let name = name.clone();
                 self.current += 1;
-                let mut expr = Expr::Var(name);
-                loop {
-                    if self.match_exact(&TokenKind::PlusPlus) {
-                        expr = Expr::PostInc(Box::new(expr));
-                    } else if self.match_exact(&TokenKind::MinusMinus) {
-                        expr = Expr::PostDec(Box::new(expr));
-                    } else {
-                        break;
+                // Chapter 9: identifier followed by `(` is a function call.
+                // The grammar permits `f()` for zero-arg functions or
+                // `f(a, b, c)` for multi-arg; the result type for chapter 9
+                // is always `int` because we do not yet implement return
+                // types other than int.  Function name is `name`; the
+                // argument list is parsed as a comma-separated sequence of
+                // full expressions.
+                if self.check(&TokenKind::OpenParen) {
+                    self.current += 1;
+                    let args = self.parse_arg_list()?;
+                    self.expect_exact(&TokenKind::CloseParen, "')' after arguments")?;
+                    Ok(Expr::Call {
+                        name,
+                        args,
+                    })
+                } else {
+                    let mut expr = Expr::Var(name);
+                    loop {
+                        if self.match_exact(&TokenKind::PlusPlus) {
+                            expr = Expr::PostInc(Box::new(expr));
+                        } else if self.match_exact(&TokenKind::MinusMinus) {
+                            expr = Expr::PostDec(Box::new(expr));
+                        } else {
+                            break;
+                        }
                     }
+                    Ok(expr)
                 }
-                Ok(expr)
             }
             TokenKind::Minus => {
                 self.current += 1;
@@ -352,6 +471,23 @@ impl Parser {
                 self.peek().lexeme
             ),
         }
+    }
+
+    /// Parse the argument list inside a function-call's `(...)`.  Returns
+    /// an empty vector for `f()`, otherwise a comma-separated list of
+    /// full expressions.
+    fn parse_arg_list(&mut self) -> Result<Vec<Expr>> {
+        let mut args = Vec::new();
+        if self.check(&TokenKind::CloseParen) {
+            return Ok(args);
+        }
+        loop {
+            args.push(self.parse_assignment()?);
+            if !self.match_exact(&TokenKind::Comma) {
+                break;
+            }
+        }
+        Ok(args)
     }
 
     fn match_assignment_op(&mut self) -> Option<AssignOp> {

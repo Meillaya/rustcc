@@ -1,6 +1,6 @@
 //! AST-to-TACKY lowering.
 //!
-//! Mirrors `nqcc2/lib/tacky_gen.ml`.  Through chapter 5:
+//! Mirrors `nqcc2/lib/tacky_gen.ml`.  Through chapter 9:
 //!
 //! - Chapter 1 emits one `Return(Constant(N))` per explicit `return N;`
 //!   statement.
@@ -19,12 +19,19 @@
 //!   pre/post `++` / `--`.  Lvalues are evaluated exactly once for
 //!   compound assignment and pre/post increment so side effects in the
 //!   lvalue expression stay well-behaved.
+//! - Chapter 9 widens the entry point from a single function to a
+//!   translation unit: `lower_program` now iterates over every
+//!   `TopLevelItem::Function` in the AST and emits one
+//!   `TackyFunction` per definition (forward declarations without a
+//!   body produce no TACKY).  Each function carries the resolved
+//!   parameter names so the codegen pass can route incoming register
+//!   arguments to the matching stack slots.
 
 use anyhow::Result;
 use std::collections::HashMap;
 
 use crate::ast::{
-    AssignOp, BinaryOp, BlockItem, Expr, ForInit, Program, Statement, UnaryOp,
+    AssignOp, BinaryOp, BlockItem, Expr, ForInit, Program, Statement, TopLevelItem, UnaryOp,
 };
 use crate::ir::tacky::{ConditionCode, Instruction, TackyFunction, TackyProgram, Val};
 use crate::ir::temp::TempIdGenerator;
@@ -34,14 +41,50 @@ pub type TypedProgram = Program;
 
 pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
     let mut ctx = LowerCtx::new();
-    let body = lower_block_items(&ast.function.body, &mut ctx)?;
-    let body = ensure_trailing_return(body);
-    Ok(TackyProgram {
-        functions: vec![TackyFunction {
-            name: ast.function.name.clone(),
-            body,
-        }],
-    })
+    let mut functions: Vec<TackyFunction> = Vec::new();
+    for item in &ast.top_level_items {
+        match item {
+            TopLevelItem::Function(func) => {
+                // `func.body` is `Some(...)` for every function
+                // definition; declarations have already been filtered
+                // out by the parser (they live in
+                // `TopLevelItem::Declaration`).
+                if let Some(body_items) = &func.body {
+                    let params: Vec<String> = func.params.iter().map(|p| p.name.clone()).collect();
+                    // Reset per-function lowering state (label map
+                    // and counter) so the same source label can be
+                    // reused in different functions; the chapter-9
+                    // extra-credit `goto_label_multiple_functions`
+                    // test exercises exactly this.
+                    ctx.user_labels.clear();
+                    ctx.user_label_counter = 0;
+                    ctx.current_function = Some(func.name.clone());
+                    let body = lower_block_items(body_items, &mut ctx)?;
+                    let body = ensure_trailing_return(body);
+                    ctx.current_function = None;
+                    // Chapter 9 marks every function as global because
+                    // the codegen pass has no visibility into which
+                    // functions are called from outside the
+                    // translation unit.  Marking them all `.globl` is
+                    // the safe default; chapter 10 will switch to a
+                    // symbol-table-driven answer once `static` /
+                    // `extern` linkage lands.
+                    functions.push(TackyFunction {
+                        name: func.name.clone(),
+                        global: true,
+                        params,
+                        body,
+                    });
+                }
+            }
+            TopLevelItem::Declaration(_) => {
+                // Forward declarations produce no TACKY; the
+                // declaration is informational and the function table
+                // already knows about the name from resolve.
+            }
+        }
+    }
+    Ok(TackyProgram { functions })
 }
 
 /// Namespace-prefix user-defined labels so they cannot collide with
@@ -50,11 +93,38 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
 /// makes the conflict observable: the assembly emitter writes a
 /// top-level `<name>:` for every TACKY `Label(name)`, so leaving a
 /// user `main:` label unmangled would shadow the function entry
-/// symbol.  Using a fixed prefix keeps the jump / label sides
-/// symmetric (both call this helper) and keeps C identifier
-/// characters — letters, digits, underscores — valid as the suffix.
-fn mangle_user_label(name: &str) -> String {
-    format!("user_label.{name}")
+/// symbol.  Chapter 9 also disambiguates across functions: the same
+/// source label `foo:` in two different functions compiles to two
+/// different assembly labels (the function name is part of the
+/// prefix) so the linker sees distinct symbols even when the
+/// counter would otherwise collide across functions.
+///
+/// Repeated occurrences of the same source label within a single
+/// function return the same assembly name so the corresponding
+/// `goto` and `label:` instructions pair up correctly.
+fn mangle_user_label(
+    name: &str,
+    counter: &mut u32,
+    cache: &mut HashMap<String, String>,
+    function: Option<&str>,
+) -> String {
+    if let Some(existing) = cache.get(name) {
+        return existing.clone();
+    }
+    let id = *counter;
+    *counter += 1;
+    // The function-name component is required so the same source
+    // label in two different functions never collapses to the same
+    // assembly symbol.  Without it, the chapter-9
+    // `label_naming_scheme` test (which deliberately picks names
+    // that would collide under naive prefixing) hits a duplicate
+    // symbol error at link time.
+    let mangled = match function {
+        Some(func) => format!("user_label.{func}.{name}.{id}"),
+        None => format!("user_label.{name}.{id}"),
+    };
+    cache.insert(name.to_string(), mangled.clone());
+    mangled
 }
 
 /// Append `Return(Constant(0))` when the function body does not already
@@ -91,6 +161,20 @@ struct LowerCtx {
     /// being lowered, if any.  Same nesting semantics as
     /// `case_labels`.
     default_label: Option<String>,
+    /// Per-function counter that namespaces user labels so the
+    /// same source label name in two different functions
+    /// compiles to two distinct assembly labels.  Reset to zero
+    /// at the start of every function in `lower_program`.
+    user_label_counter: u32,
+    /// Per-function cache mapping source label names to their
+    /// mangled assembly names so repeated `goto <name>` and the
+    /// matching `<name>:` use the same assembly symbol.  Cleared
+    /// at the start of every function.
+    user_labels: HashMap<String, String>,
+    /// Name of the function currently being lowered; used as a
+    /// prefix on user-label assembly symbols so cross-function
+    /// label name collisions never reach the linker.
+    current_function: Option<String>,
 }
 
 impl LowerCtx {
@@ -100,6 +184,9 @@ impl LowerCtx {
             labels: LabelGenerator::new(),
             case_labels: None,
             default_label: None,
+            user_label_counter: 0,
+            user_labels: HashMap::new(),
+            current_function: None,
         }
     }
 
@@ -113,16 +200,17 @@ fn lower_block_items(items: &[BlockItem], ctx: &mut LowerCtx) -> Result<Vec<Inst
     for item in items {
         match item {
             BlockItem::Statement(stmt) => out.extend(lower_statement(stmt, ctx)?),
-            BlockItem::Declaration { name, init } => {
-                if let Some(expr) = init {
+            BlockItem::Declaration(decl) => {
+                if let Some(expr) = &decl.init {
                     let (instrs, val) = lower_expr(expr, ctx)?;
                     out.extend(instrs);
                     out.push(Instruction::Copy {
                         src: val,
-                        dst: name.clone(),
+                        dst: decl.name.clone(),
                     });
                 }
             }
+            BlockItem::FunctionDecl(_) => {}
         }
     }
     Ok(out)
@@ -253,13 +341,13 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
             let mut out = Vec::new();
             if let Some(init) = init {
                 match init {
-                    ForInit::Declaration { name, init } => {
-                        if let Some(expr) = init {
+                    ForInit::Declaration(decl) => {
+                        if let Some(expr) = &decl.init {
                             let (instrs, val) = lower_expr(expr, ctx)?;
                             out.extend(instrs);
                             out.push(Instruction::Copy {
                                 src: val,
-                                dst: name.clone(),
+                                dst: decl.name.clone(),
                             });
                         }
                     }
@@ -289,11 +377,21 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
             Ok(out)
         }
         Statement::Goto(target) => Ok(vec![Instruction::Jump {
-            target: mangle_user_label(target),
+            target: mangle_user_label(
+                target,
+                &mut ctx.user_label_counter,
+                &mut ctx.user_labels,
+                ctx.current_function.as_deref(),
+            ),
         }]),
         Statement::Labeled { label, statement } => {
             let mut out = Vec::new();
-            out.push(Instruction::Label(mangle_user_label(label)));
+            out.push(Instruction::Label(mangle_user_label(
+                label,
+                &mut ctx.user_label_counter,
+                &mut ctx.user_labels,
+                ctx.current_function.as_deref(),
+            )));
             out.extend(lower_statement(statement, ctx)?);
             Ok(out)
         }
@@ -554,7 +652,44 @@ fn lower_expr(expr: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)
             else_expr,
         } => lower_conditional(condition, then_expr, else_expr, ctx),
         Expr::Binary { op, left, right } => lower_binary(*op, left, right, ctx),
+        Expr::Call { name, args } => lower_call(name, args, ctx),
     }
+}
+
+/// Lower a function call `f(args)`.
+///
+/// Mirrors `emit_fun_call` in `nqcc2/lib/tacky_gen.ml:311-325`:
+/// 1. Lower each argument expression in source order.
+/// 2. Concatenate the per-argument instruction lists (each
+///    `lower_expr` for an argument may itself allocate a
+///    temporary).
+/// 3. Append `Instruction::Call { name, args, dst }` where
+///    `dst` is `None` for the chapter-9 surface — chapter 12
+///    widens this to `Some(...)` when a non-void call result is
+///    actually consumed (we already use `dst` for chapter-9's
+///    `int`-returning functions because the call site may
+///    immediately use the value).
+fn lower_call(
+    name: &str,
+    args: &[Expr],
+    ctx: &mut LowerCtx,
+) -> Result<(Vec<Instruction>, Val)> {
+    let mut out: Vec<Instruction> = Vec::new();
+    let mut arg_vals: Vec<Val> = Vec::with_capacity(args.len());
+    for arg in args {
+        let (instrs, val) = lower_expr(arg, ctx)?;
+        out.extend(instrs);
+        arg_vals.push(val);
+    }
+    // Chapter 9: every call returns an int and the result is
+    // always consumed by the surrounding expression context.
+    let dst_name = ctx.fresh_tmp();
+    out.push(Instruction::Call {
+        name: name.to_string(),
+        args: arg_vals,
+        dst: Some(dst_name.clone()),
+    });
+    Ok((out, Val::Var(dst_name)))
 }
 
 fn lower_unary(

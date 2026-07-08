@@ -4,13 +4,14 @@
 //! responsibilities live here:
 //!
 //! 1. **User labels and `goto`s** (chapter 6 / `--goto` extra).
-//!    Walk the function body and collect every `Statement::Labeled`
-//!    name into a per-function set; reject duplicates.  Walk again
-//!    and reject any `goto <name>` whose target is not in that set.
-//!    This catches `goto undeclared;` and `goto variable;` (variables
-//!    live in a different namespace).
+//!    Walk every function body in the translation unit and collect
+//!    every `Statement::Labeled` name into a per-function set;
+//!    reject duplicates.  Walk again and reject any `goto <name>`
+//!    whose target is not in that set.  This catches
+//!    `goto undeclared;` and `goto variable;` (variables live in a
+//!    different namespace).
 //!
-//! 2. **Loop / switch IDs** (chapter 8).  Walk the body once,
+//! 2. **Loop / switch IDs** (chapter 8).  Walk each body once,
 //!    maintaining two parallel stacks:
 //!       * `break_stack` — labels that catch a bare `break;`.  Every
 //!         `While` / `DoWhile` / `For` / `Switch` pushes its freshly
@@ -42,27 +43,46 @@
 //! accepted-but-not-yet-rewritten and falls back to the bare-target
 //! semantics, which matches the chapter-8 base behavior the tests
 //! verify.
+//!
+//! Chapter 9 extends this pass to walk every `TopLevelItem::Function`
+//! in the translation unit (forward declarations are skipped because
+//! they have no body).
 
 use std::collections::HashSet;
 
 use anyhow::{Result, bail};
 
-use crate::ast::{BlockItem, ForInit, Program, Statement};
+use crate::ast::{BlockItem, ForInit, Program, Statement, TopLevelItem};
 use crate::util::labels::LabelGenerator;
 
 /// Validate labels / gotos / break-continue / loop IDs in the program.
 ///
-/// Walks each function body once and rewrites the AST in place: every
-/// loop / switch node receives a freshly minted `label`; every bare
-/// `break` / `continue` receives the enclosing loop's label in its
-/// `target` field.
+/// Walks every function body in the translation unit once and
+/// rewrites the AST in place: every loop / switch node receives a
+/// freshly minted `label`; every bare `break` / `continue` receives
+/// the enclosing loop's label in its `target` field.
 pub fn label_loops(program: &mut Program) -> Result<()> {
-    let mut user_labels = HashSet::new();
-    collect_user_labels_block(&program.function.body, &mut user_labels)?;
-    check_user_gotos_block(&program.function.body, &user_labels)?;
+    for item in program.top_level_items.iter_mut() {
+        match item {
+            TopLevelItem::Function(func) => {
+                if let Some(body) = func.body.as_mut() {
+                    label_loops_function(body)?;
+                }
+            }
+            TopLevelItem::Declaration(_) => {
+                // Forward declarations carry no body; nothing to do.
+            }
+        }
+    }
+    Ok(())
+}
 
+fn label_loops_function(body: &mut Vec<BlockItem>) -> Result<()> {
+    let mut user_labels = HashSet::new();
+    collect_user_labels_block(body, &mut user_labels)?;
+    check_user_gotos_block(body, &user_labels)?;
     let mut ctx = LoopCtx::new();
-    rewrite_block(&mut program.function.body, &mut ctx)?;
+    rewrite_block(body, &mut ctx)?;
     Ok(())
 }
 
@@ -141,11 +161,12 @@ fn check_user_gotos_block(items: &[BlockItem], labels: &HashSet<String>) -> Resu
     for item in items {
         match item {
             BlockItem::Statement(stmt) => check_user_gotos_stmt(stmt, labels)?,
-            BlockItem::Declaration { init, .. } => {
-                if let Some(expr) = init {
+            BlockItem::Declaration(decl) => {
+                if let Some(expr) = &decl.init {
                     walk_expr(expr);
                 }
             }
+            BlockItem::FunctionDecl(_) => {}
         }
     }
     Ok(())
@@ -225,8 +246,8 @@ fn walk_expr(_expr: &crate::ast::Expr) {}
 fn walk_for_init(init: &Option<ForInit>) {
     if let Some(init) = init {
         match init {
-            ForInit::Declaration { init, .. } => {
-                if let Some(expr) = init {
+            ForInit::Declaration(decl) => {
+                if let Some(expr) = &decl.init {
                     walk_expr(expr);
                 }
             }

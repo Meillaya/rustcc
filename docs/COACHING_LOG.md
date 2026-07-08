@@ -777,3 +777,106 @@ All three exercise the new per-block scope stack:
   OK`.
 - manual QA: `.omo/evidence/task-22-manual-qa.txt` — all three
   rows match expected exit codes.
+
+---
+
+## Session: 2026-07-07 — chapter 9 invalid-semantic gate
+
+### Working mode
+- Sisyphus-Junior (focused executor from OhMyOpenCode).
+- Execute tasks directly without delegating.
+
+### Goal
+Fix the 7 failing chapter 9 `invalid_semantic` tests:
+
+| Test file                                            | What it exercises                              |
+|------------------------------------------------------|------------------------------------------------|
+| `invalid_declarations/decl_params_with_same_name.c`  | duplicate parameter names in a *declaration*   |
+| `invalid_declarations/redefine_fun_as_var.c`         | same-scope function-decl + variable collision  |
+| `invalid_declarations/redefine_var_as_fun.c`         | same-scope variable + function-decl collision  |
+| `invalid_declarations/undeclared_fun.c`              | call before any prior declaration/definition   |
+| `invalid_types/conflicting_function_declarations.c`  | declaration and definition with different arities |
+| `invalid_types/too_few_args.c`                       | call with fewer args than the callee declares  |
+| `invalid_types/too_many_args.c`                      | call with more args than the callee declares   |
+
+### Root cause
+The pre-fix `resolve.rs`:
+- Did **two passes**: collected every function name in a first pass,
+  then resolved bodies in a second pass.  This made
+  `undeclared_fun.c` pass (it should fail).
+- Tracked only `Declared` / `Defined` in `FunctionEntry` — no arity,
+  so `too_few_args.c`, `too_many_args.c`, and
+  `conflicting_function_declarations.c` all silently passed.
+- Did **not** check duplicate parameters in *declarations* (only in
+  definitions), so `decl_params_with_same_name.c` passed.
+- Folded block-level `int NAME(params);` into a no-op
+  `Statement::Expr(None)`, so the local function-declaration name was
+  invisible to the per-block scope and `redefine_*_as_*` tests passed.
+
+### Implementation summary
+Five files touched:
+
+- `src/ast/decl.rs` — added `BlockItem::FunctionDecl(GlobalDecl)`
+  variant so a block-level `int NAME(params);` is a real AST node (not
+  a no-op statement).  Reuses the existing `GlobalDecl { name, params }`
+  shape so the AST stays lean.
+- `src/parse/parser.rs` — when the block-level lookahead sees
+  `int NAME ( params ) ;`, emit
+  `BlockItem::FunctionDecl(GlobalDecl { name, params })` instead of
+  the previous `Statement::Expr(None)` no-op.
+- `src/semantics/resolve.rs` — full rewrite of the chapter-9 surface:
+  - `FunctionEntry` is now a `struct { arity: usize, defined: bool }`.
+  - `resolve_program` is a **single top-down pass** over the
+    translation unit.  Each top-level item is processed in source
+    order; a function body can only call names that have been declared
+    or defined *earlier* (matching C's single-translation-unit
+    visibility rule and the OCaml reference's `resolve.ml`).
+  - `check_function_conflict` rejects a duplicate definition, a
+    conflicting arity across declarations, and accepts a same-arity
+    re-declaration (the OCaml `has_linkage = true` re-declaration
+    path, which `multiple_declarations.c` exercises).
+  - `check_duplicate_params` is called on both function
+    *definitions* (existing behaviour) and forward *declarations*
+    (new — fixes `decl_params_with_same_name.c`).
+  - `ScopeStack` now carries a parallel `Vec<HashMap<String, usize>>`
+    of per-scope function prototypes (name → arity).  `declare_fun`
+    inserts into the innermost scope and rejects a same-scope collision
+    with a variable declaration (or a conflicting-arity re-declaration);
+    `declare` rejects a same-scope collision with a function prototype.
+    This is what catches the block-level
+    `redefine_fun_as_var.c` / `redefine_var_as_fun.c` cases.
+  - Call sites (`Expr::Call { name, args }`) look up the arity by
+    walking the per-block fun-decls stack innermost-first, then
+    falling back to the global function table.  An undeclared name
+    fails with `"call to undeclared function"`; an arity mismatch
+    fails with `"function 'foo' called with N argument(s) but
+    declared with M"`.
+- `src/semantics/label_loops.rs` — `BlockItem::FunctionDecl(_)` arm
+  added to `check_user_gotos_block` as a no-op (no gotos can hide
+  inside a prototype).
+- `src/ir/lower.rs` — `BlockItem::FunctionDecl(_)` arm added to
+  `lower_block_items` as a no-op (the prototype has no runtime effect).
+
+### Public-API surface
+Unchanged: `resolve_program`, `ResolvedProgram`, and `resolve`'s
+export list are identical.  The new `FunctionEntry` is module-private.
+
+### QA
+
+| Gate                                                 | Result          |
+|------------------------------------------------------|-----------------|
+| `cargo build --release`                              | exit 0, zero warnings |
+| `cargo test --release`                               | 9 passed, 0 failed |
+| chapter 9 `--latest-only`                            | 7/7 invalid tests rejected (1 pre-existing `stack_alignment` test-fixture error: missing `stack_alignment_check_linux.s`) |
+| chapter 9 valid extra-credit (`--bitwise --compound --increment --goto --switch`) | OK (same 1 pre-existing fixture error) |
+| chapter 8 `--latest-only --compound --increment --goto --switch` | `Ran 98 tests … OK` |
+| chapters 1–7 cumulative `--latest-only`              | all `OK` |
+| manual QA: `function_shadows_variable.c`            | passes (inner-scope function decl shadows outer variable) |
+| manual QA: `variable_shadows_function.c`            | passes (inner-scope variable shadows outer function decl) |
+| manual QA: `forward_decl_multi_arg.c`               | passes (forward decl with arity 2, definition with arity 2, call with 2 args) |
+
+### Evidence
+- `.omo/evidence/task-29-cargo-build.txt`
+- `.omo/evidence/task-29-cargo-test.txt`
+- `.omo/evidence/task-29-ch9-fix.txt`
+- `.omo/evidence/task-29-ch9-valid.txt`
