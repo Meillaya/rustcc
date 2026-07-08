@@ -1,0 +1,52 @@
+============================================================
+COMMAND: cargo build --release
+START: 2026-07-08T13:25:11-04:00
+    Finished `release` profile [optimized] target(s) in 0.02s
+END: 2026-07-08T13:25:11-04:00
+STATUS: 0
+
+============================================================
+COMMAND: cargo test --release
+START: 2026-07-08T13:25:11-04:00
+    Finished `release` profile [optimized] target(s) in 0.01s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 9 tests
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test driver::tests::derives_all_output_paths ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test driver::tests::parses_default_run_stage ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+END: 2026-07-08T13:25:12-04:00
+STATUS: 0
+
+============================================================
+COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 13 --latest-only
+START: 2026-07-08T13:25:12-04:00
+----------------------------------------------------------------------
+Ran 50 tests in 1.108s
+
+OK
+END: 2026-07-08T13:25:13-04:00
+STATUS: 0
+
+ALL_GATE_COMMANDS_PASSED
