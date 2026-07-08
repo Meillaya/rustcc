@@ -166,7 +166,7 @@ fn lex_number(chars: &mut Chars<'_>, tokens: &mut Vec<Token>) -> Result<()> {
             });
         } else {
             tokens.push(Token {
-                kind: TokenKind::Constant(value as i32),
+                kind: TokenKind::Constant(value as i64),
                 lexeme,
             });
         }
@@ -275,7 +275,7 @@ fn lex_number(chars: &mut Chars<'_>, tokens: &mut Vec<Token>) -> Result<()> {
         });
     } else {
         tokens.push(Token {
-            kind: TokenKind::Constant(value as i32),
+            kind: TokenKind::Constant(value as i64),
             lexeme,
         });
     }

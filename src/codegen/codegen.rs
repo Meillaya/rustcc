@@ -302,23 +302,41 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
             // 32-bit register first so the assembler sees a legal
             // source operand.  `movslq` also requires a register
             // destination, so we stage through `%r10` and then move
-            // the result into the destination pseudo.
+            // the result into the destination pseudo.  Constants that
+            // don't fit in a signed 32-bit value (e.g. `2147483653L`)
+            // need `movabsq` so the 64-bit immediate isn't silently
+            // truncated by `movl`.
             let src_op = convert_val(src);
             match src_op {
-                Operand::Imm(n) => vec![
-                    Instr::Mov {
-                        src: Operand::Imm(n),
-                        dst: Operand::Reg(Reg::R10),
-                    },
-                    Instr::Movsx {
-                        src: Operand::Reg(Reg::R10),
-                        dst: Operand::Reg(Reg::R10),
-                    },
-                    Instr::Movq {
-                        src: Operand::Reg(Reg::R10),
-                        dst: Operand::Pseudo(dst.clone()),
-                    },
-                ],
+                Operand::Imm(n) => {
+                    if n >= i64::from(i32::MIN) && n <= i64::from(i32::MAX) {
+                        vec![
+                            Instr::Mov {
+                                src: Operand::Imm(n),
+                                dst: Operand::Reg(Reg::R10),
+                            },
+                            Instr::Movsx {
+                                src: Operand::Reg(Reg::R10),
+                                dst: Operand::Reg(Reg::R10),
+                            },
+                            Instr::Movq {
+                                src: Operand::Reg(Reg::R10),
+                                dst: Operand::Pseudo(dst.clone()),
+                            },
+                        ]
+                    } else {
+                        vec![
+                            Instr::Movabsq {
+                                src: n,
+                                dst: Operand::Reg(Reg::R10),
+                            },
+                            Instr::Movq {
+                                src: Operand::Reg(Reg::R10),
+                                dst: Operand::Pseudo(dst.clone()),
+                            },
+                        ]
+                    }
+                }
                 _ => vec![Instr::Movsx {
                     src: src_op,
                     dst: Operand::Pseudo(dst.clone()),

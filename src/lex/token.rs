@@ -165,7 +165,7 @@ pub(crate) enum TokenKind {
 
     // Identifiers and constants.
     Identifier(String),
-    Constant(i32),
+    Constant(i64),
     /// Chapter 11: integer constant with a `L` / `l` suffix, typed as
     /// `long` in C.  Carried as an i64 so values larger than 32 bits
     /// (e.g. `4294967290L`) fit without truncation.
