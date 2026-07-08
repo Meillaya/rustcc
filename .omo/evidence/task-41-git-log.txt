@@ -1,0 +1,20 @@
+# Task 41 git history evidence
+timestamp=2026-07-08T14:26:20-04:00
+cwd=/home/mei/projects/rustcc
+
+## git log --oneline -8 --skip=1 (chapter 14 history below task-41 evidence commit)
+6ba757a Reject unsupported sizeof without panicking
+9bbac7c feat(compiler): chapter 14: pointers
+2d52828 Record chapter 13 gate verification evidence
+24870dc feat(extra): chapter 13: NaN-aware comparisons
+43fbce6 Record chapter 13 core scope-fidelity review
+dfd5d91 feat(compiler): chapter 13: double floating-point core
+8d9c755 Document chapter 5 scope-fidelity review
+ee4ee1c Keep chapter 5 scope free of double declarations
+
+## Required chapter 14 commit probes
+9bbac7c feat(compiler): chapter 14: pointers
+6ba757a Reject unsupported sizeof without panicking
+
+## Evidence commit note
+Task-41 evidence is committed on top of the chapter 14 commits; final hash is reported by the verifier after amend to avoid self-referential stale evidence.
