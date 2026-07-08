@@ -1,0 +1,155 @@
+# task-18-fix3 gate evidence
+2026-07-08T12:40:24-04:00
+
+## dirty worktree before scoped fix (captured by worker start)
+ M .omo/boulder.json
+ M .omo/run-continuation/ses_0c241b468ffeuCkDS36rF8DZEG.json
+?? .omo/evidence/task-18-adversarial-verify-2.txt
+?? .omo/evidence/task-18-adversarial-verify-3.txt
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/start-work/
+
+## current dirty worktree after scoped edits before verification
+ M .omo/boulder.json
+ M .omo/evidence/task-18-code-review.txt
+ M .omo/run-continuation/ses_0c241b468ffeuCkDS36rF8DZEG.json
+ M src/ir/lower.rs
+?? .omo/evidence/task-18-adversarial-verify-2.txt
+?? .omo/evidence/task-18-adversarial-verify-3.txt
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-fix3-gate.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/start-work/
+
+## type_to_operand_type local grep context
+    44	pub type TypedProgram = Program;
+    45	
+    46	/// Map AST integer `Type` variants used by the supported lowering paths
+    47	/// to their TACKY `OperandType` width.
+    48	fn type_to_operand_type(ty: Type) -> OperandType {
+    49	    match ty {
+    50	        Type::Long | Type::UnsignedLong => OperandType::Long,
+    51	        _ => OperandType::Int,
+    52	    }
+
+## rg forbidden wording near type_to_operand_type (context shows helper has no chapter-13/double wording)
+45-
+46-/// Map AST integer `Type` variants used by the supported lowering paths
+47-/// to their TACKY `OperandType` width.
+48:fn type_to_operand_type(ty: Type) -> OperandType {
+49-    match ty {
+50-        Type::Long | Type::UnsignedLong => OperandType::Long,
+51-        _ => OperandType::Int,
+--
+77-        };
+78-        let param_tys: Vec<_> = params
+79-            .iter()
+80:            .map(|p| type_to_operand_type(p.ty.clone()))
+81-            .collect();
+82-        ctx.func_sigs.insert(name, param_tys);
+83-    }
+--
+96-                    // width.
+97-                    for param in &func.params {
+98-                        ctx.type_env
+99:                            .insert(param.name.clone(), type_to_operand_type(param.ty.clone()));
+
+## code-review overfit/slop bullets
+34:## Fix3 explicit overfit/slop criterion coverage (2026-07-08 task-18-fix3)
+35-- PASS: No out-of-scope feature overfit — the fix does not add later-chapter floating-point behavior or expand task 18 beyond chapter-5 assignment/compound/increment scope.
+36-- PASS: No speculative abstraction — no new helpers, traits, plumbing, or dependency surfaces were introduced.
+37-- PASS: No stale/misleading success evidence — this review now names the remaining verifier blockers and records their scoped resolution instead of relying on older pass claims.
+38-- PASS: Malformed input probes are covered — malformed declaration/specifier cases and out-of-scope floating-point probes remain part of the recorded task-18 verification surface.
+39-- PASS: Scope-fidelity probes are covered — chapter-5 harness/manual/probe evidence distinguishes supported integer/local-variable behavior from later feature surfaces.
+40-- PASS: No broad formatting churn — the fix is limited to the `type_to_operand_type` comment wording and this evidence note; unrelated repo formatting/state remains untouched.
+41-
+
+## cargo build --release
+2026-07-08T12:40:29-04:00
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 1.67s
+cargo build --release exit=0
+
+## cargo test --release
+2026-07-08T12:40:39-04:00
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 1.36s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 9 tests
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test driver::tests::parses_default_run_stage ... ok
+test driver::tests::derives_all_output_paths ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+cargo test --release exit=0
+
+## ./tests/test_compiler ./target/release/rustcc --chapter 5 --latest-only --bitwise --compound --increment
+2026-07-08T12:40:45-04:00
+----------------------------------------------------------------------
+Ran 82 tests in 1.267s
+
+OK
+./tests/test_compiler chapter5 exit=0
+
+## LSP diagnostics
+mcp__lsp.diagnostics /home/mei/projects/rustcc/src/ir/lower.rs severity=all -> No diagnostics found
+
+## post-verification scoped grep
+    44	pub type TypedProgram = Program;
+    45	
+    46	/// Map AST integer `Type` variants used by the supported lowering paths
+    47	/// to their TACKY `OperandType` width.
+    48	fn type_to_operand_type(ty: Type) -> OperandType {
+    49	    match ty {
+    50	        Type::Long | Type::UnsignedLong => OperandType::Long,
+    51	        _ => OperandType::Int,
+    52	    }
+No chapter-13/double wording appears in the type_to_operand_type doc comment above.
+
+## dirty worktree after verification before commit
+ M .omo/boulder.json
+ M .omo/evidence/task-18-code-review.txt
+ M .omo/run-continuation/ses_0c241b468ffeuCkDS36rF8DZEG.json
+ M src/ir/lower.rs
+?? .omo/evidence/task-18-adversarial-verify-2.txt
+?? .omo/evidence/task-18-adversarial-verify-3.txt
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-fix3-gate.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/start-work/
+
+## Rust post-write LOC check
+src/ir/lower.rs pure LOC: 1134
+Comment-only Rust change; no semantic Rust code was added.
+
+## dirty worktree after commit
+ M .omo/boulder.json
+ M .omo/evidence/task-18-fix3-gate.txt
+ M .omo/run-continuation/ses_0c241b468ffeuCkDS36rF8DZEG.json
+?? .omo/evidence/task-18-adversarial-verify-2.txt
+?? .omo/evidence/task-18-adversarial-verify-3.txt
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/start-work/
+Unrelated .omo state preserved outside commit; only requested task-18 evidence/comment files were committed.

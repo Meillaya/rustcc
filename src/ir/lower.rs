@@ -43,9 +43,8 @@ use crate::util::labels::LabelGenerator;
 
 pub type TypedProgram = Program;
 
-/// Map the AST's integer `Type` variants to the TACKY `OperandType`.
-/// Chapter-13 `double` declarations are intentionally not admitted by
-/// the chapter-5 parser paths this helper supports.
+/// Map AST integer `Type` variants used by the supported lowering paths
+/// to their TACKY `OperandType` width.
 fn type_to_operand_type(ty: Type) -> OperandType {
     match ty {
         Type::Long | Type::UnsignedLong => OperandType::Long,
