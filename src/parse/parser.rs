@@ -15,14 +15,14 @@
 // Mirrors nqcc2/lib/parse.ml chapter 9 grammar (~lines 1-50 of parse_program).
 // Recursive-descent, Result-returning.
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 use crate::ast::{
     AssignOp, BinaryOp, BlockItem, Expr, ForInit, Function, GlobalDecl, GlobalVarDecl, Program,
     Statement, StorageClass, TopLevelItem, Type, UnaryOp, VarDecl,
 };
 use crate::lex::{Token, TokenKind};
-use crate::parse::precedence::{Precedence, precedence_of};
+use crate::parse::precedence::{precedence_of, Precedence};
 
 pub(crate) fn parse_program(tokens: Vec<Token>) -> Result<Program> {
     Parser::new(tokens).parse_program()
@@ -108,7 +108,10 @@ impl Parser {
             } else {
                 None
             };
-            self.expect_exact(&TokenKind::Semicolon, "';' after file-scope variable declaration")?;
+            self.expect_exact(
+                &TokenKind::Semicolon,
+                "';' after file-scope variable declaration",
+            )?;
             Ok(TopLevelItem::Variable(GlobalVarDecl {
                 name,
                 ty,
@@ -346,8 +349,10 @@ impl Parser {
         //   [static|extern] int NAME ...
         //   int [static|extern] NAME ...   (type-before-storage-class)
         // Chapter 11 widens the type to `int` or `long` (any order).
+        // Chapter 13 adds `double`.
         if self.peek().kind == TokenKind::Int
             || self.peek().kind == TokenKind::Long
+            || self.peek().kind == TokenKind::Double
             || self.peek().kind == TokenKind::Unsigned
             || self.peek().kind == TokenKind::Signed
             || self.peek().kind == TokenKind::Static
@@ -478,11 +483,7 @@ impl Parser {
             self.expect_exact(&TokenKind::CloseParen, "')' after switch expression")?;
             let body = Box::new(self.parse_statement()?);
             let label = String::new();
-            Ok(Statement::Switch {
-                expr,
-                body,
-                label,
-            })
+            Ok(Statement::Switch { expr, body, label })
         } else if self.match_exact(&TokenKind::Case) {
             let value = self.parse_expr()?;
             self.expect_exact(&TokenKind::Colon, "':' after case value")?;
@@ -505,7 +506,10 @@ impl Parser {
         self.expect_exact(&TokenKind::OpenParen, "'(' after for")?;
         let init = if self.match_exact(&TokenKind::Semicolon) {
             None
-        } else if self.peek().kind == TokenKind::Int || self.peek().kind == TokenKind::Long {
+        } else if matches!(
+            self.peek().kind,
+            TokenKind::Int | TokenKind::Long | TokenKind::Double
+        ) {
             let ty = self.parse_type_specifier()?;
             let name = self.expect_identifier("for-loop variable name")?;
             let init = if self.match_exact(&TokenKind::Equal) {
@@ -615,6 +619,11 @@ impl Parser {
                 self.current += 1;
                 Ok(Expr::Constant(value))
             }
+            TokenKind::DoubleConstant(value) => {
+                let value = *value;
+                self.current += 1;
+                Ok(Expr::DoubleConstant(value))
+            }
             TokenKind::LongConstant(value) => {
                 let value = *value;
                 self.current += 1;
@@ -634,10 +643,7 @@ impl Parser {
                     self.current += 1;
                     let args = self.parse_arg_list()?;
                     self.expect_exact(&TokenKind::CloseParen, "')' after arguments")?;
-                    Ok(Expr::Call {
-                        name,
-                        args,
-                    })
+                    Ok(Expr::Call { name, args })
                 } else {
                     let mut expr = Expr::Var(name);
                     loop {
@@ -690,7 +696,14 @@ impl Parser {
                 // Chapter 11: `(T) expr` cast.  If the token after
                 // `(` is a type specifier, parse it as a cast; the
                 // closing `)` and the casted expression follow.
-                if self.peek().kind == TokenKind::Int || self.peek().kind == TokenKind::Long {
+                if matches!(
+                    self.peek().kind,
+                    TokenKind::Int
+                        | TokenKind::Long
+                        | TokenKind::Double
+                        | TokenKind::Unsigned
+                        | TokenKind::Signed
+                ) {
                     let target_type = self.parse_type_specifier()?;
                     self.expect_exact(&TokenKind::CloseParen, "')' after cast type")?;
                     let inner = self.parse_unary_expr()?;

@@ -43,12 +43,16 @@ use crate::util::labels::LabelGenerator;
 
 pub type TypedProgram = Program;
 
-/// Map the AST's `Type` to the TACKY `OperandType`.  Only the
-/// chapter-11 surface is mapped; everything else falls back to `Int`
-/// so the existing chapter-1..10 codegen keeps compiling.
+/// Map the AST's `Type` to the TACKY `OperandType`.  Through
+/// chapter 13: `int` / `unsigned int` / `char` map to `Int`,
+/// `long` / `unsigned long` map to `Long`, `double` maps to
+/// `Double`.  Pointer / array types are lowered by the chapter-14
+/// and -15 paths and are not seen by the simple local-scope
+/// declarations that call this helper.
 fn type_to_operand_type(ty: Type) -> OperandType {
     match ty {
         Type::Long | Type::UnsignedLong => OperandType::Long,
+        Type::Double => OperandType::Double,
         _ => OperandType::Int,
     }
 }
@@ -56,10 +60,8 @@ fn type_to_operand_type(ty: Type) -> OperandType {
 pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
     let mut ctx = LowerCtx::new();
     let mut functions: Vec<TackyFunction> = Vec::new();
-    let mut globals: HashMap<
-        String,
-        (StorageClass, Option<Expr>, crate::ir::tacky::OperandType),
-    > = HashMap::new();
+    let mut globals: HashMap<String, (StorageClass, Option<Expr>, crate::ir::tacky::OperandType)> =
+        HashMap::new();
     // Two-pass walk: gather file-scope variables first so each
     // function can seed its type env with their declared widths.
     for item in &ast.top_level_items {
@@ -78,7 +80,7 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
             TopLevelItem::Declaration(d) => (d.name.clone(), d.params.clone()),
             _ => continue,
         };
-let param_tys: Vec<_> = params
+        let param_tys: Vec<_> = params
             .iter()
             .map(|p| type_to_operand_type(p.ty.clone()))
             .collect();
@@ -98,10 +100,8 @@ let param_tys: Vec<_> = params
                     // body can refer to each parameter by its declared
                     // width.
                     for param in &func.params {
-                        ctx.type_env.insert(
-                            param.name.clone(),
-                            type_to_operand_type(param.ty.clone()),
-                        );
+                        ctx.type_env
+                            .insert(param.name.clone(), type_to_operand_type(param.ty.clone()));
                     }
                     // Also seed the env with file-scope variable
                     // types so `Copy` / `Add` / etc. of a `long`
@@ -179,9 +179,11 @@ fn merge_global_decl(
     var: &GlobalVarDecl,
     globals: &mut HashMap<String, (StorageClass, Option<Expr>, crate::ir::tacky::OperandType)>,
 ) {
-    let entry = globals
-        .entry(var.name.clone())
-        .or_insert((var.storage, var.init.clone(), type_to_operand_type(var.ty.clone())));
+    let entry = globals.entry(var.name.clone()).or_insert((
+        var.storage,
+        var.init.clone(),
+        type_to_operand_type(var.ty.clone()),
+    ));
     if entry.1.is_none() && var.init.is_some() {
         entry.0 = var.storage;
         entry.1 = var.init.clone();
@@ -328,11 +330,7 @@ impl LowerCtx {
     /// name and records the name's type in `type_env`.  The caller
     /// receives the synthetic name as a `Val::Var` so downstream
     /// uses can look up the type from the env.
-    fn materialize_long_constant(
-        &mut self,
-        instrs: &mut Vec<Instruction>,
-        value: i64,
-    ) -> Val {
+    fn materialize_long_constant(&mut self, instrs: &mut Vec<Instruction>, value: i64) -> Val {
         let name = format!("const.{}", self.const_counter);
         self.const_counter += 1;
         self.type_env.insert(name.clone(), OperandType::Long);
@@ -351,9 +349,7 @@ fn lower_block_items(items: &[BlockItem], ctx: &mut LowerCtx) -> Result<Vec<Inst
             BlockItem::Statement(stmt) => out.extend(lower_statement(stmt, ctx)?),
             BlockItem::Declaration(decl) => {
                 let decl_ty = type_to_operand_type(decl.ty.clone());
-                ctx.type_env
-                    .entry(decl.name.clone())
-                    .or_insert(decl_ty);
+                ctx.type_env.entry(decl.name.clone()).or_insert(decl_ty);
                 if let Some(expr) = &decl.init {
                     let (instrs, val) = lower_expr(expr, ctx)?;
                     out.extend(instrs);
@@ -570,10 +566,7 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
                     .as_ref()
                     .and_then(|m| m.get(n).cloned())
                     .ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "lower: case {} outside of any switch dispatch",
-                            n
-                        )
+                        anyhow::anyhow!("lower: case {} outside of any switch dispatch", n)
                     })?,
                 _ => {
                     return Err(anyhow::anyhow!(
@@ -589,9 +582,10 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
             // Same story as `Case`: emit the default label
             // (populated by the enclosing switch), then lower
             // the default's own statement.
-            let label = ctx.default_label.as_ref().ok_or_else(|| {
-                anyhow::anyhow!("lower: `default` outside of any switch")
-            })?;
+            let label = ctx
+                .default_label
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("lower: `default` outside of any switch"))?;
             let mut out = vec![Instruction::Label(label.clone())];
             out.extend(lower_statement(statement, ctx)?);
             Ok(out)
@@ -820,7 +814,10 @@ fn lower_expr(expr: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)
         } => lower_conditional(condition, then_expr, else_expr, ctx),
         Expr::Binary { op, left, right } => lower_binary(*op, left, right, ctx),
         Expr::Call { name, args } => lower_call(name, args, ctx),
-        Expr::Cast { target_type, expr: inner } => {
+        Expr::Cast {
+            target_type,
+            expr: inner,
+        } => {
             // Chapter 11 explicit cast: `SignExtend` (int -> long)
             // or `Truncate` (long -> int).  Other combinations
             // (int -> int, long -> long) lower to a plain Copy.
@@ -876,11 +873,7 @@ fn lower_expr(expr: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)
 ///    actually consumed (we already use `dst` for chapter-9's
 ///    `int`-returning functions because the call site may
 ///    immediately use the value).
-fn lower_call(
-    name: &str,
-    args: &[Expr],
-    ctx: &mut LowerCtx,
-) -> Result<(Vec<Instruction>, Val)> {
+fn lower_call(name: &str, args: &[Expr], ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)> {
     let mut out: Vec<Instruction> = Vec::new();
     let mut arg_vals: Vec<Val> = Vec::with_capacity(args.len());
     // Chapter 11: when the called function's signature is known,
@@ -889,8 +882,7 @@ fn lower_call(
     // sign-extended; a long passed to an int parameter is
     // truncated.  Mirrors the `convert_by_assignment` calls in
     // OCaml `typecheck_fun_call`.
-    let param_tys: Option<Vec<crate::ir::tacky::OperandType>> =
-        ctx.func_sigs.get(name).cloned();
+    let param_tys: Option<Vec<crate::ir::tacky::OperandType>> = ctx.func_sigs.get(name).cloned();
     for (idx, arg) in args.iter().enumerate() {
         let (instrs, val) = lower_expr(arg, ctx)?;
         out.extend(instrs);
@@ -936,7 +928,11 @@ fn lower_call(
 /// type and target type differ in width, emit `SignExtend` (int ->
 /// long) or `Truncate` (long -> int); same-width casts degrade to a
 /// plain `Copy`.
-fn lower_cast(target_type: Type, inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)> {
+fn lower_cast(
+    target_type: Type,
+    inner: &Expr,
+    ctx: &mut LowerCtx,
+) -> Result<(Vec<Instruction>, Val)> {
     let (mut instrs, inner_val) = lower_expr(inner, ctx)?;
     let inner_ty = type_of_val(&inner_val, ctx);
     let target_ty = type_to_operand_type(target_type.clone());
@@ -1035,11 +1031,7 @@ fn lower_subscript(
     Ok((base_instrs, Val::Var(dst)))
 }
 
-fn lower_unary(
-    op: UnaryOp,
-    inner: &Expr,
-    ctx: &mut LowerCtx,
-) -> Result<(Vec<Instruction>, Val)> {
+fn lower_unary(op: UnaryOp, inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)> {
     let (mut instrs, inner_val) = lower_expr(inner, ctx)?;
     let inner_ty = type_of_val(&inner_val, ctx);
     let tmp = ctx.fresh_typed_tmp(inner_ty);
@@ -1117,7 +1109,7 @@ fn lower_assign(
         src: lhs_for_copy,
         dst: tmp.clone(),
     });
-    instrs.push(binary_to_tacky(bin_op, rhs_for_op, tmp.clone()));
+    instrs.push(binary_to_tacky(bin_op, target_ty, rhs_for_op, tmp.clone()));
     instrs.push(Instruction::Copy {
         src: Val::Var(tmp.clone()),
         dst: target_name,
@@ -1301,27 +1293,37 @@ fn lower_binary(
             // the assembler emits the quadword form.
             let left_ty = type_of_val(&left_val, ctx);
             let right_ty = type_of_val(&right_val, ctx);
-            let (left_val, right_val, dst_ty) = promote_for_binary(left_val, right_val, left_ty, right_ty, &mut instrs, ctx);
+            let (left_val, right_val, dst_ty) =
+                promote_for_binary(left_val, right_val, left_ty, right_ty, &mut instrs, ctx);
             // Re-resolve types after promotion so the destination
             // tmp is correctly tagged.
             let _ = (left_ty, right_ty);
-            let _ = dst_ty;
             if is_cmp_op(op) {
+                // Comparisons always produce an `int` result
+                // (0 or 1).  When the operands are double, the
+                // `cmp_to_tacky` mapping picks the unsigned
+                // condition codes (A/AE/B/BE) so the post-cmp
+                // `setCC` returns false for NaN operands; the
+                // OCaml reference uses the same shape.
                 let tmp = ctx.fresh_typed_tmp(OperandType::Int);
                 instrs.push(Instruction::Copy {
                     src: left_val.clone(),
                     dst: tmp.clone(),
                 });
-                instrs.push(cmp_to_tacky(op, left_val, right_val, tmp.clone()));
+                instrs.push(cmp_to_tacky(op, dst_ty, left_val, right_val, tmp.clone()));
                 Ok((instrs, Val::Var(tmp)))
             } else {
-                let tmp_ty = type_of_val(&left_val, ctx);
+                // Arithmetic on doubles produces a double result;
+                // the binary_to_tacky mapping picks the SSE
+                // variants (AddDouble/SubDouble/etc.) when the
+                // dst_ty is Double.
+                let tmp_ty = dst_ty;
                 let tmp = ctx.fresh_typed_tmp(tmp_ty);
                 instrs.push(Instruction::Copy {
                     src: left_val,
                     dst: tmp.clone(),
                 });
-                instrs.push(binary_to_tacky(op, right_val, tmp.clone()));
+                instrs.push(binary_to_tacky(op, dst_ty, right_val, tmp.clone()));
                 Ok((instrs, Val::Var(tmp)))
             }
         }
@@ -1339,18 +1341,17 @@ fn type_of_val(val: &Val, ctx: &LowerCtx) -> OperandType {
     match val {
         Val::Constant(_) => OperandType::Int,
         Val::ConstantDouble(_) => OperandType::Double,
-        Val::Var(name) => ctx
-            .type_env
-            .get(name)
-            .copied()
-            .unwrap_or(OperandType::Int),
+        Val::Var(name) => ctx.type_env.get(name).copied().unwrap_or(OperandType::Int),
     }
 }
 
-/// Usual arithmetic conversion for int / long.  When one operand is
-/// long, the other is sign-extended into a fresh tmp and the result
-/// type is long.  When both are int, the operands are left as-is.
-/// Mirrors `convert_to` + the chapter-11 `get_common_type` path in
+/// Usual arithmetic conversion for int / long / double.  When one
+/// operand is double, the other is converted via `IntToDouble` /
+/// `UIntToDouble` into a fresh tmp and the result type is double.
+/// When one operand is long, the other is sign-extended into a fresh
+/// tmp and the result type is long.  When both are int, the
+/// operands are left as-is.  Mirrors `convert_to` + the
+/// chapter-11/13 `get_common_type` path in
 /// `nqcc2/lib/semantic_analysis/typecheck.ml`.
 fn promote_for_binary(
     left_val: Val,
@@ -1377,11 +1378,53 @@ fn promote_for_binary(
             });
             (left_val, Val::Var(tmp), OperandType::Long)
         }
-        (a, b) => (left_val, right_val, if a == OperandType::Long || b == OperandType::Long {
-            OperandType::Long
-        } else {
-            OperandType::Int
-        }),
+        // Chapter 13: when one operand is double, the other is
+        // converted to double via `IntToDouble` (signed int) or
+        // `UIntToDouble` (unsigned int).  The result type is double.
+        (OperandType::Double, _) | (_, OperandType::Double) => {
+            // Pick the operand to convert: the non-double side.
+            let is_left_double = left_ty == OperandType::Double;
+            let (src_val, src_ty) = if is_left_double {
+                (right_val.clone(), right_ty)
+            } else {
+                (left_val.clone(), left_ty)
+            };
+            let tmp = ctx.fresh_typed_tmp(OperandType::Double);
+            let cast = match src_ty {
+                OperandType::Int | OperandType::Long => Instruction::IntToDouble {
+                    src: src_val,
+                    dst: tmp.clone(),
+                },
+                OperandType::UInt | OperandType::ULong => Instruction::UIntToDouble {
+                    src: src_val,
+                    dst: tmp.clone(),
+                },
+                OperandType::Double => {
+                    // `(Double, Double)` already matches the
+                    // outer arm; if we reach here the conversion
+                    // is a no-op, so use a plain Copy.
+                    Instruction::Copy {
+                        src: src_val,
+                        dst: tmp.clone(),
+                    }
+                }
+            };
+            instrs.push(cast);
+            if is_left_double {
+                (left_val, Val::Var(tmp), OperandType::Double)
+            } else {
+                (Val::Var(tmp), right_val, OperandType::Double)
+            }
+        }
+        (a, b) => (
+            left_val,
+            right_val,
+            if a == OperandType::Long || b == OperandType::Long {
+                OperandType::Long
+            } else {
+                OperandType::Int
+            },
+        ),
     }
 }
 
@@ -1454,7 +1497,7 @@ fn is_cmp_op(op: BinaryOp) -> bool {
     )
 }
 
-fn binary_to_tacky(op: BinaryOp, src: Val, dst: String) -> Instruction {
+fn binary_to_tacky(op: BinaryOp, _operand_ty: OperandType, src: Val, dst: String) -> Instruction {
     match op {
         BinaryOp::Add => Instruction::Add { src, dst },
         BinaryOp::Subtract => Instruction::Sub { src, dst },
@@ -1470,7 +1513,13 @@ fn binary_to_tacky(op: BinaryOp, src: Val, dst: String) -> Instruction {
     }
 }
 
-fn cmp_to_tacky(op: BinaryOp, left: Val, right: Val, dst: String) -> Instruction {
+fn cmp_to_tacky(
+    op: BinaryOp,
+    _operand_ty: OperandType,
+    left: Val,
+    right: Val,
+    dst: String,
+) -> Instruction {
     let cc = match op {
         BinaryOp::Equal => ConditionCode::E,
         BinaryOp::NotEqual => ConditionCode::NE,

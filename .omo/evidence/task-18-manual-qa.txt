@@ -1,0 +1,26 @@
+## Manual QA task-18 real compiler surface
+2026-07-08T12:08:53-04:00
+## local_return
+source: int main(void) { int x = 5; return x; }
+expected: 5
+$ target/release/rustcc .omo/tmp/task18/local_return.c
+actual: 5
+## compound_add
+source: int main(void) { int x = 5; x += 3; return x; }
+expected: 8
+$ target/release/rustcc .omo/tmp/task18/compound_add.c
+actual: 8
+## prefix_inc
+source: int main(void) { int x = 5; return ++x; }
+expected: 6
+$ target/release/rustcc .omo/tmp/task18/prefix_inc.c
+actual: 6
+## postfix_inc
+source: int main(void) { int x = 5; int y = x++; return y * 10 + x; }
+expected: 56
+$ target/release/rustcc .omo/tmp/task18/postfix_inc.c
+actual: 56
+note: postfix_inc mathematical/C result is 56 (old y=5, new x=6); task/plan text says 57, which is inconsistent with C post-increment semantics and the existing coaching log.
+
+$ rm -rf .omo/tmp/task18
+cleanup: removed .omo/tmp/task18 temporary C files and executables

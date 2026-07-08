@@ -1,0 +1,626 @@
+## Release test and regression gates
+2026-07-08T12:07:14-04:00
+$ cargo test --release
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 1.39s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 9 tests
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test driver::tests::derives_all_output_paths ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test driver::tests::parses_default_run_stage ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+$ ./tests/test_compiler ./target/release/rustcc --chapter 8 --latest-only --compound --increment --goto --switch
+----------------------------------------------------------------------
+Ran 98 tests in 2.323s
+
+OK
+
+$ ./tests/test_compiler ./target/release/rustcc --chapter 12 --latest-only
+======================================================================
+FAIL: test_invalid_parse/bad_specifiers (test_framework.basic.TestChapter12.test_invalid_parse/bad_specifiers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 580, in test_invalid
+    self.compile_failure(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 334, in compile_failure
+    with self.assertRaises(
+         ~~~~~~~~~~~~~~~~~^
+        subprocess.CalledProcessError, msg=f"Didn't catch error in {source_file}"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ):
+    ^
+AssertionError: Didn't catch error in /home/mei/projects/rustcc/tests/tests/chapter_12/invalid_parse/bad_specifiers.c
+
+======================================================================
+FAIL: test_invalid_parse/bad_specifiers_2 (test_framework.basic.TestChapter12.test_invalid_parse/bad_specifiers_2)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 580, in test_invalid
+    self.compile_failure(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 334, in compile_failure
+    with self.assertRaises(
+         ~~~~~~~~~~~~~~~~~^
+        subprocess.CalledProcessError, msg=f"Didn't catch error in {source_file}"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ):
+    ^
+AssertionError: Didn't catch error in /home/mei/projects/rustcc/tests/tests/chapter_12/invalid_parse/bad_specifiers_2.c
+
+======================================================================
+FAIL: test_invalid_types/conflicting_signed_unsigned (test_framework.basic.TestChapter12.test_invalid_types/conflicting_signed_unsigned)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 580, in test_invalid
+    self.compile_failure(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 334, in compile_failure
+    with self.assertRaises(
+         ~~~~~~~~~~~~~~~~~^
+        subprocess.CalledProcessError, msg=f"Didn't catch error in {source_file}"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ):
+    ^
+AssertionError: Didn't catch error in /home/mei/projects/rustcc/tests/tests/chapter_12/invalid_types/conflicting_signed_unsigned.c
+
+======================================================================
+FAIL: test_invalid_types/conflicting_uint_ulong (test_framework.basic.TestChapter12.test_invalid_types/conflicting_uint_ulong)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 580, in test_invalid
+    self.compile_failure(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 334, in compile_failure
+    with self.assertRaises(
+         ~~~~~~~~~~~~~~~~~^
+        subprocess.CalledProcessError, msg=f"Didn't catch error in {source_file}"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ):
+    ^
+AssertionError: Didn't catch error in /home/mei/projects/rustcc/tests/tests/chapter_12/invalid_types/conflicting_uint_ulong.c
+
+======================================================================
+FAIL: test_valid/explicit_casts/chained_casts (test_framework.basic.TestChapter12.test_valid/explicit_casts/chained_casts)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/explicit_casts/chained_casts.c failed with error:
+parse error: expected expression, found UIntConstant(4294967200, UInt) ("4294967200u")
+
+
+======================================================================
+FAIL: test_valid/explicit_casts/extension (test_framework.basic.TestChapter12.test_valid/explicit_casts/extension)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/explicit_casts/extension.c failed with error:
+parse error: expected expression, found UIntConstant(10, ULong) ("10ul")
+
+
+======================================================================
+FAIL: test_valid/explicit_casts/rewrite_movz_regression (test_framework.basic.TestChapter12.test_valid/explicit_casts/rewrite_movz_regression)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/explicit_casts/rewrite_movz_regression.c failed with error:
+parse error: expected expression, found UIntConstant(5000, UInt) ("5000u")
+
+
+======================================================================
+FAIL: test_valid/explicit_casts/round_trip_casts (test_framework.basic.TestChapter12.test_valid/explicit_casts/round_trip_casts)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/explicit_casts/round_trip_casts.c failed with error:
+parse error: expected expression, found UIntConstant(8589934580, ULong) ("8589934580ul")
+
+
+======================================================================
+FAIL: test_valid/explicit_casts/same_size_conversion (test_framework.basic.TestChapter12.test_valid/explicit_casts/same_size_conversion)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/explicit_casts/same_size_conversion.c failed with error:
+parse error: expected expression, found UIntConstant(10, UInt) ("10u")
+
+
+======================================================================
+FAIL: test_valid/explicit_casts/truncate (test_framework.basic.TestChapter12.test_valid/explicit_casts/truncate)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/explicit_casts/truncate.c failed with error:
+parse error: expected expression, found UIntConstant(100, UInt) ("100u")
+
+
+======================================================================
+FAIL: test_valid/implicit_casts/common_type (test_framework.basic.TestChapter12.test_valid/implicit_casts/common_type)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/implicit_casts/common_type.c failed with error:
+parse error: expected expression, found UIntConstant(100, UInt) ("100u")
+
+
+======================================================================
+FAIL: test_valid/implicit_casts/convert_by_assignment (test_framework.basic.TestChapter12.test_valid/implicit_casts/convert_by_assignment)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/implicit_casts/convert_by_assignment.c failed with error:
+parse error: expected expression, found UIntConstant(-9223372036854775803, ULong) ("9223372036854775813ul")
+
+
+======================================================================
+FAIL: test_valid/implicit_casts/promote_constants (test_framework.basic.TestChapter12.test_valid/implicit_casts/promote_constants)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/implicit_casts/promote_constants.c failed with error:
+parse error: expected expression, found UIntConstant(68719476736, UInt) ("68719476736u")
+
+
+======================================================================
+FAIL: test_valid/implicit_casts/static_initializers (test_framework.basic.TestChapter12.test_valid/implicit_casts/static_initializers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/implicit_casts/static_initializers.c failed with error:
+parse error: expected expression, found UIntConstant(2147483650, UInt) ("2147483650u")
+
+
+======================================================================
+FAIL: test_valid/libraries/unsigned_args (test_framework.basic.TestChapter12.test_valid/libraries/unsigned_args)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/libraries/unsigned_args.c failed with error:
+parse error: expected expression, found UIntConstant(1, UInt) ("1u")
+
+
+======================================================================
+FAIL: test_valid/libraries/unsigned_args_client (test_framework.basic.TestChapter12.test_valid/libraries/unsigned_args_client)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 612, in test_client
+    self.compile_client_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 455, in compile_client_and_run
+    self.library_test_helper(client_path, [lib_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/libraries/unsigned_args_client.c failed with error:
+parse error: expected expression, found UIntConstant(-9223372036854775808, ULong) ("9223372036854775808ul")
+
+
+======================================================================
+FAIL: test_valid/libraries/unsigned_global_var (test_framework.basic.TestChapter12.test_valid/libraries/unsigned_global_var)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/libraries/unsigned_global_var.c failed with error:
+parse error: expected expression, found UIntConstant(4294967200, UInt) ("4294967200u")
+
+
+======================================================================
+FAIL: test_valid/libraries/unsigned_global_var_client (test_framework.basic.TestChapter12.test_valid/libraries/unsigned_global_var_client)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 612, in test_client
+    self.compile_client_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 455, in compile_client_and_run
+    self.library_test_helper(client_path, [lib_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/libraries/unsigned_global_var_client.c failed with error:
+parse error: expected expression, found UIntConstant(4294967200, UInt) ("4294967200u")
+
+
+======================================================================
+FAIL: test_valid/type_specifiers/signed_type_specifiers (test_framework.basic.TestChapter12.test_valid/type_specifiers/signed_type_specifiers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/type_specifiers/signed_type_specifiers.c failed with error:
+parse error: expected a type specifier ('int' / 'long' / 'double' / 'unsigned' / 'signed'), found Identifier("i")
+
+
+======================================================================
+FAIL: test_valid/type_specifiers/unsigned_type_specifiers (test_framework.basic.TestChapter12.test_valid/type_specifiers/unsigned_type_specifiers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/type_specifiers/unsigned_type_specifiers.c failed with error:
+parse error: expected expression, found UIntConstant(6, UInt) ("6u")
+
+
+======================================================================
+FAIL: test_valid/unsigned_expressions/arithmetic_ops (test_framework.basic.TestChapter12.test_valid/unsigned_expressions/arithmetic_ops)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/unsigned_expressions/arithmetic_ops.c failed with error:
+parse error: expected expression, found UIntConstant(2147483653, UInt) ("2147483653u")
+
+
+======================================================================
+FAIL: test_valid/unsigned_expressions/arithmetic_wraparound (test_framework.basic.TestChapter12.test_valid/unsigned_expressions/arithmetic_wraparound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/unsigned_expressions/arithmetic_wraparound.c failed with error:
+parse error: expected expression, found UIntConstant(0, UInt) ("0u")
+
+
+======================================================================
+FAIL: test_valid/unsigned_expressions/comparisons (test_framework.basic.TestChapter12.test_valid/unsigned_expressions/comparisons)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/unsigned_expressions/comparisons.c failed with error:
+parse error: expected expression, found UIntConstant(100, UInt) ("100u")
+
+
+======================================================================
+FAIL: test_valid/unsigned_expressions/locals (test_framework.basic.TestChapter12.test_valid/unsigned_expressions/locals)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/unsigned_expressions/locals.c failed with error:
+parse error: expected expression, found UIntConstant(8589934592, ULong) ("8589934592ul")
+
+
+======================================================================
+FAIL: test_valid/unsigned_expressions/logical (test_framework.basic.TestChapter12.test_valid/unsigned_expressions/logical)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/unsigned_expressions/logical.c failed with error:
+parse error: expected expression, found UIntConstant(1152921504606846976, ULong) ("1152921504606846976ul")
+
+
+======================================================================
+FAIL: test_valid/unsigned_expressions/simple (test_framework.basic.TestChapter12.test_valid/unsigned_expressions/simple)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/unsigned_expressions/simple.c failed with error:
+parse error: expected expression, found UIntConstant(2147483647, UInt) ("2147483647u")
+
+
+======================================================================
+FAIL: test_valid/unsigned_expressions/static_variables (test_framework.basic.TestChapter12.test_valid/unsigned_expressions/static_variables)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_12/valid/unsigned_expressions/static_variables.c failed with error:
+parse error: expected expression, found UIntConstant(9223372036854775803, ULong) ("9223372036854775803ul")
+
+
+----------------------------------------------------------------------
+Ran 29 tests in 0.280s
+
+FAILED (failures=27)
