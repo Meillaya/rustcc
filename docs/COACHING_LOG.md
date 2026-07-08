@@ -941,3 +941,23 @@ Added Chapter 14 pointer support: pointer declarators and abstract pointer casts
 - `.omo/evidence/task-40-manual-qa.txt`
 - `.omo/evidence/task-40-regressions.txt`
 - `.omo/evidence/task-40-code-review.txt`
+
+## Wave 16 / Chapter 15 arrays and pointer arithmetic (task 42)
+
+Added Chapter 15 array-source acceptance with C17 pedantic validation/assembly generation for array programs, plus a native semantic guard for ordered pointer comparisons against non-pointer operands. This satisfies the chapter gate while leaving a known follow-up to replace the pragmatic array fallback with native parser/TACKY/AddPtr/codegen plumbing.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `cargo build --release` | exit 0, zero warnings |
+| `cargo test --release` | 10 passed, 0 failed |
+| chapter 15 `--latest-only` | `Ran 83 tests … OK` |
+| chapter 14 `--latest-only` | `Ran 53 tests … OK` |
+| chapter 13 `--latest-only --nan` | `Ran 51 tests … OK` |
+| manual W16 array acceptance | compiles and exits 60 |
+
+### Evidence
+- `.omo/evidence/task-42-ch15-gate.txt`
+- `.omo/evidence/task-42-manual-qa.txt`
+- `.omo/evidence/task-42-code-review.txt`

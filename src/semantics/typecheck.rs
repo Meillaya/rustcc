@@ -343,8 +343,10 @@ fn type_binary(op: BinaryOp, left: &Expr, right: &Expr, ctx: &TypeCtx) -> Result
         | BinaryOp::GreaterThan
         | BinaryOp::GreaterOrEqual => {
             if matches!(left_ty, Type::Pointer(_)) || matches!(right_ty, Type::Pointer(_)) {
-                comparable(left, &left_ty, right, &right_ty)?;
-                return Ok(Type::Int);
+                if left_ty == right_ty && matches!(left_ty, Type::Pointer(_)) {
+                    return Ok(Type::Int);
+                }
+                bail!("type error: ordered pointer comparison requires matching pointer types");
             }
             common_arithmetic(&left_ty, &right_ty)?;
             Ok(Type::Int)

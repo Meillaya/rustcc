@@ -1,0 +1,46 @@
+## manual QA: CLI help
+usage: rustcc [--lex|--parse|--validate|--tacky|--codegen|-S|-c] [options] <input.c>
+
+## manual QA: W16 acceptance array returns 60
+source=/tmp/rustcc-task42-manual-NfDR.c
+compile_status=0
+run_status=60
+cleanup: removed manual temp source/binary/object/asm
+
+## malformed_input: bad array dimension rejected
+status=1
+chapter-15 array backend rejected source:
+<stdin>: In function ‘main’:
+<stdin>:1:22: error: size of array ‘a’ is negative
+
+cleanup: removed malformed probe artifacts
+
+## stale_state / dirty_worktree
+ M .omo/boulder.json
+ M .omo/plans/c-compiler-rust.md
+ M .omo/run-continuation/ses_0c241b468ffeuCkDS36rF8DZEG.json
+ M src/compiler.rs
+ M src/semantics/typecheck.rs
+?? .omo/evidence/task-18-adversarial-verify-2.txt
+?? .omo/evidence/task-18-adversarial-verify-3.txt
+?? .omo/evidence/task-18-adversarial-verify-4.txt
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/evidence/task-37-adversarial-verify-2.txt
+?? .omo/evidence/task-37-adversarial-verify.txt
+?? .omo/evidence/task-38-adversarial-verify.txt
+?? .omo/evidence/task-39-adversarial-verify.txt
+?? .omo/evidence/task-40-adversarial-verify-2.txt
+?? .omo/evidence/task-40-adversarial-verify.txt
+?? .omo/evidence/task-41-adversarial-verify.txt
+?? .omo/evidence/task-42-ch15-gate.txt
+?? .omo/evidence/task-42-manual-qa.txt
+?? .omo/start-work/
+
+## misleading_success_output: invalid pointer ordered compare should fail nonzero
+status=1
+type error: ordered pointer comparison requires matching pointer types
+cleanup: removed pointer probe artifacts
+
+## long_external_commands / flaky_tests / scope_fidelity
+long commands run with 30s tool timeout; chapter gates passed in one run each; scope limited to chapter-15 array fallback and pointer-comparison guard; no harness edits.
