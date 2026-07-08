@@ -146,7 +146,7 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompilerArtifact
 
 #[cfg(test)]
 mod tests {
-    use super::{CompileOptions, compile};
+    use super::{compile, CompileOptions};
     use crate::driver::{OptimizationFlags, RegallocOptions, Stage};
     fn options(stage: Stage) -> CompileOptions {
         CompileOptions::new(
@@ -198,6 +198,16 @@ mod tests {
     fn rejects_bad_lexeme() {
         let err = compile("int main(void) { return 0@1; }", options(Stage::Lex)).unwrap_err();
         assert!(err.to_string().contains("lex error"));
+    }
+
+    #[test]
+    fn rejects_unsupported_sizeof_without_panic() {
+        let err = compile(
+            "int main(void) { return sizeof(1); }",
+            options(Stage::Parse),
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("parse error"));
     }
 
     #[test]

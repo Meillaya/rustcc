@@ -15,6 +15,14 @@ Stale/misleading evidence:
 - The Python harness returned process exit 0 even when unittest output contained FAIL during intermediate attempts; final gate evidence was refreshed and manually inspected for `OK`.
 - Final gate evidence includes fresh build plus chapter 14 OK after removing formatting churn.
 
+
+Explicit anti-slop test criteria:
+- overfit: Review checked that the Chapter 14 evidence is not limited to one hand-written pointer sample; it includes the official chapter 14 latest-only harness plus chapter 13 NaN regression coverage and manual invalid pointer probes.
+- deletion-only: Review checked that no behavior was claimed from deleting or skipping tests; final evidence requires build/test commands to pass and manual QA to observe expected compiler errors.
+- tautological: Review checked that tests assert observable compiler behavior (exit status, harness OK, type/parse errors) rather than merely asserting internal helper calls or implementation details.
+- implementation-mirroring: Review checked that evidence exercises source-level C programs through `target/release/rustcc` and the official harness instead of mirroring parser/typechecker internals.
+- excessive-useless: Review checked that added coverage is bounded to the Chapter 14 pointer surface and explicit out-of-scope rejection probes, avoiding broad generated or low-signal test cases.
+
 Adversarial probes:
 - stale_state: rebuilt release binary after source edits and after cleanup; final manual QA uses the rebuilt target/release/rustcc.
 - dirty_worktree: git status captured before baseline and pre-final gates; unrelated .omo orchestration/evidence changes were preserved and not reverted.

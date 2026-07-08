@@ -162,6 +162,7 @@ pub(crate) enum TokenKind {
     Switch,
     Case,
     Default,
+    Sizeof,
 
     // Identifiers and constants.
     Identifier(String),
@@ -235,9 +236,7 @@ impl TokenKind {
     /// Map a `Keyword` to its flat `TokenKind` representation.
     ///
     /// This keeps the keyword table declarative in `keyword.rs` while giving
-    /// the scanner a single conversion point.  The compiler guarantees this
-    /// match is exhaustive via the `unreachable!` arm -- adding a `Keyword`
-    /// variant without a corresponding `TokenKind` mapping is a compile error.
+    /// the scanner a single conversion point.
     pub(crate) fn from_keyword(keyword: Keyword) -> Self {
         match keyword {
             Keyword::Int => Self::Int,
@@ -259,7 +258,7 @@ impl TokenKind {
             Keyword::Switch => Self::Switch,
             Keyword::Case => Self::Case,
             Keyword::Default => Self::Default,
-            Keyword::Sizeof => unreachable!("sizeof is not a parser token yet"),
+            Keyword::Sizeof => Self::Sizeof,
             Keyword::Struct => Self::Struct,
             Keyword::Union => Self::Union,
             Keyword::Static => Self::Static,
@@ -344,6 +343,7 @@ impl TokenKind {
             Self::Switch => "Switch",
             Self::Case => "Case",
             Self::Default => "Default",
+            Self::Sizeof => "Sizeof",
             Self::Identifier(_) => "Identifier",
             Self::Constant(_) => "Constant",
             Self::LongConstant(_) => "LongConstant",
