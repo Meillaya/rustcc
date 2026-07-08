@@ -95,8 +95,24 @@ pub(crate) struct MemberDecl {
     pub(crate) ty: Type,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AggregateKind {
+    Struct,
+    Union,
+}
+
+impl AggregateKind {
+    pub(crate) const fn keyword(self) -> &'static str {
+        match self {
+            Self::Struct => "struct",
+            Self::Union => "union",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct StructDecl {
+    pub(crate) kind: AggregateKind,
     pub(crate) tag: String,
     pub(crate) members: Vec<MemberDecl>,
 }

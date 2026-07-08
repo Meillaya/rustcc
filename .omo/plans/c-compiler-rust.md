@@ -1771,7 +1771,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   - [ ] `struct s { int a; int b; }; int main(void) { struct s x; x.a = 5; x.b = 10; return x.a + x.b; }` -> exit 15.
   - [ ] `./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only` (core) green.
 
-- [ ] 49. W19-T2: Chapter 18 - `--union` extra (`union` types sharing storage)
+- [x] 49. W19-T2: Chapter 18 - `--union` extra (`union` types sharing storage)
 
   **What to do**: Add union extra.
   - Extend AST `Type` with `Union { name, fields }`.

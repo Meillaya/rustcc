@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use anyhow::{Result, bail};
 
 use crate::ast::{
-    AssignOp, BinaryOp, BlockItem, Expr, ForInit, GlobalDecl, GlobalVarDecl, Program, Statement,
-    StorageClass, StructDecl, TopLevelItem, Type, UnaryOp, VarDecl,
+    AggregateKind, AssignOp, BinaryOp, BlockItem, Expr, ForInit, GlobalDecl, GlobalVarDecl,
+    Program, Statement, StorageClass, StructDecl, TopLevelItem, Type, UnaryOp, VarDecl,
 };
 use crate::codegen::type_table::{self, MemberEntry, StructEntry};
 
@@ -45,6 +45,13 @@ pub fn typecheck(ast: &ResolvedProgram) -> Result<TypedProgram> {
                     && !func.ret_ty.clone().is_complete()
                 {
                     bail!("type error: function definition has incomplete return type");
+                }
+                if func.body.is_some() {
+                    for param_ty in &param_tys {
+                        if !param_ty.clone().is_complete() {
+                            bail!("type error: function definition has incomplete parameter type");
+                        }
+                    }
                 }
                 ctx.funcs
                     .insert(func.name.clone(), (param_tys, func.ret_ty.clone()));
@@ -118,7 +125,10 @@ fn validate_global_var(var: &GlobalVarDecl, ctx: &mut TypeCtx) -> Result<()> {
         }
     }
     if let Some(init) = &var.init {
-        if matches!(var.ty, Type::Array { .. } | Type::Struct(_)) {
+        if matches!(
+            var.ty,
+            Type::Array { .. } | Type::Struct(_) | Type::Union(_)
+        ) {
             if var.storage == StorageClass::Static && !initializer_is_constant(init) {
                 bail!("type error: static array initializer must be constant");
             }
@@ -181,7 +191,10 @@ fn check_var_decl(decl: &VarDecl, ctx: &mut TypeCtx) -> Result<()> {
     }
     ctx.objects.insert(decl.name.clone(), decl.ty.clone());
     if let Some(init) = &decl.init {
-        if matches!(decl.ty, Type::Array { .. } | Type::Struct(_)) {
+        if matches!(
+            decl.ty,
+            Type::Array { .. } | Type::Struct(_) | Type::Union(_)
+        ) {
             if decl.storage == StorageClass::Static && !initializer_is_constant(init) {
                 bail!("type error: static array initializer must be constant");
             }
@@ -389,6 +402,9 @@ fn type_of_expr(expr: &Expr, ctx: &TypeCtx) -> Result<Type> {
             }
             for (arg, param_ty) in args.iter().zip(params.iter()) {
                 let arg_ty = type_of_expr(arg, ctx)?;
+                if !arg_ty.clone().is_complete() {
+                    bail!("type error: argument to '{name}' has incomplete type");
+                }
                 if !can_assign(arg, &arg_ty, param_ty) {
                     bail!("type error: argument to '{name}' has incompatible type");
                 }
@@ -430,24 +446,26 @@ fn type_of_expr(expr: &Expr, ctx: &TypeCtx) -> Result<Type> {
         }
         Expr::Dot { structure, member } => {
             let structure_ty = type_of_expr(structure, ctx)?;
-            let Type::Struct(tag) = structure_ty else {
-                bail!("type error: dot operator requires structure type");
+            let tag = match structure_ty {
+                Type::Struct(tag) | Type::Union(tag) => tag,
+                _ => bail!("type error: dot operator requires aggregate type"),
             };
             type_table::member(&tag, member)
                 .map(|entry| entry.member_type)
-                .ok_or_else(|| anyhow::anyhow!("type error: struct has no member '{member}'"))
+                .ok_or_else(|| anyhow::anyhow!("type error: aggregate has no member '{member}'"))
         }
         Expr::Arrow { structure, member } => {
             let structure_ty = type_of_expr(structure, ctx)?.decay();
             let Type::Pointer(pointee) = structure_ty else {
-                bail!("type error: arrow operator requires pointer to structure");
+                bail!("type error: arrow operator requires pointer to aggregate");
             };
-            let Type::Struct(tag) = *pointee else {
-                bail!("type error: arrow operator requires pointer to structure");
+            let tag = match *pointee {
+                Type::Struct(tag) | Type::Union(tag) => tag,
+                _ => bail!("type error: arrow operator requires pointer to aggregate"),
             };
             type_table::member(&tag, member)
                 .map(|entry| entry.member_type)
-                .ok_or_else(|| anyhow::anyhow!("type error: struct has no member '{member}'"))
+                .ok_or_else(|| anyhow::anyhow!("type error: aggregate has no member '{member}'"))
         }
         Expr::InitializerList(_) => {
             bail!("type error: initializer list is only valid in an initializer")
@@ -629,6 +647,7 @@ fn can_assign(expr: &Expr, source: &Type, target: &Type) -> bool {
         || (matches!((&source, &target), (Type::Pointer(a), Type::Pointer(_)) if matches!(**a, Type::Void)))
         || (matches!((&source, &target), (Type::Pointer(_), Type::Pointer(b)) if matches!(**b, Type::Void)))
         || matches!((&source, &target), (Type::Struct(a), Type::Struct(b)) if a == b)
+        || matches!((&source, &target), (Type::Union(a), Type::Union(b)) if a == b)
         || (source.clone().is_integer() && target.clone().is_integer())
         || ((source.clone().is_integer() || matches!(source, Type::Double))
             && (target.clone().is_integer() || matches!(target, Type::Double))
@@ -674,6 +693,16 @@ fn validate_initializer(init: &Expr, target: &Type, ctx: &TypeCtx) -> Result<()>
                 validate_initializer(item, &member.member_type, ctx)?;
             }
             Ok(())
+        }
+        (Type::Union(tag), Expr::InitializerList(items)) => {
+            if items.len() != 1 {
+                bail!("type error: union initializer must have exactly one element");
+            }
+            let first = type_table::members_in_order(tag)
+                .first()
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("type error: union has no members"))?;
+            validate_initializer(&items[0], &first.member_type, ctx)
         }
         (_, Expr::InitializerList(_)) => bail!("type error: initializer list for scalar"),
         (target, expr) => {
@@ -823,6 +852,8 @@ fn validate_type(ty: &Type) -> Result<()> {
         Type::Pointer(pointee) => validate_type(pointee),
         Type::Struct(tag) if type_table::is_declared(tag) => Ok(()),
         Type::Struct(tag) => bail!("type error: undeclared struct tag '{tag}'"),
+        Type::Union(tag) if type_table::is_declared(tag) => Ok(()),
+        Type::Union(tag) => bail!("type error: undeclared union tag '{tag}'"),
         _ => Ok(()),
     }
 }
@@ -840,6 +871,9 @@ fn validate_object_type(ty: &Type) -> Result<()> {
         Type::Struct(_) if !ty.clone().is_complete() => {
             bail!("type error: object has incomplete struct type")
         }
+        Type::Union(_) if !ty.clone().is_complete() => {
+            bail!("type error: object has incomplete union type")
+        }
         _ => Ok(()),
     }
 }
@@ -850,7 +884,11 @@ fn typecheck_struct_decl(sd: &StructDecl) -> Result<()> {
         return Ok(());
     }
     if type_table::contains(&sd.tag) {
-        bail!("type error: duplicate struct definition '{}'", sd.tag);
+        bail!(
+            "type error: duplicate {} definition '{}'",
+            sd.kind.keyword(),
+            sd.tag
+        );
     }
     type_table::declare(&sd.tag);
     let mut offset = 0;
@@ -859,26 +897,36 @@ fn typecheck_struct_decl(sd: &StructDecl) -> Result<()> {
     let mut order = Vec::new();
     for member in &sd.members {
         if members.contains_key(&member.name) {
-            bail!("type error: duplicate struct member '{}'", member.name);
+            bail!("type error: duplicate aggregate member '{}'", member.name);
         }
         validate_object_type(&member.ty)?;
         let member_alignment = member.ty.clone().alignment();
-        offset = round_up(offset, member_alignment);
+        let member_offset = match sd.kind {
+            AggregateKind::Struct => {
+                offset = round_up(offset, member_alignment);
+                offset
+            }
+            AggregateKind::Union => 0,
+        };
         members.insert(
             member.name.clone(),
             MemberEntry {
                 member_type: member.ty.clone(),
-                offset,
+                offset: member_offset,
             },
         );
         order.push(member.name.clone());
         alignment = alignment.max(member_alignment);
-        offset += member.ty.clone().size();
+        match sd.kind {
+            AggregateKind::Struct => offset += member.ty.clone().size(),
+            AggregateKind::Union => offset = offset.max(member.ty.clone().size()),
+        }
     }
     let size = round_up(offset, alignment);
     type_table::add(
         sd.tag.clone(),
         StructEntry {
+            kind: sd.kind,
             size,
             alignment,
             members,

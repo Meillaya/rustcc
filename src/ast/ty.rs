@@ -37,6 +37,7 @@ pub enum Type {
         size: Option<usize>,
     },
     Struct(String),
+    Union(String),
 }
 
 impl Type {
@@ -96,7 +97,7 @@ impl Type {
                 element,
                 size: Some(_),
             } => element.is_complete(),
-            Type::Struct(tag) => crate::codegen::type_table::is_complete(&tag),
+            Type::Struct(tag) | Type::Union(tag) => crate::codegen::type_table::is_complete(&tag),
             Type::Pointer(_) => true,
             _ => true,
         }
@@ -108,7 +109,7 @@ impl Type {
             Type::Int | Type::UnsignedInt => 4,
             Type::Long | Type::UnsignedLong | Type::Double | Type::Pointer(_) => 8,
             Type::Array { element, .. } => element.alignment(),
-            Type::Struct(tag) => crate::codegen::type_table::get(&tag)
+            Type::Struct(tag) | Type::Union(tag) => crate::codegen::type_table::get(&tag)
                 .map(|entry| entry.alignment)
                 .unwrap_or(1),
             Type::Void => 1,
@@ -130,7 +131,7 @@ impl Type {
                 element,
                 size: Some(n),
             } => element.size() * n as i64,
-            Type::Struct(tag) => crate::codegen::type_table::get(&tag)
+            Type::Struct(tag) | Type::Union(tag) => crate::codegen::type_table::get(&tag)
                 .map(|entry| entry.size)
                 .unwrap_or(0),
             Type::Array { size: None, .. } | Type::Void => 0,

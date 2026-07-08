@@ -11,8 +11,8 @@ pub mod stmt;
 pub mod ty;
 
 pub(crate) use decl::{
-    BlockItem, ForInit, Function, GlobalDecl, GlobalVarDecl, MemberDecl, StorageClass, StructDecl,
-    VarDecl,
+    AggregateKind, BlockItem, ForInit, Function, GlobalDecl, GlobalVarDecl, MemberDecl,
+    StorageClass, StructDecl, VarDecl,
 };
 pub(crate) use expr::Expr;
 pub(crate) use item::{Program, TopLevelItem};

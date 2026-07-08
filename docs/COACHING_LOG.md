@@ -1034,3 +1034,32 @@ Implemented the Chapter 18 W19-T1 core struct surface in the Rust compiler pipel
 ### Remaining scope
 - W19-T3 struct ABI parameter/return classification is still pending.
 - The type table remains process-global and is reset at compile start; that matches the current single-compile path but is a future concurrency risk.
+
+## Wave 19 / Chapter 18 union extra (task 49)
+
+Implemented the Chapter 18 W19-T2 union extra on top of the already-landed struct core: `Type::Union` is now a first-class aggregate kind, the type table records union entries with `size = max(member sizes)`, `alignment = max(member alignments)`, and every member at offset `0`, and tag lookup respects the single tag namespace without falling through a shadowed struct/union kind mismatch. Typechecking and lowering now accept union initialization, union copy, and union conditionals using the shared-storage semantics expected by the chapter tests.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `cargo build --release` | exit 0 |
+| `cargo test --release` | 10 passed, 0 failed |
+| chapter 18 `--latest-only --union --stage validate` | `Ran 286 tests … OK` |
+| chapter 18 `--latest-only --union --stage codegen` | `Ran 286 tests … OK` |
+| chapter 17 `--latest-only` | `Ran 70 tests … OK` |
+| chapter 16 `--latest-only` | `Ran 72 tests … OK` |
+| forbidden bridge scan | no matches in `src/` |
+| full chapter 18 `--latest-only --union` | still red only in W19-T3 ABI buckets; union-core failures are gone |
+
+### Evidence
+
+- `.omo/evidence/task-49-ch18-union-implementation.txt`
+- `.omo/evidence/task-49-ch18-code-review.md`
+- `.omo/evidence/task-49-adversarial-verify-2.txt`
+- `.omo/evidence/task-49-ch18-union-commit.txt`
+
+### Remaining scope
+
+- W19-T3 Chapter 18 ABI classification for by-value aggregate parameters and returns remains unchecked.
+- No broader `--union` claim should be made until that ABI work lands.

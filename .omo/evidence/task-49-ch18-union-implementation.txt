@@ -1,0 +1,95 @@
+Task 49 / W19-T2 Chapter 18 --union extra evidence
+Date: 2026-07-08
+Workspace: /home/mei/projects/rustcc
+
+Implementation summary
+- Added native Type::Union and AggregateKind::{Struct, Union}; struct declarations now carry aggregate kind while preserving existing StructDecl/TopLevelItem plumbing.
+- Parser accepts union type specifiers, forward declarations, and definitions; union specifiers are rejected when combined with other type specifiers.
+- Resolver tracks one tag namespace with aggregate kind, so struct/union same-tag conflicts in the same scope are rejected and inner same-name different-kind declarations shadow outer tags correctly.
+- Type table stores aggregate kind plus members/order/size/alignment. Struct layout remains padded-offset layout. Union layout assigns every member offset 0, size=max member size rounded to max alignment, alignment=max member alignment.
+- Typechecker accepts/rejects union declarations, incomplete unions, member access, initialization, assignment/copy, conditional expressions, pointer comparisons, casts to void, and invalid scalar use consistently with the Chapter 18 union tests.
+- Lowering/codegen treats unions as byte-array aggregates where appropriate: static/local zero init, first-member union initialization plus padding, aggregate assignment/copy via CopyBytes, member access at offset 0, nested aggregate members, and aggregate conditionals.
+- Also fixed a Chapter 18 validation gap found during review: by-value function definitions require complete parameter types, and function-call arguments must be complete by-value objects. Incomplete parameter declarations remain allowed and pass once the tag is completed before definition/call.
+
+Baseline before implementation
+- cargo build --release: PASS (Finished release profile in 0.03s)
+- cargo test --release: PASS (10 binary unit tests passed; 0 lib/doc tests)
+- ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union: FAIL
+  - Ran 286 tests; FAILED (failures=54, errors=5)
+  - Union failures included parser rejection of union keyword plus union valid extra_credit semantic/member/size/copy/library cases.
+  - Pre-existing W19-T3/future failures were also present under valid/parameters and valid/params_and_returns.
+
+Final verification
+- cargo build --release: PASS (rerun before final gates; release binary rebuilt successfully)
+- cargo test --release: PASS
+  - running 10 tests in src/main.rs; all 10 passed
+  - src/lib.rs/doc-tests: 0 tests, OK
+- LSP diagnostics: PASS/no diagnostics found for modified Rust files:
+  - src/ast/decl.rs
+  - src/ast/mod.rs
+  - src/ast/ty.rs
+  - src/parse/parser.rs
+  - src/semantics/resolve.rs
+  - src/semantics/typecheck.rs
+  - src/codegen/type_table.rs
+  - src/ir/lower.rs
+- Chapter 18 validate-stage with union: PASS
+  - ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union --stage validate
+  - Ran 286 tests in 3.196s; OK
+- Chapter 18 full run with union: expected scoped FAIL due W19-T3 ABI/fixture surfaces
+  - ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union
+  - Ran 286 tests in 7.099s; FAILED (failures=31, errors=5)
+  - Remaining errors (5): valid/parameters/pass_args_on_page_boundary and valid/params_and_returns/*_page_boundary / return_pointer fixture cases that fail linking because expected *_linux.s fixture files are absent.
+  - Remaining failures (31) are confined to W19-T3 ABI parameters/returns/libraries:
+    * valid/parameters/incomplete_param_type
+    * valid/parameters/simple
+    * valid/parameters/stack_clobber
+    * valid/parameters/libraries/{classify_params,classify_params_client,modify_param,modify_param_client,param_calling_conventions,param_calling_conventions_client,pass_struct,pass_struct_client,struct_sizes,struct_sizes_client}
+    * valid/params_and_returns/{return_incomplete_type,simple,stack_clobber,temporary_lifetime}
+    * valid/params_and_returns/libraries/{access_retval_members,access_retval_members_client,missing_retval,missing_retval_client,return_calling_conventions,return_calling_conventions_client,retval_struct_sizes,retval_struct_sizes_client}
+    * valid/extra_credit/libraries/{classify_unions,classify_unions_client,param_passing,param_passing_client,union_retvals,union_retvals_client}
+  - No remaining failures from union core semantic_analysis, member_access, size_and_offset, union_copy, invalid_parse, invalid_struct_tags, or invalid_types after the implementation and validate-stage fix.
+- Chapter 17 regression: PASS
+  - ./tests/test_compiler ./target/release/rustcc --chapter 17 --latest-only
+  - Ran 70 tests in 4.161s; OK
+- Chapter 16 regression: PASS
+  - ./tests/test_compiler ./target/release/rustcc --chapter 16 --latest-only
+  - Ran 72 tests in 1.984s; OK
+  - assembler warning from existing chapter_16 valid/chars/explicit_casts.s: value shortened; test suite still OK.
+- Forbidden bridge scan: PASS/no matches
+  - grep -R "source_has_\|should_defer_parse_to_system_frontend\|semantic_error_that_should_parse\|likely_parse_error\|likely_struct_or_union_parse_error\|support::source" -n src || true
+  - no output
+- git diff --check: PASS/no whitespace errors
+
+Manual QA
+1. Union size/offset program
+   - Program declared union u { char c; int i; long l; }, checked sizeof(union u)==8 and &x.c == &x.i == &x.l.
+   - ./target/release/rustcc <temp>/union_size_offset.c && <temp>/union_size_offset
+   - exit 0
+2. Union member aliasing program
+   - Program declared union u { char bytes[8]; long l; }, initialized bytes, assigned x.l=65, then read x.bytes[0].
+   - ./target/release/rustcc <temp>/union_alias.c && <temp>/union_alias
+   - exit 0
+3. Invalid bad union member rejected
+   - Program declared union u { int a; } then returned x.nope.
+   - ./target/release/rustcc <temp>/bad_union_member.c
+   - exit 1 with: type error: aggregate has no member 'nope'
+4. Focused invalid union parse/type probes
+   - invalid_parse/extra_credit/union_decl_empty_member_list.c rejected with parse error: aggregate declaration requires at least one member
+   - invalid_types/extra_credit/union_initializers/initializer_too_long.c rejected with type error: union initializer must have exactly one element
+5. Focused valid union probes
+   - valid/extra_credit/member_access/union_init_and_member_access.c compiled and ran with exit 0
+   - valid/extra_credit/union_copy/assign_to_union.c compiled and ran with exit 0
+
+Review/debug audit
+- Code-review subagent verdict: PASS / APPROVE; no blockers. It reported no tracked bridge/test/harness modifications and full-run failures confined to expected parameter/return/library ABI buckets.
+- QA subagent verdict: PASS for union core; independently reported 49/49 focused union-core cases passing and broad runner failures classified outside union core.
+- Gate-review subagent initially rejected final approval because validate-stage had two incomplete-struct misses and review/manual QA artifacts were not yet consolidated. The validate-stage misses were fixed; final validate-stage is now OK. This file consolidates required manual QA and review evidence.
+- Debugging hypotheses with runtime evidence:
+  1. Hypothesis: union parser/type surface was absent. Baseline full gate showed parse errors "found Union" for union library tests; after implementation, no parse failures remain and validate-stage --union is OK.
+  2. Hypothesis: tag-kind lookup could incorrectly fall through to an outer same-name aggregate of the other kind. Evidence: gate review identified invalid struct/union shadowing cases as a risk; resolver lookup was changed to stop at nearest tag name even when kind mismatches; final validate-stage --union is OK.
+  3. Hypothesis: aggregate conditionals and temporary member access still treated only structs as byte-copy aggregates. Evidence: earlier full run still failed union_temp_lifetime and unions_in_conditionals; after extending aggregate conditional/copy paths to unions, those tests disappeared from the remaining failure list.
+
+Scope notes / remaining risks
+- Full Chapter 18 --union run is not green because W19-T3 ABI work is still outstanding: by-value aggregate parameter passing, aggregate returns/hidden return pointer behavior, ABI classification of structs/unions, and related library tests.
+- No commits, staging, plan checkbox edits, tests/harness edits, source bridge, typedef/bitfield/variadic/long double/etc. were added.

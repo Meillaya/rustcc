@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
-use crate::ast::Type;
+use crate::ast::{AggregateKind, Type};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MemberEntry {
@@ -11,6 +11,7 @@ pub struct MemberEntry {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructEntry {
+    pub kind: AggregateKind,
     pub size: i64,
     pub alignment: i64,
     pub members: HashMap<String, MemberEntry>,

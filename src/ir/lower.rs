@@ -55,7 +55,7 @@ fn type_to_operand_type(ty: Type) -> OperandType {
         Type::Double => OperandType::Double,
         Type::Pointer(_) => OperandType::Long,
         Type::Array { size: Some(_), .. } => OperandType::ByteArray { size: ty.size() },
-        Type::Struct(_) => OperandType::ByteArray { size: ty.size() },
+        Type::Struct(_) | Type::Union(_) => OperandType::ByteArray { size: ty.size() },
         Type::Void => OperandType::Int,
         _ => OperandType::Int,
     }
@@ -106,7 +106,9 @@ fn zero_static_init_for_type(ty: &Type) -> TackyStaticInit {
                 .map(|_| zero_static_init_for_type(element))
                 .collect(),
         ),
-        Type::Struct(_) => TackyStaticInit::StringBytes(vec![0; ty.clone().size() as usize]),
+        Type::Struct(_) | Type::Union(_) => {
+            TackyStaticInit::StringBytes(vec![0; ty.clone().size() as usize])
+        }
         ty => scalar_static_init_for(Expr::Constant(0), type_to_operand_type(ty.clone())),
     }
 }
@@ -171,6 +173,31 @@ fn static_init_for_type(expr: Expr, target_ty: &Type, ctx: &mut LowerCtx) -> Tac
                 inits.push(TackyStaticInit::StringBytes(vec![
                     0;
                     (size - offset) as usize
+                ]));
+            }
+            TackyStaticInit::Aggregate(inits)
+        }
+        (Expr::InitializerList(items), Type::Union(tag)) => {
+            let member = crate::codegen::type_table::members_in_order(tag)
+                .first()
+                .cloned();
+            let Some(member) = member else {
+                return TackyStaticInit::StringBytes(vec![0; target_ty.clone().size() as usize]);
+            };
+            let mut inits = Vec::new();
+            let init = items
+                .first()
+                .cloned()
+                .map(|item| static_init_for_type(item, &member.member_type, ctx))
+                .unwrap_or_else(|| zero_static_init_for_type(&member.member_type));
+            inits.push(init);
+            let initialized = member.member_type.clone().size();
+            let size = target_ty.clone().size();
+            if size > initialized {
+                inits.push(TackyStaticInit::StringBytes(vec![
+                    0;
+                    (size - initialized)
+                        as usize
                 ]));
             }
             TackyStaticInit::Aggregate(inits)
@@ -579,7 +606,10 @@ fn lower_block_items(items: &[BlockItem], ctx: &mut LowerCtx) -> Result<Vec<Inst
                     continue;
                 }
                 if let Some(expr) = &decl.init {
-                    if matches!(decl.ty, Type::Array { .. } | Type::Struct(_)) {
+                    if matches!(
+                        decl.ty,
+                        Type::Array { .. } | Type::Struct(_) | Type::Union(_)
+                    ) {
                         out.extend(lower_aggregate_initializer(
                             &decl.name, &decl.ty, expr, ctx,
                         )?);
@@ -745,7 +775,10 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
                             .entry(decl.name.clone())
                             .or_insert(decl.ty.clone());
                         if let Some(expr) = &decl.init {
-                            if matches!(decl.ty, Type::Array { .. } | Type::Struct(_)) {
+                            if matches!(
+                                decl.ty,
+                                Type::Array { .. } | Type::Struct(_) | Type::Union(_)
+                            ) {
                                 out.extend(lower_aggregate_initializer(
                                     &decl.name, &decl.ty, expr, ctx,
                                 )?);
@@ -1394,7 +1427,10 @@ fn zero_initialize_aggregate(
     {
         for idx in 0..*size {
             let ptr = add_const_index(base.clone(), idx, element, out, ctx);
-            if matches!(**element, Type::Array { .. } | Type::Struct(_)) {
+            if matches!(
+                **element,
+                Type::Array { .. } | Type::Struct(_) | Type::Union(_)
+            ) {
                 zero_initialize_aggregate(ptr, element, out, ctx)?;
             } else {
                 let zero = zero_value_for_type(element, out, ctx);
@@ -1408,7 +1444,10 @@ fn zero_initialize_aggregate(
     } else if let Type::Struct(tag) = ty {
         for member in crate::codegen::type_table::members_in_order(tag) {
             let ptr = add_const_byte_offset(base.clone(), member.offset, out, ctx);
-            if matches!(member.member_type, Type::Array { .. } | Type::Struct(_)) {
+            if matches!(
+                member.member_type,
+                Type::Array { .. } | Type::Struct(_) | Type::Union(_)
+            ) {
                 zero_initialize_aggregate(ptr, &member.member_type, out, ctx)?;
             } else {
                 let zero = zero_value_for_type(&member.member_type, out, ctx);
@@ -1419,9 +1458,28 @@ fn zero_initialize_aggregate(
             }
         }
         Ok(())
+    } else if let Type::Union(tag) = ty {
+        if let Some(member) = crate::codegen::type_table::members_in_order(tag)
+            .into_iter()
+            .max_by_key(|member| member.member_type.clone().size())
+        {
+            if matches!(
+                member.member_type,
+                Type::Array { .. } | Type::Struct(_) | Type::Union(_)
+            ) {
+                zero_initialize_aggregate(base, &member.member_type, out, ctx)?;
+            } else {
+                let zero = zero_value_for_type(&member.member_type, out, ctx);
+                out.push(Instruction::Store {
+                    src: zero,
+                    dst_pointer: base,
+                });
+            }
+        }
+        Ok(())
     } else {
         Err(anyhow::anyhow!(
-            "lower: array initializer target is not array"
+            "lower: initializer target is not aggregate"
         ))
     }
 }
@@ -1463,7 +1521,10 @@ fn initialize_aggregate_elements(
         }
         for (idx, item) in items.iter().enumerate() {
             let ptr = add_const_index(base.clone(), idx, element, out, ctx);
-            if matches!(**element, Type::Array { .. } | Type::Struct(_)) {
+            if matches!(
+                **element,
+                Type::Array { .. } | Type::Struct(_) | Type::Union(_)
+            ) {
                 initialize_aggregate_elements(ptr, element, item, out, ctx)?;
             } else {
                 let (instrs, value) = lower_expr(item, ctx)?;
@@ -1506,7 +1567,10 @@ fn initialize_aggregate_elements(
         }
         for (item, member) in items.iter().zip(members.iter()) {
             let ptr = add_const_byte_offset(base.clone(), member.offset, out, ctx);
-            if matches!(member.member_type, Type::Array { .. } | Type::Struct(_)) {
+            if matches!(
+                member.member_type,
+                Type::Array { .. } | Type::Struct(_) | Type::Union(_)
+            ) {
                 initialize_aggregate_elements(ptr, &member.member_type, item, out, ctx)?;
             } else {
                 let (instrs, value) = lower_expr(item, ctx)?;
@@ -1524,6 +1588,55 @@ fn initialize_aggregate_elements(
                     dst_pointer: ptr,
                 });
             }
+        }
+        Ok(())
+    } else if let Type::Union(tag) = ty {
+        if !matches!(init, Expr::InitializerList(_)) {
+            let (instrs, src_ptr) = match lower_lvalue_address(init, ctx) {
+                Ok((instrs, ptr, _)) => (instrs, ptr),
+                Err(_) => lower_expr(init, ctx)?,
+            };
+            out.extend(instrs);
+            out.push(Instruction::CopyBytes {
+                src_pointer: src_ptr,
+                dst_pointer: base,
+                size: ty.clone().size(),
+            });
+            return Ok(());
+        }
+        let Expr::InitializerList(items) = init else {
+            unreachable!()
+        };
+        if items.len() != 1 {
+            return Err(anyhow::anyhow!(
+                "type error: union initializer must have exactly one element"
+            ));
+        }
+        let member = crate::codegen::type_table::members_in_order(tag)
+            .first()
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("type error: union has no members"))?;
+        let item = &items[0];
+        if matches!(
+            member.member_type,
+            Type::Array { .. } | Type::Struct(_) | Type::Union(_)
+        ) {
+            initialize_aggregate_elements(base, &member.member_type, item, out, ctx)?;
+        } else {
+            let (instrs, value) = lower_expr(item, ctx)?;
+            out.extend(instrs);
+            let value_ty = type_of_val(&value, ctx);
+            let value = convert_to_type(
+                value,
+                value_ty,
+                type_to_operand_type(member.member_type),
+                out,
+                ctx,
+            );
+            out.push(Instruction::Store {
+                src: value,
+                dst_pointer: base,
+            });
         }
         Ok(())
     } else {
@@ -1654,7 +1767,7 @@ fn lower_assign(
     ctx: &mut LowerCtx,
 ) -> Result<(Vec<Instruction>, Val)> {
     let target_ast_ty = expr_type(target, ctx);
-    if op == AssignOp::Assign && matches!(target_ast_ty, Type::Struct(_)) {
+    if op == AssignOp::Assign && matches!(target_ast_ty, Type::Struct(_) | Type::Union(_)) {
         let (mut instrs, dst_pointer, _) = lower_lvalue_address(target, ctx)?;
         let (src_instrs, src_pointer) = match lower_lvalue_address(value, ctx) {
             Ok((src_instrs, src_pointer, _)) => (src_instrs, src_pointer),
@@ -1844,7 +1957,10 @@ fn lower_member_access(
     ctx: &mut LowerCtx,
 ) -> Result<(Vec<Instruction>, Val)> {
     let (mut instrs, ptr, member_ty) = lower_member_address(structure, member, arrow, ctx)?;
-    if matches!(member_ty, Type::Array { .. } | Type::Struct(_)) {
+    if matches!(
+        member_ty,
+        Type::Array { .. } | Type::Struct(_) | Type::Union(_)
+    ) {
         return Ok((instrs, ptr));
     }
     let dst = ctx.fresh_typed_tmp(type_to_operand_type(member_ty));
@@ -1912,7 +2028,7 @@ fn lower_member_address(
     } else {
         match lower_lvalue_address(structure, ctx) {
             Ok(parts) => parts,
-            Err(_) if matches!(expr_type(structure, ctx), Type::Struct(_)) => {
+            Err(_) if matches!(expr_type(structure, ctx), Type::Struct(_) | Type::Union(_)) => {
                 let ty = expr_type(structure, ctx);
                 let (instrs, ptr) = lower_expr(structure, ctx)?;
                 (instrs, ptr, ty)
@@ -1921,15 +2037,15 @@ fn lower_member_address(
         }
     };
     let tag = match base_ty {
-        Type::Struct(tag) => tag,
+        Type::Struct(tag) | Type::Union(tag) => tag,
         Type::Pointer(pointee) => match *pointee {
-            Type::Struct(tag) => tag,
-            _ => return Err(anyhow::anyhow!("lower: member access on non-struct")),
+            Type::Struct(tag) | Type::Union(tag) => tag,
+            _ => return Err(anyhow::anyhow!("lower: member access on non-aggregate")),
         },
-        _ => return Err(anyhow::anyhow!("lower: member access on non-struct")),
+        _ => return Err(anyhow::anyhow!("lower: member access on non-aggregate")),
     };
     let entry = crate::codegen::type_table::member(&tag, member)
-        .ok_or_else(|| anyhow::anyhow!("lower: unknown struct member '{member}'"))?;
+        .ok_or_else(|| anyhow::anyhow!("lower: unknown aggregate member '{member}'"))?;
     let ptr = add_const_byte_offset(base_ptr, entry.offset, &mut instrs, ctx);
     Ok((instrs, ptr, entry.member_type))
 }
@@ -2112,7 +2228,7 @@ fn lower_conditional(
     let else_label = ctx.labels.next_with_prefix("cond_else");
     let end_label = ctx.labels.next_with_prefix("cond_end");
     let result_ast_ty = expr_type(then_expr, ctx);
-    if matches!(result_ast_ty, Type::Struct(_)) {
+    if matches!(result_ast_ty, Type::Struct(_) | Type::Union(_)) {
         let (cond_instrs, cond_val) = lower_expr(condition, ctx)?;
         let (mut then_instrs, then_ptr, _) = lower_lvalue_address(then_expr, ctx)?;
         let (mut else_instrs, else_ptr, _) = lower_lvalue_address(else_expr, ctx)?;
@@ -2421,7 +2537,7 @@ fn expr_type(expr: &Expr, ctx: &LowerCtx) -> Type {
         } => {
             let then_ty = expr_type(then_expr, ctx);
             let else_ty = expr_type(else_expr, ctx);
-            if matches!(then_ty, Type::Struct(_)) && then_ty == else_ty {
+            if matches!(then_ty, Type::Struct(_) | Type::Union(_)) && then_ty == else_ty {
                 then_ty
             } else if matches!(then_ty, Type::Pointer(_)) {
                 then_ty
@@ -2485,16 +2601,20 @@ fn expr_type(expr: &Expr, ctx: &LowerCtx) -> Type {
         },
         Expr::Subscript { base, .. } => subscript_element_type(base, ctx),
         Expr::Dot { structure, member } => match expr_type(structure, ctx) {
-            Type::Struct(tag) => crate::codegen::type_table::member(&tag, member)
-                .map(|entry| entry.member_type)
-                .unwrap_or(Type::Int),
+            Type::Struct(tag) | Type::Union(tag) => {
+                crate::codegen::type_table::member(&tag, member)
+                    .map(|entry| entry.member_type)
+                    .unwrap_or(Type::Int)
+            }
             _ => Type::Int,
         },
         Expr::Arrow { structure, member } => match expr_type(structure, ctx).decay() {
             Type::Pointer(pointee) => match *pointee {
-                Type::Struct(tag) => crate::codegen::type_table::member(&tag, member)
-                    .map(|entry| entry.member_type)
-                    .unwrap_or(Type::Int),
+                Type::Struct(tag) | Type::Union(tag) => {
+                    crate::codegen::type_table::member(&tag, member)
+                        .map(|entry| entry.member_type)
+                        .unwrap_or(Type::Int)
+                }
                 _ => Type::Int,
             },
             _ => Type::Int,

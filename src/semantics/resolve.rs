@@ -60,8 +60,8 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, bail};
 
 use crate::ast::{
-    BlockItem, Expr, ForInit, Function, GlobalDecl, GlobalVarDecl, Program, Statement,
-    StorageClass, StructDecl, TopLevelItem, Type, VarDecl,
+    AggregateKind, BlockItem, Expr, ForInit, Function, GlobalDecl, GlobalVarDecl, Program,
+    Statement, StorageClass, StructDecl, TopLevelItem, Type, VarDecl,
 };
 
 /// Thin wrapper that carries a `Program` after resolution.
@@ -874,9 +874,15 @@ fn resolve_expr(
     }
 }
 
+#[derive(Debug, Clone)]
+struct TagEntry {
+    kind: AggregateKind,
+    unique: String,
+}
+
 #[derive(Debug)]
 struct TagScopes {
-    scopes: Vec<HashMap<String, String>>,
+    scopes: Vec<HashMap<String, TagEntry>>,
     next_id: u32,
 }
 
@@ -902,14 +908,26 @@ impl TagScopes {
             .last()
             .and_then(|scope| scope.get(&sd.tag).cloned())
         {
-            existing
+            if existing.kind != sd.kind {
+                bail!(
+                    "resolve error: conflicting aggregate tag '{}' in same scope",
+                    sd.tag
+                );
+            }
+            existing.unique
         } else {
-            let unique = format!("struct.{}.{}", sd.tag, self.next_id);
+            let unique = format!("{}.{}.{}", sd.kind.keyword(), sd.tag, self.next_id);
             self.next_id += 1;
             self.scopes
                 .last_mut()
-                .ok_or_else(|| anyhow::anyhow!("resolve error: missing struct tag scope"))?
-                .insert(sd.tag.clone(), unique.clone());
+                .ok_or_else(|| anyhow::anyhow!("resolve error: missing aggregate tag scope"))?
+                .insert(
+                    sd.tag.clone(),
+                    TagEntry {
+                        kind: sd.kind,
+                        unique: unique.clone(),
+                    },
+                );
             unique
         };
         let members = sd
@@ -923,6 +941,7 @@ impl TagScopes {
             })
             .collect::<Result<Vec<_>>>()?;
         Ok(StructDecl {
+            kind: sd.kind,
             tag: unique,
             members,
         })
@@ -936,18 +955,24 @@ impl TagScopes {
                 size: *size,
             }),
             Type::Struct(tag) => self
-                .lookup(tag)
+                .lookup(tag, AggregateKind::Struct)
                 .map(Type::Struct)
                 .ok_or_else(|| anyhow::anyhow!("resolve error: undeclared struct tag '{tag}'")),
+            Type::Union(tag) => self
+                .lookup(tag, AggregateKind::Union)
+                .map(Type::Union)
+                .ok_or_else(|| anyhow::anyhow!("resolve error: undeclared union tag '{tag}'")),
             other => Ok(other.clone()),
         }
     }
 
-    fn lookup(&self, tag: &str) -> Option<String> {
-        self.scopes
-            .iter()
-            .rev()
-            .find_map(|scope| scope.get(tag).cloned())
+    fn lookup(&self, tag: &str, kind: AggregateKind) -> Option<String> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(entry) = scope.get(tag) {
+                return (entry.kind == kind).then(|| entry.unique.clone());
+            }
+        }
+        None
     }
 }
 

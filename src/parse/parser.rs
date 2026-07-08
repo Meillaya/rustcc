@@ -18,8 +18,9 @@
 use anyhow::{Result, bail};
 
 use crate::ast::{
-    AssignOp, BinaryOp, BlockItem, Expr, ForInit, Function, GlobalDecl, GlobalVarDecl, MemberDecl,
-    Program, Statement, StorageClass, StructDecl, TopLevelItem, Type, UnaryOp, VarDecl,
+    AggregateKind, AssignOp, BinaryOp, BlockItem, Expr, ForInit, Function, GlobalDecl,
+    GlobalVarDecl, MemberDecl, Program, Statement, StorageClass, StructDecl, TopLevelItem, Type,
+    UnaryOp, VarDecl,
 };
 use crate::lex::{Token, TokenKind};
 use crate::parse::precedence::{Precedence, precedence_of};
@@ -46,6 +47,7 @@ fn is_type_specifier_start(kind: &TokenKind) -> bool {
             | TokenKind::Double
             | TokenKind::Void
             | TokenKind::Struct
+            | TokenKind::Union
     )
 }
 
@@ -123,8 +125,10 @@ impl Parser {
     /// `nqcc2/lib/parse.ml` `parse_function_or_variable_declaration`
     /// (~lines 798-823) for chapter-10 surface.
     fn parse_top_level_item(&mut self) -> Result<TopLevelItem> {
-        if self.is_struct_declaration() {
-            return Ok(TopLevelItem::StructDecl(self.parse_struct_declaration()?));
+        if self.is_aggregate_declaration() {
+            return Ok(TopLevelItem::StructDecl(
+                self.parse_aggregate_declaration()?,
+            ));
         }
         // Chapter 11: storage-class specifiers may appear in any
         // order relative to the type specifiers (`static int long`,
@@ -256,7 +260,7 @@ impl Parser {
                     saw_void = true;
                     self.current += 1;
                 }
-                TokenKind::Struct => {
+                TokenKind::Struct | TokenKind::Union => {
                     if saw_int
                         || saw_long
                         || saw_unsigned
@@ -266,10 +270,10 @@ impl Parser {
                         || saw_void
                     {
                         bail!(
-                            "parse error: 'struct' cannot be combined with other type specifiers"
+                            "parse error: aggregate type specifier cannot be combined with other type specifiers"
                         );
                     }
-                    let ty = self.parse_struct_type_specifier()?;
+                    let ty = self.parse_aggregate_type_specifier()?;
                     return Ok((ty, storage));
                 }
                 TokenKind::Static => {
@@ -366,8 +370,8 @@ impl Parser {
     /// `double` (which cannot be combined with `int` / `long` /
     /// `unsigned` / `signed`).
     fn parse_type_specifier(&mut self) -> Result<Type> {
-        if self.check(&TokenKind::Struct) {
-            return self.parse_struct_type_specifier();
+        if self.check(&TokenKind::Struct) || self.check(&TokenKind::Union) {
+            return self.parse_aggregate_type_specifier();
         }
         let mut is_long = false;
         let mut saw_int = false;
@@ -480,14 +484,27 @@ impl Parser {
         }
     }
 
-    fn parse_struct_type_specifier(&mut self) -> Result<Type> {
-        self.expect_exact(&TokenKind::Struct, "'struct'")?;
-        let tag = self.expect_identifier("struct tag")?;
-        Ok(Type::Struct(tag))
+    fn parse_aggregate_type_specifier(&mut self) -> Result<Type> {
+        let kind = self.parse_aggregate_keyword()?;
+        let tag = self.expect_identifier(&format!("{} tag", kind.keyword()))?;
+        Ok(match kind {
+            AggregateKind::Struct => Type::Struct(tag),
+            AggregateKind::Union => Type::Union(tag),
+        })
     }
 
-    fn is_struct_declaration(&self) -> bool {
-        self.check(&TokenKind::Struct)
+    fn parse_aggregate_keyword(&mut self) -> Result<AggregateKind> {
+        if self.match_exact(&TokenKind::Struct) {
+            Ok(AggregateKind::Struct)
+        } else if self.match_exact(&TokenKind::Union) {
+            Ok(AggregateKind::Union)
+        } else {
+            bail!("parse error: expected 'struct' or 'union'")
+        }
+    }
+
+    fn is_aggregate_declaration(&self) -> bool {
+        matches!(self.peek().kind, TokenKind::Struct | TokenKind::Union)
             && matches!(
                 self.tokens.get(self.current + 1).map(|t| &t.kind),
                 Some(TokenKind::Identifier(_))
@@ -502,40 +519,44 @@ impl Parser {
         let base_ty = self.parse_type_specifier()?;
         let decl = self.parse_declarator()?;
         if self.match_exact(&TokenKind::Equal) {
-            bail!("parse error: struct member declarations cannot have initializers");
+            bail!("parse error: aggregate member declarations cannot have initializers");
         }
-        self.expect_exact(&TokenKind::Semicolon, "';' after struct member declaration")?;
+        self.expect_exact(
+            &TokenKind::Semicolon,
+            "';' after aggregate member declaration",
+        )?;
         match Self::process_declarator(decl, base_ty)? {
             DeclShape::Object { name, ty } => Ok(MemberDecl { name, ty }),
             DeclShape::Function { .. } => {
-                bail!("parse error: struct member cannot be a function")
+                bail!("parse error: aggregate member cannot be a function")
             }
         }
     }
 
-    fn parse_struct_declaration(&mut self) -> Result<StructDecl> {
-        self.expect_exact(&TokenKind::Struct, "'struct'")?;
-        let tag = self.expect_identifier("struct tag")?;
+    fn parse_aggregate_declaration(&mut self) -> Result<StructDecl> {
+        let kind = self.parse_aggregate_keyword()?;
+        let tag = self.expect_identifier(&format!("{} tag", kind.keyword()))?;
         if self.match_exact(&TokenKind::Semicolon) {
             return Ok(StructDecl {
+                kind,
                 tag,
                 members: Vec::new(),
             });
         }
-        self.expect_exact(&TokenKind::OpenBrace, "'{' in struct declaration")?;
+        self.expect_exact(&TokenKind::OpenBrace, "'{' in aggregate declaration")?;
         if self.check(&TokenKind::CloseBrace) {
-            bail!("parse error: struct declaration requires at least one member");
+            bail!("parse error: aggregate declaration requires at least one member");
         }
         let mut members = Vec::new();
         while !self.check(&TokenKind::CloseBrace) {
             if self.check(&TokenKind::Eof) {
-                bail!("parse error: expected '}}' to close struct declaration");
+                bail!("parse error: expected '}}' to close aggregate declaration");
             }
             members.push(self.parse_member_declaration()?);
         }
-        self.expect_exact(&TokenKind::CloseBrace, "'}' after struct members")?;
-        self.expect_exact(&TokenKind::Semicolon, "';' after struct declaration")?;
-        Ok(StructDecl { tag, members })
+        self.expect_exact(&TokenKind::CloseBrace, "'}' after aggregate members")?;
+        self.expect_exact(&TokenKind::Semicolon, "';' after aggregate declaration")?;
+        Ok(StructDecl { kind, tag, members })
     }
 
     fn parse_declarator(&mut self) -> Result<Declarator> {
@@ -790,8 +811,8 @@ impl Parser {
             || self.peek().kind == TokenKind::Static
             || self.peek().kind == TokenKind::Extern
         {
-            if self.is_struct_declaration() {
-                return Ok(BlockItem::StructDecl(self.parse_struct_declaration()?));
+            if self.is_aggregate_declaration() {
+                return Ok(BlockItem::StructDecl(self.parse_aggregate_declaration()?));
             }
             let (base_ty, storage) = self.parse_specifiers_interleaved()?;
             let decl = self.parse_declarator()?;

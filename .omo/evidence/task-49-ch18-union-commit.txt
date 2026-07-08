@@ -1,0 +1,61 @@
+# Task 49 Chapter 18 Union Commit Evidence
+
+Date: 2026-07-08
+Workspace: /home/mei/projects/rustcc
+Task: W19-T2 Chapter 18 `--union` extra
+Status: APPROVED
+
+## Approval basis
+
+- `.omo/evidence/task-49-adversarial-verify-2.txt`
+- `.omo/evidence/task-49-ch18-code-review.md`
+- `.omo/evidence/task-49-ch18-union-implementation.txt`
+
+## Fresh verification run
+
+- `cargo build --release`: PASS, exit 0, finished release profile in 0.02s
+- `cargo test --release`: PASS, 10 tests passed, 0 failed
+- `./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union --stage validate`: PASS, 286 tests OK
+- `./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union --stage codegen`: PASS, 286 tests OK
+- `./tests/test_compiler ./target/release/rustcc --chapter 17 --latest-only`: PASS, 70 tests OK
+- `./tests/test_compiler ./target/release/rustcc --chapter 16 --latest-only`: PASS, 72 tests OK, existing assembler shortening warning only
+- forbidden bridge scan over `src/`: PASS, no matches
+- full Chapter 18 `--latest-only --union`: still red only in W19-T3 ABI buckets per approval evidence
+
+## Staged scope for the task-49 commit
+
+- `src/ast/decl.rs`
+- `src/ast/mod.rs`
+- `src/ast/ty.rs`
+- `src/codegen/type_table.rs`
+- `src/ir/lower.rs`
+- `src/parse/parser.rs`
+- `src/semantics/resolve.rs`
+- `src/semantics/typecheck.rs`
+- `docs/COACHING_LOG.md`
+- `.omo/plans/c-compiler-rust.md`
+- `.omo/evidence/task-49-adversarial-verify-2.txt`
+- `.omo/evidence/task-49-adversarial-verify-2-gate-review.md`
+- `.omo/evidence/task-49-adversarial-verify-gate-review.md`
+- `.omo/evidence/task-49-adversarial-verify.txt`
+- `.omo/evidence/task-49-ch18-code-review.md`
+- `.omo/evidence/task-49-ch18-union-implementation.txt`
+- `.omo/evidence/task-49-ch18-union-commit.txt`
+
+## Git-log evidence
+
+Recent commit subjects in this repository are semantic feature/plan lines and match the task-49 commit style:
+
+1. `feat(compiler): chapter 18: core structs`
+2. `plan: record chapter 17 gate verification`
+3. `feat(compiler): chapter 17: dynamic memory support`
+4. `plan: record chapter 16 gate verification`
+5. `feat(compiler): chapter 16: chars and strings`
+6. `feat(compiler): chapter 15: arrays and pointer arithmetic`
+7. `feat(compiler): chapter 15: arrays and pointer arithmetic`
+8. `feat(compiler): chapter 15: arrays and pointer arithmetic`
+
+## Scope reminder
+
+- W19-T3 Chapter 18 ABI classification remains unchecked.
+- The union-core work is approved; the full `--union` gate is not green until W19-T3 lands.
