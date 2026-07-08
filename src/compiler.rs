@@ -207,13 +207,16 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unsupported_sizeof_without_panic() {
-        let err = compile(
-            "int main(void) { return sizeof(1); }",
-            options(Stage::Parse),
+    fn parses_sizeof_expression_without_evaluating_it() {
+        let artifacts = compile(
+            "int main(void) { int x = 1; return sizeof(x = 2); }",
+            options(Stage::Tacky),
         )
-        .unwrap_err();
-        assert!(err.to_string().contains("parse error"));
+        .unwrap();
+        let tacky = artifacts.tacky_pretty.unwrap();
+        assert!(tacky.contains("Constant(\n                        4,"));
+        assert!(tacky.contains("\"const.0\": ULong"));
+        assert!(!tacky.contains("Constant(\n                        2,"));
     }
 
     #[test]

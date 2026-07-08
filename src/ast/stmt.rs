@@ -26,7 +26,7 @@ use super::{
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Statement {
-    Return(Expr),
+    Return(Option<Expr>),
     Block(Vec<BlockItem>),
     While {
         condition: Expr,

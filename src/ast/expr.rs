@@ -32,6 +32,8 @@ pub(crate) enum Expr {
         target_type: Type,
         expr: Box<Expr>,
     },
+    SizeOfExpr(Box<Expr>),
+    SizeOfType(Type),
     Paren(Box<Expr>),
     /// A unary operation. Carries the operator kind via [`UnaryOp`] so the
     /// parser, lowerer, and codegen can dispatch on a single field.  Covers

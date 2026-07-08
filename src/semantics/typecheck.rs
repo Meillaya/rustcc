@@ -80,6 +80,13 @@ fn validate_function_signature(
     ret_ty: &Type,
     ctx: &TypeCtx,
 ) -> Result<()> {
+    for param_ty in param_tys {
+        if matches!(param_ty, Type::Void) {
+            bail!("type error: function parameter has void type");
+        }
+        validate_type(param_ty)?;
+    }
+    validate_type(ret_ty)?;
     if let Some((existing_params, existing_ret)) = ctx.funcs.get(name) {
         if existing_params.as_slice() != param_tys || existing_ret != ret_ty {
             bail!("type error: conflicting declarations for function '{name}'");
@@ -133,8 +140,8 @@ fn check_block_item(item: &BlockItem, ctx: &mut TypeCtx) -> Result<()> {
     match item {
         BlockItem::Declaration(decl) => check_var_decl(decl, ctx),
         BlockItem::FunctionDecl(decl) => {
-            validate_function_decl(decl)?;
-            let param_tys = decl.params.iter().map(|p| p.ty.clone()).collect();
+            let param_tys: Vec<Type> = decl.params.iter().map(|p| p.ty.clone()).collect();
+            validate_function_signature(&decl.name, &param_tys, &decl.ret_ty, ctx)?;
             ctx.funcs
                 .insert(decl.name.clone(), (param_tys, decl.ret_ty.clone()));
             Ok(())
@@ -172,9 +179,21 @@ fn check_var_decl(decl: &VarDecl, ctx: &mut TypeCtx) -> Result<()> {
 fn check_statement(stmt: &Statement, ctx: &mut TypeCtx) -> Result<()> {
     match stmt {
         Statement::Return(expr) => {
-            let expr_ty = type_of_expr(expr, ctx)?;
-            if !can_assign(expr, &expr_ty, &ctx.current_return) {
-                bail!("type error: return expression has incompatible type");
+            match expr {
+                Some(expr) => {
+                    if matches!(ctx.current_return, Type::Void) {
+                        bail!("type error: function with void return type cannot return a value");
+                    }
+                    let expr_ty = type_of_expr(expr, ctx)?;
+                    if !can_assign(expr, &expr_ty, &ctx.current_return) {
+                        bail!("type error: return expression has incompatible type");
+                    }
+                }
+                None => {
+                    if !matches!(ctx.current_return, Type::Void) {
+                        bail!("type error: function with non-void return type must return a value");
+                    }
+                }
             }
             Ok(())
         }
@@ -284,17 +303,40 @@ fn type_of_expr(expr: &Expr, ctx: &TypeCtx) -> Result<Type> {
             validate_cast(&source, target_type)?;
             Ok(target_type.clone())
         }
+        Expr::SizeOfExpr(inner) => {
+            let ty = type_of_expr(inner, ctx)?;
+            if !ty.is_complete() {
+                bail!("type error: cannot apply sizeof to incomplete type");
+            }
+            Ok(Type::UnsignedLong)
+        }
+        Expr::SizeOfType(ty) => {
+            validate_type(ty)?;
+            if !ty.clone().is_complete() {
+                bail!("type error: cannot apply sizeof to incomplete type");
+            }
+            Ok(Type::UnsignedLong)
+        }
         Expr::Unary { op, expr } => type_unary(*op, expr, ctx),
         Expr::PreInc(inner) | Expr::PreDec(inner) | Expr::PostInc(inner) | Expr::PostDec(inner) => {
             if !inner.is_lvalue() {
                 bail!("type error: increment/decrement target is not an lvalue");
             }
             let ty = type_of_expr(inner, ctx)?;
-            if !ty.clone().decay().is_pointer()
-                && !ty.clone().is_integer()
-                && !matches!(ty, Type::Double)
-            {
-                bail!("type error: increment/decrement target must be scalar");
+            match ty.clone().decay() {
+                Type::Pointer(pointee) if matches!(*pointee, Type::Void) => {
+                    bail!("type error: cannot increment/decrement void pointer");
+                }
+                Type::Pointer(_)
+                | Type::Int
+                | Type::Long
+                | Type::UnsignedInt
+                | Type::UnsignedLong
+                | Type::Char
+                | Type::SignedChar
+                | Type::UnsignedChar
+                | Type::Double => {}
+                _ => bail!("type error: increment/decrement target must be scalar"),
             }
             Ok(ty)
         }
@@ -369,6 +411,9 @@ fn type_of_expr(expr: &Expr, ctx: &TypeCtx) -> Result<Type> {
 fn type_unary(op: UnaryOp, expr: &Expr, ctx: &TypeCtx) -> Result<Type> {
     let ty = type_of_expr(expr, ctx)?;
     match op {
+        UnaryOp::Not if matches!(ty, Type::Void) => {
+            bail!("type error: logical not requires scalar operand")
+        }
         UnaryOp::Not => Ok(Type::Int),
         UnaryOp::Negate => {
             if ty.clone().is_integer() || matches!(ty, Type::Double) {
@@ -436,18 +481,28 @@ fn type_binary(op: BinaryOp, left: &Expr, right: &Expr, ctx: &TypeCtx) -> Result
             Ok(Type::Int)
         }
         BinaryOp::Add => match (&left_ty, &right_ty) {
-            (Type::Pointer(_), _) if right_ty.clone().is_integer() => Ok(left_ty),
-            (_, Type::Pointer(_)) if left_ty.clone().is_integer() => Ok(right_ty),
+            (Type::Pointer(pointee), _) if right_ty.clone().is_integer() => {
+                validate_complete_pointee(pointee)?;
+                Ok(left_ty)
+            }
+            (_, Type::Pointer(pointee)) if left_ty.clone().is_integer() => {
+                validate_complete_pointee(pointee)?;
+                Ok(right_ty)
+            }
             (Type::Pointer(_), _) | (_, Type::Pointer(_)) => {
                 bail!("type error: pointer addition requires integer offset")
             }
             _ => common_arithmetic(&left_ty, &right_ty),
         },
         BinaryOp::Subtract => match (&left_ty, &right_ty) {
-            (Type::Pointer(_), _) if right_ty.clone().is_integer() => Ok(left_ty),
+            (Type::Pointer(pointee), _) if right_ty.clone().is_integer() => {
+                validate_complete_pointee(pointee)?;
+                Ok(left_ty)
+            }
             (Type::Pointer(left_pointee), Type::Pointer(right_pointee))
                 if left_pointee == right_pointee =>
             {
+                validate_complete_pointee(left_pointee)?;
                 Ok(Type::Long)
             }
             (Type::Pointer(_), _) | (_, Type::Pointer(_)) => {
@@ -493,11 +548,21 @@ fn compound_to_binary(op: AssignOp) -> Result<BinaryOp> {
 
 fn validate_cast(source: &Type, target: &Type) -> Result<()> {
     let source = source.clone().decay();
+    validate_type(target)?;
     if matches!(source, Type::Double) && matches!(target, Type::Pointer(_)) {
         bail!("type error: cannot cast double to pointer");
     }
     if matches!(source, Type::Pointer(_)) && matches!(target, Type::Double) {
         bail!("type error: cannot cast pointer to double");
+    }
+    if matches!(target, Type::Void) {
+        return Ok(());
+    }
+    if !is_scalar_type(&source) {
+        bail!("type error: can only cast scalar expressions to non-void type");
+    }
+    if !is_scalar_type(target) {
+        bail!("type error: can only cast to scalar types or void");
     }
     Ok(())
 }
@@ -508,6 +573,8 @@ fn can_assign(expr: &Expr, source: &Type, target: &Type) -> bool {
     source == target
         || (is_null_pointer_constant(expr) && matches!(target, Type::Pointer(_)))
         || (matches!((&source, &target), (Type::Pointer(a), Type::Pointer(b)) if a == b))
+        || (matches!((&source, &target), (Type::Pointer(a), Type::Pointer(_)) if matches!(**a, Type::Void)))
+        || (matches!((&source, &target), (Type::Pointer(_), Type::Pointer(b)) if matches!(**b, Type::Void)))
         || (source.clone().is_integer() && target.clone().is_integer())
         || ((source.clone().is_integer() || matches!(source, Type::Double))
             && (target.clone().is_integer() || matches!(target, Type::Double))
@@ -571,7 +638,7 @@ fn initializer_is_constant(init: &Expr) -> bool {
 fn is_null_pointer_constant(expr: &Expr) -> bool {
     match expr {
         Expr::Constant(0) | Expr::LongConstant(0) | Expr::UIntConstant(0, _) => true,
-        Expr::Paren(inner) | Expr::Cast { expr: inner, .. } => is_null_pointer_constant(inner),
+        Expr::Paren(inner) => is_null_pointer_constant(inner),
         _ => false,
     }
 }
@@ -580,12 +647,20 @@ fn comparable(left: &Expr, left_ty: &Type, right: &Expr, right_ty: &Type) -> Res
     let left_ty = left_ty.clone().decay();
     let right_ty = right_ty.clone().decay();
     if left_ty == right_ty {
+        if matches!(left_ty, Type::Void) {
+            bail!("type error: cannot compare void expressions");
+        }
         return Ok(());
     }
     if matches!(left_ty, Type::Pointer(_)) && is_null_pointer_constant(right) {
         return Ok(());
     }
     if matches!(right_ty, Type::Pointer(_)) && is_null_pointer_constant(left) {
+        return Ok(());
+    }
+    if matches!((&left_ty, &right_ty), (Type::Pointer(a), Type::Pointer(_)) if matches!(**a, Type::Void))
+        || matches!((&left_ty, &right_ty), (Type::Pointer(_), Type::Pointer(b)) if matches!(**b, Type::Void))
+    {
         return Ok(());
     }
     if left_ty.clone().is_integer() && right_ty.clone().is_integer() {
@@ -605,11 +680,19 @@ fn common_type(left: &Expr, left_ty: &Type, right: &Expr, right_ty: &Type) -> Re
     if left_ty == right_ty {
         return Ok(left_ty);
     }
+    if matches!(left_ty, Type::Void) || matches!(right_ty, Type::Void) {
+        bail!("type error: conditional operands have incompatible void type");
+    }
     if matches!(left_ty, Type::Pointer(_)) && is_null_pointer_constant(right) {
         return Ok(left_ty.clone());
     }
     if matches!(right_ty, Type::Pointer(_)) && is_null_pointer_constant(left) {
         return Ok(right_ty.clone());
+    }
+    if matches!((&left_ty, &right_ty), (Type::Pointer(a), Type::Pointer(_)) if matches!(**a, Type::Void))
+        || matches!((&left_ty, &right_ty), (Type::Pointer(_), Type::Pointer(b)) if matches!(**b, Type::Void))
+    {
+        return Ok(Type::Pointer(Box::new(Type::Void)));
     }
     common_arithmetic(&left_ty, &right_ty)
 }
@@ -617,6 +700,9 @@ fn common_type(left: &Expr, left_ty: &Type, right: &Expr, right_ty: &Type) -> Re
 fn common_arithmetic(left: &Type, right: &Type) -> Result<Type> {
     let left = promote_char_type(left.clone());
     let right = promote_char_type(right.clone());
+    if !is_arithmetic_type(&left) || !is_arithmetic_type(&right) {
+        bail!("type error: arithmetic operands expected");
+    }
     if matches!(left, Type::Pointer(_)) || matches!(right, Type::Pointer(_)) {
         bail!("type error: pointer is not an arithmetic operand");
     }
@@ -651,6 +737,29 @@ fn ensure_scalar(ty: &Type) -> Result<()> {
     Ok(())
 }
 
+fn is_scalar_type(ty: &Type) -> bool {
+    matches!(ty, Type::Pointer(_)) || ty.clone().is_integer() || matches!(ty, Type::Double)
+}
+
+fn is_arithmetic_type(ty: &Type) -> bool {
+    ty.clone().is_integer() || matches!(ty, Type::Double)
+}
+
+fn validate_complete_pointee(pointee: &Type) -> Result<()> {
+    if !pointee.clone().is_complete() {
+        bail!("type error: pointer arithmetic requires complete pointed-to type");
+    }
+    Ok(())
+}
+
+fn validate_type(ty: &Type) -> Result<()> {
+    match ty {
+        Type::Array { element, .. } => validate_object_type(element),
+        Type::Pointer(pointee) => validate_type(pointee),
+        _ => Ok(()),
+    }
+}
+
 fn validate_object_type(ty: &Type) -> Result<()> {
     match ty {
         Type::Array { element, size } => {
@@ -659,6 +768,7 @@ fn validate_object_type(ty: &Type) -> Result<()> {
             }
             validate_object_type(element)
         }
+        Type::Pointer(pointee) => validate_type(pointee),
         Type::Void => bail!("type error: object has void type"),
         _ => Ok(()),
     }

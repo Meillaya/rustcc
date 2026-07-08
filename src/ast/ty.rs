@@ -91,8 +91,12 @@ impl Type {
     pub fn is_complete(self) -> bool {
         match self {
             Type::Array { size: None, .. } | Type::Void => false,
+            Type::Array {
+                element,
+                size: Some(_),
+            } => element.is_complete(),
             Type::Pointer(_) => true,
-            other => !matches!(other, Type::Array { .. }),
+            _ => true,
         }
     }
 

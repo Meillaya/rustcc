@@ -35,6 +35,19 @@ fn adjust_param_type(ty: Type) -> Type {
     }
 }
 
+fn is_type_specifier_start(kind: &TokenKind) -> bool {
+    matches!(
+        kind,
+        TokenKind::Int
+            | TokenKind::Long
+            | TokenKind::Unsigned
+            | TokenKind::Signed
+            | TokenKind::Char
+            | TokenKind::Double
+            | TokenKind::Void
+    )
+}
+
 struct Parser {
     tokens: Vec<Token>,
     current: usize,
@@ -183,6 +196,7 @@ impl Parser {
         let mut saw_long = false;
         let mut is_double = false;
         let mut saw_char = false;
+        let mut saw_void = false;
         let mut storage = StorageClass::Auto;
         let mut had_storage = false;
         loop {
@@ -231,6 +245,13 @@ impl Parser {
                     saw_char = true;
                     self.current += 1;
                 }
+                TokenKind::Void => {
+                    if saw_void {
+                        bail!("parse error: duplicate 'void' in type specifier");
+                    }
+                    saw_void = true;
+                    self.current += 1;
+                }
                 TokenKind::Static => {
                     if had_storage {
                         bail!("parse error: multiple storage-class specifiers in declaration");
@@ -250,9 +271,16 @@ impl Parser {
                 _ => break,
             }
         }
-        if !saw_int && !is_long && !is_unsigned && !saw_signed && !is_double && !saw_char {
+        if !saw_int
+            && !is_long
+            && !is_unsigned
+            && !saw_signed
+            && !is_double
+            && !saw_char
+            && !saw_void
+        {
             bail!(
-                "parse error: expected a type specifier ('int' / 'long' / 'double' / 'unsigned' / 'signed' / 'char'), found {:?}",
+                "parse error: expected a type specifier ('int' / 'long' / 'double' / 'unsigned' / 'signed' / 'char' / 'void'), found {:?}",
                 self.peek().kind
             );
         }
@@ -265,7 +293,12 @@ impl Parser {
         if saw_char && (is_long || saw_int || is_double) {
             bail!("parse error: 'char' cannot be combined with int, long, or double");
         }
-        let ty = if is_double {
+        if saw_void && (saw_int || is_long || is_unsigned || saw_signed || is_double || saw_char) {
+            bail!("parse error: 'void' cannot be combined with other type specifiers");
+        }
+        let ty = if saw_void {
+            Type::Void
+        } else if is_double {
             Type::Double
         } else if saw_char && is_unsigned {
             Type::UnsignedChar
@@ -318,6 +351,7 @@ impl Parser {
         let mut saw_long = false;
         let mut saw_double = false;
         let mut saw_char = false;
+        let mut saw_void = false;
         let mut is_unsigned = false;
         let mut saw_unsigned = false;
         let mut saw_signed = false;
@@ -352,6 +386,13 @@ impl Parser {
                     saw_char = true;
                     self.current += 1;
                 }
+                TokenKind::Void => {
+                    if saw_void {
+                        bail!("parse error: duplicate 'void' in type specifier");
+                    }
+                    saw_void = true;
+                    self.current += 1;
+                }
                 TokenKind::Unsigned => {
                     if saw_unsigned {
                         bail!("parse error: duplicate 'unsigned' in type specifier");
@@ -370,9 +411,16 @@ impl Parser {
                 _ => break,
             }
         }
-        if !saw_int && !saw_long && !is_unsigned && !saw_signed && !saw_double && !saw_char {
+        if !saw_int
+            && !saw_long
+            && !is_unsigned
+            && !saw_signed
+            && !saw_double
+            && !saw_char
+            && !saw_void
+        {
             bail!(
-                "parse error: expected a type specifier ('int' / 'long' / 'double' / 'unsigned' / 'signed' / 'char'), found {:?}",
+                "parse error: expected a type specifier ('int' / 'long' / 'double' / 'unsigned' / 'signed' / 'char' / 'void'), found {:?}",
                 self.peek().kind
             );
         }
@@ -385,7 +433,12 @@ impl Parser {
         if saw_char && (is_long || saw_int || saw_double) {
             bail!("parse error: 'char' cannot be combined with int, long, or double");
         }
-        if saw_double {
+        if saw_void && (saw_int || is_long || is_unsigned || saw_signed || saw_double || saw_char) {
+            bail!("parse error: 'void' cannot be combined with other type specifiers");
+        }
+        if saw_void {
+            Ok(Type::Void)
+        } else if saw_double {
             Ok(Type::Double)
         } else if saw_char && is_unsigned {
             Ok(Type::UnsignedChar)
@@ -523,6 +576,16 @@ impl Parser {
         }
     }
 
+    fn parse_type_name(&mut self) -> Result<Type> {
+        let base_type = self.parse_type_specifier()?;
+        if self.check(&TokenKind::CloseParen) {
+            Ok(base_type)
+        } else {
+            let abstract_decl = self.parse_abstract_declarator()?;
+            Ok(Self::process_abstract_declarator(abstract_decl, base_type))
+        }
+    }
+
     fn expect_array_size(&mut self) -> Result<usize> {
         let raw = match &self.peek().kind {
             TokenKind::Constant(value) => i64::from(*value),
@@ -587,8 +650,14 @@ impl Parser {
     /// separated list of `int` parameters (`int x, int y, ...`).  Chapter 9
     /// supports up to 6 register-passed args (the rest go on the stack).
     fn parse_param_list(&mut self) -> Result<Vec<VarDecl>> {
-        if self.match_exact(&TokenKind::Void) {
+        if self.check(&TokenKind::Void)
+            && self
+                .tokens
+                .get(self.current + 1)
+                .is_some_and(|token| token.kind == TokenKind::CloseParen)
+        {
             // `(void)` means no parameters; empty list.
+            self.current += 1;
             return Ok(Vec::new());
         }
         let mut params = Vec::new();
@@ -596,7 +665,12 @@ impl Parser {
             let base_ty = self.parse_type_specifier()?;
             let decl = self.parse_declarator()?;
             let (name, ty) = match Self::process_declarator(decl, base_ty)? {
-                DeclShape::Object { name, ty } => (name, adjust_param_type(ty)),
+                DeclShape::Object { name, ty } => {
+                    if matches!(ty, Type::Array { .. }) && !ty.clone().is_complete() {
+                        bail!("parse error: parameter array has incomplete element type");
+                    }
+                    (name, adjust_param_type(ty))
+                }
                 DeclShape::Function { .. } => {
                     bail!("parse error: function parameters cannot be function declarators")
                 }
@@ -619,12 +693,7 @@ impl Parser {
         //   [static|extern] int NAME ...
         //   int [static|extern] NAME ...   (type-before-storage-class)
         // Chapter 11 widens the type to `int` or `long` (any order).
-        if self.peek().kind == TokenKind::Int
-            || self.peek().kind == TokenKind::Long
-            || self.peek().kind == TokenKind::Unsigned
-            || self.peek().kind == TokenKind::Signed
-            || self.peek().kind == TokenKind::Char
-            || self.peek().kind == TokenKind::Double
+        if is_type_specifier_start(&self.peek().kind)
             || self.peek().kind == TokenKind::Static
             || self.peek().kind == TokenKind::Extern
         {
@@ -680,7 +749,11 @@ impl Parser {
                 statement: Box::new(statement),
             })
         } else if self.match_exact(&TokenKind::Return) {
-            let expr = self.parse_expr()?;
+            let expr = if self.check(&TokenKind::Semicolon) {
+                None
+            } else {
+                Some(self.parse_expr()?)
+            };
             self.expect_exact(&TokenKind::Semicolon, "';'")?;
             Ok(Statement::Return(expr))
         } else if self.match_exact(&TokenKind::OpenBrace) {
@@ -775,15 +848,7 @@ impl Parser {
         self.expect_exact(&TokenKind::OpenParen, "'(' after for")?;
         let init = if self.match_exact(&TokenKind::Semicolon) {
             None
-        } else if matches!(
-            self.peek().kind,
-            TokenKind::Int
-                | TokenKind::Long
-                | TokenKind::Unsigned
-                | TokenKind::Signed
-                | TokenKind::Char
-                | TokenKind::Double
-        ) {
+        } else if is_type_specifier_start(&self.peek().kind) {
             let base_ty = self.parse_type_specifier()?;
             let decl = self.parse_declarator()?;
             let (name, ty) = match Self::process_declarator(decl, base_ty)? {
@@ -989,27 +1054,29 @@ impl Parser {
                 self.current += 1;
                 return Ok(Expr::PreDec(Box::new(self.parse_unary_expr()?)));
             }
+            TokenKind::Sizeof => {
+                self.current += 1;
+                if self.check(&TokenKind::OpenParen)
+                    && self
+                        .tokens
+                        .get(self.current + 1)
+                        .is_some_and(|token| is_type_specifier_start(&token.kind))
+                {
+                    self.current += 1;
+                    let ty = self.parse_type_name()?;
+                    self.expect_exact(&TokenKind::CloseParen, "')' after sizeof type")?;
+                    return self.apply_postfix(Expr::SizeOfType(ty));
+                }
+                let inner = self.parse_unary_expr()?;
+                return self.apply_postfix(Expr::SizeOfExpr(Box::new(inner)));
+            }
             TokenKind::OpenParen => {
                 self.current += 1;
                 // Chapter 11: `(T) expr` cast.  If the token after
                 // `(` is a type specifier, parse it as a cast; the
                 // closing `)` and the casted expression follow.
-                if matches!(
-                    self.peek().kind,
-                    TokenKind::Int
-                        | TokenKind::Long
-                        | TokenKind::Unsigned
-                        | TokenKind::Signed
-                        | TokenKind::Char
-                        | TokenKind::Double
-                ) {
-                    let base_type = self.parse_type_specifier()?;
-                    let target_type = if self.check(&TokenKind::CloseParen) {
-                        base_type
-                    } else {
-                        let abstract_decl = self.parse_abstract_declarator()?;
-                        Self::process_abstract_declarator(abstract_decl, base_type)
-                    };
+                if is_type_specifier_start(&self.peek().kind) {
+                    let target_type = self.parse_type_name()?;
                     self.expect_exact(&TokenKind::CloseParen, "')' after cast type")?;
                     let inner = self.parse_unary_expr()?;
                     return self.apply_postfix(Expr::Cast {

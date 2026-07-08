@@ -55,6 +55,7 @@ fn type_to_operand_type(ty: Type) -> OperandType {
         Type::Double => OperandType::Double,
         Type::Pointer(_) => OperandType::Long,
         Type::Array { size: Some(_), .. } => OperandType::ByteArray { size: ty.size() },
+        Type::Void => OperandType::Int,
         _ => OperandType::Int,
     }
 }
@@ -562,10 +563,15 @@ fn lower_block_items(items: &[BlockItem], ctx: &mut LowerCtx) -> Result<Vec<Inst
 fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instruction>> {
     match stmt {
         Statement::Return(expr) => {
-            let (instrs, val) = lower_expr(expr, ctx)?;
-            let mut out = instrs;
-            let val_ty = type_of_val(&val, ctx);
-            let val = convert_to_type(val, val_ty, ctx.current_return_ty, &mut out, ctx);
+            let mut out = Vec::new();
+            let val = if let Some(expr) = expr {
+                let (instrs, val) = lower_expr(expr, ctx)?;
+                out.extend(instrs);
+                let val_ty = type_of_val(&val, ctx);
+                convert_to_type(val, val_ty, ctx.current_return_ty, &mut out, ctx)
+            } else {
+                Val::Constant(0)
+            };
             out.push(Instruction::Return(val));
             Ok(out)
         }
@@ -1065,6 +1071,18 @@ fn lower_expr(expr: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)
             Ok((Vec::new(), Val::Var(name.clone())))
         }
         Expr::Paren(inner) => lower_expr(inner, ctx),
+        Expr::SizeOfExpr(inner) => {
+            let mut instrs = Vec::new();
+            let size = expr_type(inner, ctx).size();
+            let val = ctx.materialize_typed_constant(&mut instrs, size, OperandType::ULong);
+            Ok((instrs, val))
+        }
+        Expr::SizeOfType(ty) => {
+            let mut instrs = Vec::new();
+            let val =
+                ctx.materialize_typed_constant(&mut instrs, ty.clone().size(), OperandType::ULong);
+            Ok((instrs, val))
+        }
         Expr::Unary { op, expr: inner } => lower_unary(*op, inner, ctx),
         Expr::Assign { op, target, value } => lower_assign(*op, target, value, ctx),
         Expr::PreInc(inner) => lower_prefix_incdec(inner, true, ctx),
@@ -1085,6 +1103,10 @@ fn lower_expr(expr: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)
             // Chapter 11 explicit cast: `SignExtend` (int -> long)
             // or `Truncate` (long -> int).  Other combinations
             // (int -> int, long -> long) lower to a plain Copy.
+            if matches!(target_type, Type::Void) {
+                let (instrs, _src) = lower_expr(inner, ctx)?;
+                return Ok((instrs, Val::Constant(0)));
+            }
             let (mut instrs, src) = lower_expr(inner, ctx)?;
             let src_ty = type_of_val(&src, ctx);
             let dst_ty = type_to_operand_type(target_type.clone());
@@ -1146,6 +1168,14 @@ fn lower_call(name: &str, args: &[Expr], ctx: &mut LowerCtx) -> Result<(Vec<Inst
         .get(name)
         .copied()
         .unwrap_or(OperandType::Int);
+    if matches!(ctx.func_return_types.get(name), Some(Type::Void)) {
+        out.push(Instruction::Call {
+            name: name.to_string(),
+            args: arg_vals,
+            dst: None,
+        });
+        return Ok((out, Val::Constant(0)));
+    }
     let dst_name = ctx.fresh_typed_tmp(ret_ty);
     out.push(Instruction::Call {
         name: name.to_string(),
@@ -1166,6 +1196,9 @@ fn lower_cast(
     ctx: &mut LowerCtx,
 ) -> Result<(Vec<Instruction>, Val)> {
     let (mut instrs, inner_val) = lower_expr(inner, ctx)?;
+    if matches!(target_type, Type::Void) {
+        return Ok((instrs, Val::Constant(0)));
+    }
     let inner_ty = type_of_val(&inner_val, ctx);
     let target_ty = type_to_operand_type(target_type.clone());
     let converted = convert_to_type(inner_val, inner_ty, target_ty, &mut instrs, ctx);
@@ -1810,6 +1843,23 @@ fn lower_conditional(
     let (cond_instrs, cond_val) = lower_expr(condition, ctx)?;
     let (mut then_instrs, then_val) = lower_expr(then_expr, ctx)?;
     let (mut else_instrs, else_val) = lower_expr(else_expr, ctx)?;
+    if matches!(expr_type(then_expr, ctx), Type::Void)
+        && matches!(expr_type(else_expr, ctx), Type::Void)
+    {
+        let mut out = cond_instrs;
+        out.push(Instruction::JumpIfZero {
+            condition: cond_val,
+            target: else_label.clone(),
+        });
+        then_instrs.push(Instruction::Jump {
+            target: end_label.clone(),
+        });
+        out.extend(then_instrs);
+        out.push(Instruction::Label(else_label));
+        out.extend(else_instrs);
+        out.push(Instruction::Label(end_label));
+        return Ok((out, Val::Constant(0)));
+    }
     // The result's type follows the usual arithmetic conversion of
     // the two branch values: long if either branch is long, int
     // otherwise.  Mirrors `get_common_type` for the chapter-11
@@ -2048,6 +2098,7 @@ fn expr_type(expr: &Expr, ctx: &LowerCtx) -> Type {
         Expr::Var(name) => ctx.ast_type_env.get(name).cloned().unwrap_or(Type::Int),
         Expr::Paren(inner) => expr_type(inner, ctx),
         Expr::Cast { target_type, .. } => target_type.clone(),
+        Expr::SizeOfExpr(_) | Expr::SizeOfType(_) => Type::UnsignedLong,
         Expr::Unary {
             op: UnaryOp::Not, ..
         } => Type::Int,

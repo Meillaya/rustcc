@@ -184,7 +184,9 @@ fn check_user_gotos_stmt(stmt: &Statement, labels: &HashSet<String>) -> Result<(
             }
         }
         Statement::Return(expr) => {
-            walk_expr(expr);
+            if let Some(expr) = expr {
+                walk_expr(expr);
+            }
         }
         Statement::Expr(maybe_expr) => {
             if let Some(expr) = maybe_expr {

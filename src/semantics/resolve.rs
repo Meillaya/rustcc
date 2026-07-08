@@ -620,7 +620,11 @@ fn resolve_statement(
     globals: &GlobalTable,
 ) -> Result<Statement> {
     match stmt {
-        Statement::Return(expr) => Ok(Statement::Return(resolve_expr(expr, scopes, globals)?)),
+        Statement::Return(expr) => Ok(Statement::Return(
+            expr.as_ref()
+                .map(|expr| resolve_expr(expr, scopes, globals))
+                .transpose()?,
+        )),
         Statement::If {
             condition,
             then_branch,
@@ -732,6 +736,10 @@ fn resolve_expr(expr: &Expr, scopes: &mut ScopeStack, globals: &GlobalTable) -> 
             target_type: target_type.clone(),
             expr: Box::new(resolve_expr(inner, scopes, globals)?),
         }),
+        Expr::SizeOfExpr(inner) => Ok(Expr::SizeOfExpr(Box::new(resolve_expr(
+            inner, scopes, globals,
+        )?))),
+        Expr::SizeOfType(ty) => Ok(Expr::SizeOfType(ty.clone())),
         Expr::Paren(inner) => Ok(Expr::Paren(Box::new(resolve_expr(inner, scopes, globals)?))),
         Expr::Var(name) => {
             if let Some(unique) = scopes.lookup(name) {
