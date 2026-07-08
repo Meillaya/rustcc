@@ -67,9 +67,7 @@ impl Parser {
     /// (~lines 798-823) for chapter-10 surface.
     fn parse_top_level_item(&mut self) -> Result<TopLevelItem> {
         let storage = self.parse_optional_storage_class_top_level()?;
-        self.expect_exact(&TokenKind::Int, "type 'int' or storage-class specifier")?;
-        // After `int` we may see another storage-class specifier.  The
-        // OCaml grammar accepts both `static int x;` and `int static x;`.
+        let ty = self.parse_type_specifier()?;
         let storage = self.combine_storage_class(storage)?;
         let name = self.expect_identifier("function or variable name")?;
         if self.check(&TokenKind::OpenParen) {
@@ -79,6 +77,7 @@ impl Parser {
             if self.match_exact(&TokenKind::Semicolon) {
                 Ok(TopLevelItem::Declaration(GlobalDecl {
                     name,
+                    ret_ty: ty,
                     params,
                     storage,
                 }))
@@ -94,6 +93,7 @@ impl Parser {
                 self.expect_exact(&TokenKind::CloseBrace, "'}' to close function body")?;
                 Ok(TopLevelItem::Function(Function {
                     name,
+                    ret_ty: ty,
                     params,
                     body: Some(body),
                     storage,
@@ -108,7 +108,7 @@ impl Parser {
             self.expect_exact(&TokenKind::Semicolon, "';' after file-scope variable declaration")?;
             Ok(TopLevelItem::Variable(GlobalVarDecl {
                 name,
-                ty: Type::Int,
+                ty,
                 init,
                 storage,
             }))
@@ -133,6 +133,45 @@ impl Parser {
     /// distinguish "no specifier" from "saw `int` and then no specifier").
     fn parse_optional_storage_class_top_level(&mut self) -> Result<StorageClass> {
         self.parse_optional_storage_class()
+    }
+
+    /// Parse a chapter-11 type specifier: a permutation of `int` and
+    /// `long` (e.g. `long`, `int`, `long int`, `int long`).  At most
+    /// one `int` and at most one `long` may appear; the resulting
+    /// type is `long` if any `long` token was seen and `int`
+    /// otherwise.  Mirrors the OCaml `parse_type_specifier_list` +
+    /// `parse_type` combination for the chapter-11 surface.
+    fn parse_type_specifier(&mut self) -> Result<Type> {
+        let mut is_long = false;
+        let mut saw_int = false;
+        let mut saw_long = false;
+        loop {
+            match self.peek().kind {
+                TokenKind::Int => {
+                    if saw_int {
+                        bail!("parse error: duplicate 'int' in type specifier");
+                    }
+                    saw_int = true;
+                    self.current += 1;
+                }
+                TokenKind::Long => {
+                    if saw_long {
+                        bail!("parse error: duplicate 'long' in type specifier");
+                    }
+                    saw_long = true;
+                    is_long = true;
+                    self.current += 1;
+                }
+                _ => break,
+            }
+        }
+        if !saw_int && !saw_long {
+            bail!(
+                "parse error: expected a type specifier ('int' or 'long'), found {:?}",
+                self.peek().kind
+            );
+        }
+        Ok(if is_long { Type::Long } else { Type::Int })
     }
 
     /// If a storage-class specifier follows `int`, combine it with
@@ -169,10 +208,11 @@ impl Parser {
         }
         let mut params = Vec::new();
         loop {
-            self.expect_exact(&TokenKind::Int, "parameter type 'int'")?;
+            let ty = self.parse_type_specifier()?;
             let name = self.expect_identifier("parameter name")?;
             params.push(VarDecl {
                 name,
+                ty,
                 init: None,
                 storage: StorageClass::Auto,
             });
@@ -187,10 +227,10 @@ fn parse_block_item(&mut self) -> Result<BlockItem> {
         // Chapter 9 + 10: a block-level declaration can be
         //   [static|extern] int NAME ...
         //   int [static|extern] NAME ...   (type-before-storage-class)
-        // followed by either `(` (function declaration) or `=`/`;`
-        // (variable declaration).
+        // Chapter 11 widens the type to `int` or `long` (any order).
         let storage_prefix = self.parse_optional_storage_class()?;
-        if self.match_exact(&TokenKind::Int) {
+        if self.peek().kind == TokenKind::Int || self.peek().kind == TokenKind::Long {
+            let ty = self.parse_type_specifier()?;
             let storage_suffix = self.parse_optional_storage_class()?;
             let storage = if storage_prefix == StorageClass::Auto {
                 storage_suffix
@@ -208,6 +248,7 @@ fn parse_block_item(&mut self) -> Result<BlockItem> {
                     if self.match_exact(&TokenKind::Semicolon) {
                         return Ok(BlockItem::FunctionDecl(GlobalDecl {
                             name,
+                            ret_ty: ty,
                             params,
                             storage,
                         }));
@@ -223,21 +264,22 @@ fn parse_block_item(&mut self) -> Result<BlockItem> {
                 self.expect_exact(&TokenKind::Semicolon, "';'")?;
                 return Ok(BlockItem::Declaration(VarDecl {
                     name,
+                    ty,
                     init,
                     storage,
                 }));
             }
             bail!(
-                "parse error: expected identifier after 'int', found {:?}",
+                "parse error: expected identifier after type specifier, found {:?}",
                 self.peek().kind
             );
         }
-        // No `int` here: if a storage class was present but `int` is
-        // missing, that's a malformed declaration.  Otherwise this is a
-        // plain statement.
+        // No type specifier here: if a storage class was present but
+        // `int`/`long` is missing, that's a malformed declaration.
+        // Otherwise this is a plain statement.
         if storage_prefix != StorageClass::Auto {
             bail!(
-                "parse error: expected 'int' after storage-class specifier, found {:?}",
+                "parse error: expected a type specifier after storage-class specifier, found {:?}",
                 self.peek().kind
             );
         }
@@ -357,7 +399,8 @@ fn parse_block_item(&mut self) -> Result<BlockItem> {
         self.expect_exact(&TokenKind::OpenParen, "'(' after for")?;
         let init = if self.match_exact(&TokenKind::Semicolon) {
             None
-        } else if self.match_exact(&TokenKind::Int) {
+        } else if self.peek().kind == TokenKind::Int || self.peek().kind == TokenKind::Long {
+            let ty = self.parse_type_specifier()?;
             let name = self.expect_identifier("for-loop variable name")?;
             let init = if self.match_exact(&TokenKind::Equal) {
                 Some(self.parse_expr()?)
@@ -367,6 +410,7 @@ fn parse_block_item(&mut self) -> Result<BlockItem> {
             self.expect_exact(&TokenKind::Semicolon, "';' after for declaration")?;
             Some(ForInit::Declaration(VarDecl {
                 name,
+                ty,
                 init,
                 storage: StorageClass::Auto,
             }))
@@ -461,9 +505,14 @@ fn parse_block_item(&mut self) -> Result<BlockItem> {
     fn parse_unary_expr(&mut self) -> Result<Expr> {
         match &self.peek().kind {
             TokenKind::Constant(value) => {
-                let value = *value;
+                let value = i64::from(*value);
                 self.current += 1;
                 Ok(Expr::Constant(value))
+            }
+            TokenKind::LongConstant(value) => {
+                let value = *value;
+                self.current += 1;
+                Ok(Expr::LongConstant(value))
             }
             TokenKind::Identifier(name) => {
                 let name = name.clone();

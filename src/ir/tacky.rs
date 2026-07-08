@@ -25,6 +25,50 @@ pub enum Val {
     // ch.13: ConstantDouble(f64),
 }
 
+/// Operand width for TACKY values.  Mirrors `nqcc2/lib/tacky.ml`
+/// `asm_type` (Longword / Quadword) for the chapter-11 surface.  The
+/// codegen pass uses this to choose between 32-bit and 64-bit x86-64
+/// instructions (`addl` vs `addq`, `idivl` vs `idivq`, etc.).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum OperandType {
+    /// 32-bit integer (book `Longword`).
+    Int,
+    /// 64-bit integer (book `Quadword`); used for `long` and pointers.
+    Long,
+}
+
+impl OperandType {
+    /// Size in bytes — used by `replace_pseudos` to size stack slots.
+    pub fn size(self) -> i64 {
+        match self {
+            OperandType::Int => 4,
+            OperandType::Long => 8,
+        }
+    }
+}
+
+/// Side table that records the type of every TACKY variable in a
+/// function.  Populated by the lowerer as it walks the AST and used by
+/// the codegen pass to choose between 32-bit and 64-bit operand widths.
+/// Variables include the function's parameters, every `VarDecl`-bound
+/// local, and every synthetic temporary the lowerer allocates; the
+/// chapter-11 surface only needs `Int` and `Long`.
+pub type TypeEnv = std::collections::HashMap<String, OperandType>;
+
+/// TACKY value paired with the operand width its assembler form needs.
+///
+/// The lowerer tags every `Val` it produces (constants and temporaries
+/// both) so the codegen pass can pick `addl` vs `addq` without
+/// consulting a side table.  Mirrors the OCaml `Tacky.{src;dst}` shape
+/// in which every operand is paired with its `asm_type` at construction
+/// time (see `nqcc2/lib/tacky_gen.ml:163-167` and
+/// `nqcc2/lib/backend/codegen.ml:119-130`).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct TypedVal {
+    pub val: Val,
+    pub ty: OperandType,
+}
+
 /// x86-64 condition codes used by `Cmp` (which captures both branches) and
 /// the auxiliary `JumpIfZero` / `JumpIfNotZero` instructions that use the
 /// implied "compare against zero" form.
@@ -201,13 +245,17 @@ pub enum Instruction {
 /// Chapter 9 widens this with `params: Vec<String>` so the codegen pass
 /// can emit the prologue that moves each parameter from its incoming
 /// register to the function's stack slot.  Earlier chapters left
-/// `params` implicit (the function had no parameters).
+/// `params` implicit (the function had no parameters).  Chapter 11
+/// adds `type_env` so the codegen pass can look up the operand width
+/// of every TACKY variable (parameter / local / synthetic tmp /
+/// materialised long constant) without re-walking the AST.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TackyFunction {
     pub name: String,
     pub global: bool,
     pub params: Vec<String>,
     pub body: Vec<Instruction>,
+    pub type_env: TypeEnv,
 }
 
 /// A TACKY program: a list of functions.

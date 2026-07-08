@@ -160,6 +160,7 @@ pub fn resolve_program(ast: &Program) -> Result<ResolvedProgram> {
                 );
                 resolved_items.push(TopLevelItem::Declaration(GlobalDecl {
                     name: decl.name.clone(),
+                    ret_ty: decl.ret_ty.clone(),
                     params: decl.params.clone(),
                     storage: decl.storage,
                 }));
@@ -302,7 +303,7 @@ fn resolve_global_variable(
 /// for chapter 10.
 fn resolve_global_init(expr: &Expr) -> Result<Expr> {
     match expr {
-        Expr::Constant(_) => Ok(expr.clone()),
+        Expr::Constant(_) | Expr::LongConstant(_) => Ok(expr.clone()),
         other => bail!(
             "resolve error: file-scope variable initializer must be a constant expression (got {other:?})"
         ),
@@ -320,6 +321,7 @@ fn resolve_function(
         let unique = scopes.declare(&param.name)?;
         resolved_params.push(VarDecl {
             name: unique,
+            ty: param.ty.clone(),
             init: None,
             storage: StorageClass::Auto,
         });
@@ -330,6 +332,7 @@ fn resolve_function(
     };
     Ok(Function {
         name: func.name.clone(),
+        ret_ty: func.ret_ty.clone(),
         params: resolved_params,
         body,
         storage: func.storage,
@@ -538,6 +541,7 @@ fn resolve_block_item(
                 let name = scopes.declare_extern(&var_decl.name)?;
                 Ok(BlockItem::Declaration(VarDecl {
                     name,
+                    ty: var_decl.ty.clone(),
                     init: None,
                     storage: StorageClass::Extern,
                 }))
@@ -550,6 +554,7 @@ fn resolve_block_item(
                 };
                 Ok(BlockItem::Declaration(VarDecl {
                     name: new_name,
+                    ty: var_decl.ty.clone(),
                     init: new_init,
                     storage: var_decl.storage,
                 }))
@@ -573,6 +578,7 @@ fn resolve_block_item(
             scopes.declare_fun(&fd.name, fd.params.len())?;
             Ok(BlockItem::FunctionDecl(GlobalDecl {
                 name: fd.name.clone(),
+                ret_ty: fd.ret_ty.clone(),
                 params: fd.params.clone(),
                 storage: fd.storage,
             }))
@@ -594,6 +600,7 @@ fn resolve_for_init(
             };
             Ok(ForInit::Declaration(VarDecl {
                 name: new_name,
+                ty: var_decl.ty.clone(),
                 init: new_init,
                 storage: var_decl.storage,
             }))
@@ -715,6 +722,7 @@ fn resolve_expr(
 ) -> Result<Expr> {
     match expr {
         Expr::Constant(n) => Ok(Expr::Constant(*n)),
+        Expr::LongConstant(n) => Ok(Expr::LongConstant(*n)),
         Expr::Paren(inner) => {
             Ok(Expr::Paren(Box::new(resolve_expr(inner, scopes, globals)?)))
         }

@@ -76,6 +76,15 @@ pub enum BinaryOpInstr {
     BitXor,
     BitShiftLeft,
     BitShiftRight,
+    /// Chapter 11: 64-bit counterparts.  Emitted as `addq`, `subq`,
+    /// `imulq`, `idivq` (the latter paired with `cqo` to sign-extend
+    /// %rax into %rdx).  The 32-bit forms above are preserved for
+    /// the int surface.
+    AddQ,
+    SubQ,
+    MultQ,
+    DivQ,
+    RemQ,
     AddDouble,
     SubDouble,
     MultDouble,

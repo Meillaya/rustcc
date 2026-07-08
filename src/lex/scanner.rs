@@ -149,10 +149,18 @@ fn lex_number(chars: &mut Chars<'_>, tokens: &mut Vec<Token>) -> Result<()> {
         if matches!(chars.peek().copied(), Some((_, c)) if is_ident_cont(c)) {
             bail!("lex error: invalid identifier starts with digits: {lexeme}");
         }
-        tokens.push(Token {
-            kind: TokenKind::Constant(value as i32),
-            lexeme,
-        });
+        let is_long = suffix.contains('l') || suffix.contains('L');
+        if is_long {
+            tokens.push(Token {
+                kind: TokenKind::LongConstant(value as i64),
+                lexeme,
+            });
+        } else {
+            tokens.push(Token {
+                kind: TokenKind::Constant(value as i32),
+                lexeme,
+            });
+        }
         return Ok(());
     }
 
@@ -241,10 +249,18 @@ fn lex_number(chars: &mut Chars<'_>, tokens: &mut Vec<Token>) -> Result<()> {
     let value = digits
         .parse::<u128>()
         .map_err(|err| anyhow::anyhow!("lex error: invalid integer {lexeme}: {err}"))?;
-    tokens.push(Token {
-        kind: TokenKind::Constant(value as i32),
-        lexeme,
-    });
+    let is_long = suffix.contains('l') || suffix.contains('L');
+    if is_long {
+        tokens.push(Token {
+            kind: TokenKind::LongConstant(value as i64),
+            lexeme,
+        });
+    } else {
+        tokens.push(Token {
+            kind: TokenKind::Constant(value as i32),
+            lexeme,
+        });
+    }
     Ok(())
 }
 
@@ -264,21 +280,11 @@ fn collect_int_suffix(chars: &mut Chars<'_>, lexeme: &mut String) -> String {
 }
 
 fn is_valid_int_suffix(suffix: &str) -> bool {
-    matches!(
-        suffix,
-        "" | "l"
-            | "L"
-            | "u"
-            | "U"
-            | "lu"
-            | "lU"
-            | "Lu"
-            | "LU"
-            | "ul"
-            | "uL"
-            | "Ul"
-            | "UL"
-    )
+    // Chapter 11 only: signed int + signed long suffixes.  The unsigned
+    // variants (U / u / UL / UL / uL / Ul / etc.) are rejected here so
+    // we don't silently treat e.g. `123u` as an `int` literal; the
+    // chapter-12 work will widen the table again.
+    matches!(suffix, "" | "l" | "L")
 }
 
 // --- Character & string literals ------------------------------------------

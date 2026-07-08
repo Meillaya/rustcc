@@ -32,16 +32,26 @@ use std::collections::HashMap;
 
 use crate::ast::{
     AssignOp, BinaryOp, BlockItem, Expr, ForInit, GlobalVarDecl, Program, Statement, StorageClass,
-    TopLevelItem, UnaryOp,
+    TopLevelItem, Type, UnaryOp,
 };
 use crate::ir::tacky::{
-    ConditionCode, Instruction, TackyFunction, TackyProgram, TackyStaticInit, TackyStaticVariable,
-    Val,
+    ConditionCode, Instruction, OperandType, TackyFunction, TackyProgram, TackyStaticInit,
+    TackyStaticVariable, TypeEnv, Val,
 };
 use crate::ir::temp::TempIdGenerator;
 use crate::util::labels::LabelGenerator;
 
 pub type TypedProgram = Program;
+
+/// Map the AST's `Type` to the TACKY `OperandType`.  Only the
+/// chapter-11 surface is mapped; everything else falls back to `Int`
+/// so the existing chapter-1..10 codegen keeps compiling.
+fn type_to_operand_type(ty: Type) -> OperandType {
+    match ty {
+        Type::Long | Type::UnsignedLong => OperandType::Long,
+        _ => OperandType::Int,
+    }
+}
 
 pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
     let mut ctx = LowerCtx::new();
@@ -55,14 +65,27 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
                     ctx.user_labels.clear();
                     ctx.user_label_counter = 0;
                     ctx.current_function = Some(func.name.clone());
+                    ctx.type_env.clear();
+                    ctx.const_counter = 0;
+                    // Seed the env with the parameter types so the
+                    // body can refer to each parameter by its declared
+                    // width.
+                    for param in &func.params {
+                        ctx.type_env.insert(
+                            param.name.clone(),
+                            type_to_operand_type(param.ty),
+                        );
+                    }
                     let body = lower_block_items(body_items, &mut ctx)?;
                     let body = ensure_trailing_return(body);
                     ctx.current_function = None;
+                    let type_env = std::mem::take(&mut ctx.type_env);
                     functions.push(TackyFunction {
                         name: func.name.clone(),
                         global: true,
                         params,
                         body,
+                        type_env,
                     });
                 }
             }
@@ -80,7 +103,8 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
         .map(|(name, (storage, init))| {
             let global = matches!(storage, StorageClass::Extern | StorageClass::Auto);
             let init = match init {
-                Some(Expr::Constant(n)) => TackyStaticInit::Int(i64::from(n)),
+                Some(Expr::Constant(n)) => TackyStaticInit::Int(n),
+                Some(Expr::LongConstant(n)) => TackyStaticInit::Int(n),
                 None => TackyStaticInit::Int(0),
                 // Non-constant initializers rejected by resolve pass.
                 Some(_) => TackyStaticInit::Int(0),
@@ -205,6 +229,17 @@ struct LowerCtx {
     /// prefix on user-label assembly symbols so cross-function
     /// label name collisions never reach the linker.
     current_function: Option<String>,
+    /// Per-function type env tracking the operand width of every
+    /// TACKY variable the lowerer creates.  Populated alongside
+    /// each `Copy` to a fresh tmp and consulted by the binary /
+    /// unary / return codegen paths to decide between 32-bit and
+    /// 64-bit instructions.  Emitted with the function so the
+    /// codegen pass can look up types without re-walking the AST.
+    type_env: TypeEnv,
+    /// Monotonic counter for the synthetic names used to materialise
+    /// long-typed constant values into the IR (each long constant
+    /// gets a fresh `const.<n>` name and a matching env entry).
+    const_counter: u32,
 }
 
 impl LowerCtx {
@@ -217,11 +252,39 @@ impl LowerCtx {
             user_label_counter: 0,
             user_labels: HashMap::new(),
             current_function: None,
+            type_env: HashMap::new(),
+            const_counter: 0,
         }
     }
 
     fn fresh_tmp(&mut self) -> String {
         format!("tmp.{}", self.temps.next().0)
+    }
+
+    fn fresh_typed_tmp(&mut self, ty: OperandType) -> String {
+        let name = self.fresh_tmp();
+        self.type_env.insert(name.clone(), ty);
+        name
+    }
+
+    /// Materialise a long-typed constant into the IR.  Emits a
+    /// `Copy` from the inline `Val::Constant` to a fresh synthetic
+    /// name and records the name's type in `type_env`.  The caller
+    /// receives the synthetic name as a `Val::Var` so downstream
+    /// uses can look up the type from the env.
+    fn materialize_long_constant(
+        &mut self,
+        instrs: &mut Vec<Instruction>,
+        value: i64,
+    ) -> Val {
+        let name = format!("const.{}", self.const_counter);
+        self.const_counter += 1;
+        self.type_env.insert(name.clone(), OperandType::Long);
+        instrs.push(Instruction::Copy {
+            src: Val::Constant(value),
+            dst: name.clone(),
+        });
+        Val::Var(name)
     }
 }
 
@@ -231,6 +294,10 @@ fn lower_block_items(items: &[BlockItem], ctx: &mut LowerCtx) -> Result<Vec<Inst
         match item {
             BlockItem::Statement(stmt) => out.extend(lower_statement(stmt, ctx)?),
             BlockItem::Declaration(decl) => {
+                let decl_ty = type_to_operand_type(decl.ty);
+                ctx.type_env
+                    .entry(decl.name.clone())
+                    .or_insert(decl_ty);
                 if let Some(expr) = &decl.init {
                     let (instrs, val) = lower_expr(expr, ctx)?;
                     out.extend(instrs);
@@ -372,6 +439,9 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
             if let Some(init) = init {
                 match init {
                     ForInit::Declaration(decl) => {
+                        ctx.type_env
+                            .entry(decl.name.clone())
+                            .or_insert(type_to_operand_type(decl.ty));
                         if let Some(expr) = &decl.init {
                             let (instrs, val) = lower_expr(expr, ctx)?;
                             out.extend(instrs);
@@ -442,11 +512,11 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
                 Expr::Constant(n) => ctx
                     .case_labels
                     .as_ref()
-                    .and_then(|m| m.get(&i64::from(*n)).cloned())
+                    .and_then(|m| m.get(n).cloned())
                     .ok_or_else(|| {
                         anyhow::anyhow!(
                             "lower: case {} outside of any switch dispatch",
-                            i64::from(*n)
+                            n
                         )
                     })?,
                 _ => {
@@ -608,7 +678,7 @@ fn collect_switch_dispatch(
         }
         Statement::Case { value, statement } => {
             let v = match value {
-                Expr::Constant(n) => i64::from(*n),
+                Expr::Constant(n) => *n,
                 _ => {
                     return Err(anyhow::anyhow!(
                         "lower: switch case value must be a constant integer"
@@ -667,7 +737,16 @@ fn continue_label(id: &str) -> String {
 
 fn lower_expr(expr: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)> {
     match expr {
-        Expr::Constant(n) => Ok((Vec::new(), Val::Constant(i64::from(*n)))),
+        Expr::Constant(n) => Ok((Vec::new(), Val::Constant(*n))),
+        Expr::LongConstant(n) => {
+            // The lowerer can't keep `Val::Constant` typed, so it
+            // materialises the long constant into a fresh synthetic
+            // name.  Downstream uses see a `Val::Var` and look the
+            // type up from the env.
+            let mut instrs = Vec::new();
+            let v = ctx.materialize_long_constant(&mut instrs, *n);
+            Ok((instrs, v))
+        }
         Expr::Var(name) => Ok((Vec::new(), Val::Var(name.clone()))),
         Expr::Paren(inner) => lower_expr(inner, ctx),
         Expr::Unary { op, expr: inner } => lower_unary(*op, inner, ctx),
@@ -728,7 +807,8 @@ fn lower_unary(
     ctx: &mut LowerCtx,
 ) -> Result<(Vec<Instruction>, Val)> {
     let (mut instrs, inner_val) = lower_expr(inner, ctx)?;
-    let tmp = ctx.fresh_tmp();
+    let inner_ty = type_of_val(&inner_val, ctx);
+    let tmp = ctx.fresh_typed_tmp(inner_ty);
     match op {
         UnaryOp::Negate => {
             instrs.push(Instruction::Copy {
@@ -766,8 +846,20 @@ fn lower_assign(
         .lvalue_name()
         .ok_or_else(|| anyhow::anyhow!("lower: invalid lvalue in assignment target"))?
         .to_string();
+    let target_ty = ctx
+        .type_env
+        .get(&target_name)
+        .copied()
+        .unwrap_or(OperandType::Int);
     if op == AssignOp::Assign {
         let (mut instrs, rhs_val) = lower_expr(value, ctx)?;
+        // Truncate an over-wide RHS into the LHS's type so a
+        // `long` expression on the right of `int x = ...` is
+        // narrowed.  The book's chapter-11 `convert_by_assignment`
+        // covers this; we emit the explicit Truncate here because
+        // the lowerer keeps TACKY untagged.
+        let rhs_ty = type_of_val(&rhs_val, ctx);
+        let rhs_val = narrow_to_target(rhs_val, rhs_ty, target_ty, &mut instrs, ctx);
         instrs.push(Instruction::Copy {
             src: rhs_val.clone(),
             dst: target_name,
@@ -776,13 +868,22 @@ fn lower_assign(
     }
     let bin_op = compound_binop(op)
         .ok_or_else(|| anyhow::anyhow!("lower: invalid compound assignment operator"))?;
-    let tmp = ctx.fresh_tmp();
+    let tmp = ctx.fresh_typed_tmp(target_ty);
     let (mut instrs, rhs_val) = lower_expr(value, ctx)?;
+    let rhs_ty = type_of_val(&rhs_val, ctx);
+    let (lhs_for_copy, rhs_for_op, _) = promote_for_binary(
+        Val::Var(target_name.clone()),
+        rhs_val,
+        target_ty,
+        rhs_ty,
+        &mut instrs,
+        ctx,
+    );
     instrs.push(Instruction::Copy {
-        src: Val::Var(target_name.clone()),
+        src: lhs_for_copy,
         dst: tmp.clone(),
     });
-    instrs.push(binary_to_tacky(bin_op, rhs_val, tmp.clone()));
+    instrs.push(binary_to_tacky(bin_op, rhs_for_op, tmp.clone()));
     instrs.push(Instruction::Copy {
         src: Val::Var(tmp.clone()),
         dst: target_name,
@@ -790,24 +891,60 @@ fn lower_assign(
     Ok((instrs, Val::Var(tmp)))
 }
 
+/// Narrow an over-wide value into `target_ty` via a `Truncate`
+/// instruction.  A same-width or wider-to-narrower transition emits
+/// the truncate; an int value being widened to long is left as-is
+/// (the binary op handles the promotion).
+fn narrow_to_target(
+    val: Val,
+    val_ty: OperandType,
+    target_ty: OperandType,
+    instrs: &mut Vec<Instruction>,
+    ctx: &mut LowerCtx,
+) -> Val {
+    if val_ty == OperandType::Long && target_ty == OperandType::Int {
+        let tmp = ctx.fresh_typed_tmp(OperandType::Int);
+        instrs.push(Instruction::Truncate {
+            src: val,
+            dst: tmp.clone(),
+        });
+        Val::Var(tmp)
+    } else {
+        val
+    }
+}
+
 fn lower_prefix_incdec(
     inner: &Expr,
     increment: bool,
-    _ctx: &mut LowerCtx,
+    ctx: &mut LowerCtx,
 ) -> Result<(Vec<Instruction>, Val)> {
     let target_name = inner
         .lvalue_name()
         .ok_or_else(|| anyhow::anyhow!("lower: invalid lvalue in ++/--"))?
         .to_string();
+    let target_ty = ctx
+        .type_env
+        .get(&target_name)
+        .copied()
+        .unwrap_or(OperandType::Int);
     let mut instrs = Vec::new();
+    let one = if target_ty == OperandType::Long {
+        // Materialise `1` as a long-typed const so the codegen
+        // emits `addq $1, slot` rather than `addl $1, slot`.
+        let v = ctx.materialize_long_constant(&mut instrs, 1);
+        v
+    } else {
+        Val::Constant(1)
+    };
     let instr = if increment {
         Instruction::Add {
-            src: Val::Constant(1),
+            src: one,
             dst: target_name.clone(),
         }
     } else {
         Instruction::Sub {
-            src: Val::Constant(1),
+            src: one,
             dst: target_name.clone(),
         }
     };
@@ -824,20 +961,30 @@ fn lower_postfix_incdec(
         .lvalue_name()
         .ok_or_else(|| anyhow::anyhow!("lower: invalid lvalue in ++/--"))?
         .to_string();
-    let old = ctx.fresh_tmp();
+    let target_ty = ctx
+        .type_env
+        .get(&target_name)
+        .copied()
+        .unwrap_or(OperandType::Int);
+    let old = ctx.fresh_typed_tmp(target_ty);
     let mut instrs = Vec::new();
     instrs.push(Instruction::Copy {
         src: Val::Var(target_name.clone()),
         dst: old.clone(),
     });
+    let one = if target_ty == OperandType::Long {
+        ctx.materialize_long_constant(&mut instrs, 1)
+    } else {
+        Val::Constant(1)
+    };
     let instr = if increment {
         Instruction::Add {
-            src: Val::Constant(1),
+            src: one,
             dst: target_name,
         }
     } else {
         Instruction::Sub {
-            src: Val::Constant(1),
+            src: one,
             dst: target_name,
         }
     };
@@ -851,12 +998,23 @@ fn lower_conditional(
     else_expr: &Expr,
     ctx: &mut LowerCtx,
 ) -> Result<(Vec<Instruction>, Val)> {
-    let result = ctx.fresh_tmp();
     let else_label = ctx.labels.next_with_prefix("cond_else");
     let end_label = ctx.labels.next_with_prefix("cond_end");
     let (cond_instrs, cond_val) = lower_expr(condition, ctx)?;
     let (mut then_instrs, then_val) = lower_expr(then_expr, ctx)?;
     let (mut else_instrs, else_val) = lower_expr(else_expr, ctx)?;
+    // The result's type follows the usual arithmetic conversion of
+    // the two branch values: long if either branch is long, int
+    // otherwise.  Mirrors `get_common_type` for the chapter-11
+    // surface.
+    let then_ty = type_of_val(&then_val, ctx);
+    let else_ty = type_of_val(&else_val, ctx);
+    let result_ty = if then_ty == OperandType::Long || else_ty == OperandType::Long {
+        OperandType::Long
+    } else {
+        OperandType::Int
+    };
+    let result = ctx.fresh_typed_tmp(result_ty);
 
     let mut out = cond_instrs;
     out.push(Instruction::JumpIfZero {
@@ -894,8 +1052,21 @@ fn lower_binary(
             let (mut instrs, left_val) = lower_expr(left, ctx)?;
             let (right_instrs, right_val) = lower_expr(right, ctx)?;
             instrs.extend(right_instrs);
+            // Promotion: when one operand is long, both are
+            // materialised as long.  An int operand is widened with
+            // `SignExtend` into a fresh tmp before the binary op;
+            // an int temporary that is the destination of a
+            // comparison or arithmetic op is upgraded to long so
+            // the assembler emits the quadword form.
+            let left_ty = type_of_val(&left_val, ctx);
+            let right_ty = type_of_val(&right_val, ctx);
+            let (left_val, right_val, dst_ty) = promote_for_binary(left_val, right_val, left_ty, right_ty, &mut instrs, ctx);
+            // Re-resolve types after promotion so the destination
+            // tmp is correctly tagged.
+            let _ = (left_ty, right_ty);
+            let _ = dst_ty;
             if is_cmp_op(op) {
-                let tmp = ctx.fresh_tmp();
+                let tmp = ctx.fresh_typed_tmp(OperandType::Int);
                 instrs.push(Instruction::Copy {
                     src: left_val.clone(),
                     dst: tmp.clone(),
@@ -903,7 +1074,8 @@ fn lower_binary(
                 instrs.push(cmp_to_tacky(op, left_val, right_val, tmp.clone()));
                 Ok((instrs, Val::Var(tmp)))
             } else {
-                let tmp = ctx.fresh_tmp();
+                let tmp_ty = type_of_val(&left_val, ctx);
+                let tmp = ctx.fresh_typed_tmp(tmp_ty);
                 instrs.push(Instruction::Copy {
                     src: left_val,
                     dst: tmp.clone(),
@@ -912,6 +1084,61 @@ fn lower_binary(
                 Ok((instrs, Val::Var(tmp)))
             }
         }
+    }
+}
+
+/// Return the operand type of a `Val` for the purposes of TACKY
+/// instruction selection.  Constants default to `Int`; named
+/// variables look their type up from the lowerer's `type_env` (the
+/// env is populated for every parameter, every local, every
+/// materialised long constant, and every synthetic tmp the lowerer
+/// has already created).
+fn type_of_val(val: &Val, ctx: &LowerCtx) -> OperandType {
+    match val {
+        Val::Constant(_) => OperandType::Int,
+        Val::Var(name) => ctx
+            .type_env
+            .get(name)
+            .copied()
+            .unwrap_or(OperandType::Int),
+    }
+}
+
+/// Usual arithmetic conversion for int / long.  When one operand is
+/// long, the other is sign-extended into a fresh tmp and the result
+/// type is long.  When both are int, the operands are left as-is.
+/// Mirrors `convert_to` + the chapter-11 `get_common_type` path in
+/// `nqcc2/lib/semantic_analysis/typecheck.ml`.
+fn promote_for_binary(
+    left_val: Val,
+    right_val: Val,
+    left_ty: OperandType,
+    right_ty: OperandType,
+    instrs: &mut Vec<Instruction>,
+    ctx: &mut LowerCtx,
+) -> (Val, Val, OperandType) {
+    match (left_ty, right_ty) {
+        (OperandType::Int, OperandType::Long) => {
+            let tmp = ctx.fresh_typed_tmp(OperandType::Long);
+            instrs.push(Instruction::SignExtend {
+                src: left_val,
+                dst: tmp.clone(),
+            });
+            (Val::Var(tmp), right_val, OperandType::Long)
+        }
+        (OperandType::Long, OperandType::Int) => {
+            let tmp = ctx.fresh_typed_tmp(OperandType::Long);
+            instrs.push(Instruction::SignExtend {
+                src: right_val,
+                dst: tmp.clone(),
+            });
+            (left_val, Val::Var(tmp), OperandType::Long)
+        }
+        (a, b) => (left_val, right_val, if a == OperandType::Long || b == OperandType::Long {
+            OperandType::Long
+        } else {
+            OperandType::Int
+        }),
     }
 }
 

@@ -12,6 +12,7 @@ use super::{expr::Expr, stmt::Statement, ty::Type};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct VarDecl {
     pub(crate) name: String,
+    pub(crate) ty: Type,
     pub(crate) init: Option<Expr>,
     /// Chapter-10 storage-class specifier.  `Auto` for plain
     /// `int x = 0;`, `Static` for `static int x;` (file-scope tentative
@@ -24,6 +25,7 @@ pub(crate) struct VarDecl {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Function {
     pub(crate) name: String,
+    pub(crate) ret_ty: Type,
     pub(crate) params: Vec<VarDecl>,
     pub(crate) body: Option<Vec<BlockItem>>,
     /// Chapter-10 storage-class specifier on a function definition.
@@ -42,6 +44,7 @@ pub(crate) struct Function {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct GlobalDecl {
     pub(crate) name: String,
+    pub(crate) ret_ty: Type,
     pub(crate) params: Vec<VarDecl>,
     /// Chapter-10 storage-class specifier on a function declaration.
     /// `Static` is rejected at resolve time for local declarations

@@ -158,6 +158,10 @@ pub(crate) enum TokenKind {
     // Identifiers and constants.
     Identifier(String),
     Constant(i32),
+    /// Chapter 11: integer constant with a `L` / `l` suffix, typed as
+    /// `long` in C.  Carried as an i64 so values larger than 32 bits
+    /// (e.g. `4294967290L`) fit without truncation.
+    LongConstant(i64),
     CharLiteral(i32),
     StringLiteral(String),
 
@@ -327,6 +331,7 @@ impl TokenKind {
             Self::Default => "Default",
             Self::Identifier(_) => "Identifier",
             Self::Constant(_) => "Constant",
+            Self::LongConstant(_) => "LongConstant",
             Self::CharLiteral(_) => "CharLiteral",
             Self::StringLiteral(_) => "StringLiteral",
             Self::Minus => "Minus",

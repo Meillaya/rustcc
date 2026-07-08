@@ -8,7 +8,13 @@ use super::operator::{AssignOp, BinaryOp, UnaryOp};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Expr {
-    Constant(i32),
+    Constant(i64),
+    /// Chapter 11: integer constant with an `L` / `l` suffix in the
+    /// source.  Lowered as a typed `long` regardless of the value's
+    /// magnitude (e.g. `0l` is `long`, not `int`).  Carries the
+    /// original `i64` so the constant can be reused as-is in the IR
+    /// without truncation.
+    LongConstant(i64),
     Var(String),
     Paren(Box<Expr>),
     /// A unary operation. Carries the operator kind via [`UnaryOp`] so the
