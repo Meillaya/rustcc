@@ -1165,7 +1165,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
 
   **Recommended Agent Profile**: `quick`.
 
-- [ ] 27. W10-T1: Chapter 9 - reshape AST from single-function `Program` to multi-function `Program` (the BIG pivot)
+- [x] 27. W10-T1: Chapter 9 - reshape AST from single-function `Program` to multi-function `Program` (the BIG pivot)
 
   **What to do**: Reshape `Program` to hold multiple top-level functions. Updates ripple through parser, sema, TACKY, codegen.
   - `src/ast/item.rs`: change `pub struct Program` from `{ function }` to `{ pub top_level_items: Vec<TopLevelItem> }`. `TopLevelItem = Function(Function) | StaticVar(...)` (the latter for ch.10, but stub now).
@@ -1210,7 +1210,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-27-ch9-ast-pivot.txt
   ```
 
-- [ ] 28. W10-T2: Chapter 9 - parameter passing via ABI + function calls
+- [x] 28. W10-T2: Chapter 9 - parameter passing via ABI + function calls
 
   **What to do**: Implement ABI for argument passing and call/return.
   - Add `src/codegen/abi.rs::classify_params(params: &[VarDecl]) -> AbiPlan`: assign each parameter to integer (`%rdi, %rsi, %rdx, %rcx, %r8, %r9`) or SSE register (chapter 13) or stack-passed (chapter 9+).
@@ -1248,7 +1248,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-28-ch9-abi-gate.txt
   ```
 
-- [ ] 29. W10-T3: Chapter 9 - `src/codegen/fixup.rs` real implementation (callee-saved save/restore, push/pop alignment)
+- [x] 29. W10-T3: Chapter 9 - `src/codegen/fixup.rs` real implementation (callee-saved save/restore, push/pop alignment)
 
   **What to do**: Replace the no-op fixup with real instruction fixup for chapter 9+.
   - For each function, determine which callee-saved registers (`%rbx, %r12-%r15`) are used.
@@ -1272,7 +1272,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   - [ ] Functions using callee-saved registers still produce correct results after fixup prologue/epilogue.
   - [ ] All chapter-9 tests still pass after fixup is real.
 
-- [ ] 30. W10-T4: Chapter 9 - gate verification + cross-check multi-function behavior
+- [x] 30. W10-T4: Chapter 9 - gate verification + cross-check multi-function behavior
 
   **What to do**: Run full chapter 9 gate; manually verify with a 3-function program; commit.
 
@@ -1280,7 +1280,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
 
   **Acceptance Criteria**: Gate green; multi-function program runs correctly; commit made.
 
-- [ ] 31. W11-T1: Chapter 10 - global/static variables, `extern`, linkage, `.data` and `.bss` emission
+- [x] 31. W11-T1: Chapter 10 - global/static variables, `extern`, linkage, `.data` and `.bss` emission
 
   **What to do**: Add file-scope variables (global, static, extern).
   - Extend `src/ast/item.rs::TopLevelItem` with `Var(GlobalDecl { name, ty, init, storage: StorageClass })`.
@@ -1317,7 +1317,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
     Evidence: .omo/evidence/task-31-ch10-gate.txt
   ```
 
-- [ ] 32. W11-T2: Chapter 10 - gate verification + commit.
+- [x] 32. W11-T2: Chapter 10 - gate verification + commit.
 
   **What to do**: Run the full chapter 10 gate (no extras in this chapter), update `docs/COACHING_LOG.md`, commit.
 
@@ -1347,7 +1347,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   ```
 
 
-- [ ] 33. W12-T1: Chapter 11 - `long` 64-bit integers (foundation infra: `Const`, `type_utils`, `assembly_symbols`)
+- [x] 33. W12-T1: Chapter 11 - `long` 64-bit integers (foundation infra: `Const`, `type_utils`, `assembly_symbols`)
 
   **What to do**: Add `long` (64-bit signed).
   - Add `src/codegen/const.rs` (`pub enum ConstValue { Int(i64), Long(i64), UInt(u64), ULong(u64), Double(f64) }`) mirror `nqcc2/lib/const.ml` (chapter 11 introduces this).
@@ -1370,7 +1370,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   - [ ] `int main(void) { long x = 10000000000L; return x > 0; }` -> exit 1.
   - [ ] `./tests/test_compiler ./target/release/rustcc --chapter 11 --latest-only` green.
 
-- [ ] 34. W12-T2: Chapter 11 - width-aware codegen, `SignExtend` for int<->long. Gate verification + commit.
+- [x] 34. W12-T2: Chapter 11 - width-aware codegen, `SignExtend` for int<->long. Gate verification + commit.
 
   **What to do**: Confirm all chapter-11-conditional SignExtend lowering produces correct results; run `--chapter 11 --latest-only`; update COACHING_LOG; commit.
 
@@ -1400,7 +1400,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   ```
 
 
-- [ ] 35. W13-T1: Chapter 12 - `unsigned int` and `unsigned long` (zero-extension, unsigned comparisons)
+- [x] 35. W13-T1: Chapter 12 - `unsigned int` and `unsigned long` (zero-extension, unsigned comparisons)
 
   **What to do**: Add unsigned integers.
   - Extend AST `Type` with `UInt`, `ULong`.
@@ -1422,7 +1422,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   - [ ] `int main(void) { unsigned int x = 5u; return x > 0u; }` -> exit 1.
   - [ ] `./tests/test_compiler ./target/release/rustcc --chapter 12 --latest-only` green.
 
-- [ ] 36. W13-T2: Chapter 12 - gate verification + commit.
+- [x] 36. W13-T2: Chapter 12 - gate verification + commit.
 
   **What to do**: Run chapter 12 gate (unsigned int + unsigned long), update COACHING_LOG, commit.
 
