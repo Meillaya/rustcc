@@ -83,7 +83,11 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
         // Chapter 11: same split for the 64-bit `movq`.
         Instr::Movq {
             src: src @ (Operand::Stack(_) | Operand::Data(_)),
-            dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
+            dst:
+                dst @ (Operand::Stack(_)
+                | Operand::Data(_)
+                | Operand::Memory(_, _)
+                | Operand::MemoryIndexed(_, _, _)),
         } => vec![
             Instr::Movq {
                 src,

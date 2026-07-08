@@ -76,6 +76,7 @@ pub fn label_loops(program: &mut Program) -> Result<()> {
                 // File-scope variable declarations carry no labels;
                 // the lowerer turns them into a `TackyStaticVariable`.
             }
+            TopLevelItem::StructDecl(_) => {}
         }
     }
     Ok(())
@@ -171,6 +172,7 @@ fn check_user_gotos_block(items: &[BlockItem], labels: &HashSet<String>) -> Resu
                 }
             }
             BlockItem::FunctionDecl(_) => {}
+            BlockItem::StructDecl(_) => {}
         }
     }
     Ok(())

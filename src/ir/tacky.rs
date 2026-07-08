@@ -255,6 +255,11 @@ pub enum Instruction {
         src: Val,
         dst_pointer: Val,
     },
+    CopyBytes {
+        src_pointer: Val,
+        dst_pointer: Val,
+        size: i64,
+    },
     GetAddress {
         src: Var,
         dst: Var,

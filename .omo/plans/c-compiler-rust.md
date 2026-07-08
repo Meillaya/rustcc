@@ -1744,7 +1744,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   ```
 
 
-- [ ] 48. W19-T1: Chapter 18 - `struct` declarations, member access `.` and `->`, struct literals
+- [x] 48. W19-T1: Chapter 18 - `struct` declarations, member access `.` and `->`, struct literals
 
   **What to do**: Add structs.
   - Extend AST `Type` with `Struct { name: String, fields: Vec<(String, Type)> }` (with empty name for forward decl).

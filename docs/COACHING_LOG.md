@@ -1006,3 +1006,31 @@ Implemented Chapter 17 natively in the Rust compiler pipeline: `void` now works 
 - `.omo/evidence/task-46-adversarial-verify.txt`
 - `.omo/evidence/task-46-ch17-qa/`
 - `.omo/evidence/task-47-ch17-gate.txt`
+
+## Wave 19 / Chapter 18 core structs (task 48)
+
+Implemented the Chapter 18 W19-T1 core struct surface in the Rust compiler pipeline: native struct tags and the type table, complete layout/member-offset tracking, block/file tag scoping, member access through `.` and `->`, struct initializers, struct value copy, and the non-ABI core gate. This closes the core struct portion only; W19-T3 still owns the remaining struct ABI parameter/return classification for full Chapter 18.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `cargo build --release` | exit 0 |
+| `cargo test --release` | 10 passed, 0 failed |
+| core Chapter 18 no-structure-parameters gate | `PYTHONPATH=tests python3 /tmp/run_ch18_core.py` → 161 tests, OK |
+| chapter 17 `--latest-only` | `Ran 70 tests … OK` |
+| chapter 16 `--latest-only` | `Ran 72 tests … OK` |
+| full chapter 18 `--latest-only` | expected red only in `valid/parameters` and `valid/params_and_returns` (W19-T3 ABI scope) |
+| forbidden bridge scan | clean |
+| manual acceptance program | exit 15 |
+| invalid member probe | rejected with `type error: struct has no member 'b'` |
+
+### Evidence
+- `.omo/evidence/task-48-ch18-structs-implementation.txt`
+- `.omo/evidence/task-48-adversarial-verify.txt`
+- `.omo/evidence/task-48-adversarial-verify-2.txt`
+- `.omo/evidence/task-48-ch18-code-review.md`
+
+### Remaining scope
+- W19-T3 struct ABI parameter/return classification is still pending.
+- The type table remains process-global and is reset at compile start; that matches the current single-compile path but is a future concurrency risk.

@@ -88,6 +88,14 @@ pub(crate) enum Expr {
         base: Box<Expr>,
         index: Box<Expr>,
     },
+    Dot {
+        structure: Box<Expr>,
+        member: String,
+    },
+    Arrow {
+        structure: Box<Expr>,
+        member: String,
+    },
     InitializerList(Vec<Expr>),
 }
 
@@ -112,7 +120,11 @@ impl Expr {
         match self {
             Self::Var(_) => true,
             Self::Paren(inner) => inner.is_lvalue(),
-            Self::Dereference(_) | Self::Subscript { .. } | Self::StringLiteral(_) => true,
+            Self::Dereference(_)
+            | Self::Subscript { .. }
+            | Self::Arrow { .. }
+            | Self::StringLiteral(_) => true,
+            Self::Dot { structure, .. } => structure.is_lvalue(),
             _ => false,
         }
     }

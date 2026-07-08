@@ -55,6 +55,7 @@ fn type_to_operand_type(ty: Type) -> OperandType {
         Type::Double => OperandType::Double,
         Type::Pointer(_) => OperandType::Long,
         Type::Array { size: Some(_), .. } => OperandType::ByteArray { size: ty.size() },
+        Type::Struct(_) => OperandType::ByteArray { size: ty.size() },
         Type::Void => OperandType::Int,
         _ => OperandType::Int,
     }
@@ -87,9 +88,10 @@ fn scalar_static_init_for(expr: Expr, target_ty: OperandType) -> TackyStaticInit
         (Expr::UIntConstant(n, _), OperandType::Long | OperandType::ULong) => {
             TackyStaticInit::Long(n)
         }
-        (Expr::UIntConstant(n, true), _) => TackyStaticInit::Long(n),
         (Expr::Constant(n), OperandType::Long | OperandType::ULong) => TackyStaticInit::Long(n),
-        (Expr::Constant(n), _) | (Expr::UIntConstant(n, false), _) => TackyStaticInit::Int(n),
+        (Expr::Constant(n), _) | (Expr::LongConstant(n), _) | (Expr::UIntConstant(n, _), _) => {
+            TackyStaticInit::Int(n)
+        }
         _ => TackyStaticInit::Zero,
     }
 }
@@ -104,12 +106,16 @@ fn zero_static_init_for_type(ty: &Type) -> TackyStaticInit {
                 .map(|_| zero_static_init_for_type(element))
                 .collect(),
         ),
+        Type::Struct(_) => TackyStaticInit::StringBytes(vec![0; ty.clone().size() as usize]),
         ty => scalar_static_init_for(Expr::Constant(0), type_to_operand_type(ty.clone())),
     }
 }
 
-fn static_init_for_type(expr: Expr, target_ty: &Type) -> TackyStaticInit {
+fn static_init_for_type(expr: Expr, target_ty: &Type, ctx: &mut LowerCtx) -> TackyStaticInit {
     match (expr, target_ty) {
+        (Expr::StringLiteral(value), Type::Pointer(_)) => {
+            TackyStaticInit::Pointer(ctx.add_string_constant(&value))
+        }
         (
             Expr::StringLiteral(value),
             Type::Array {
@@ -133,15 +139,44 @@ fn static_init_for_type(expr: Expr, target_ty: &Type) -> TackyStaticInit {
         ) => {
             let mut inits: Vec<TackyStaticInit> = items
                 .into_iter()
-                .map(|item| static_init_for_type(item, element))
+                .map(|item| static_init_for_type(item, element, ctx))
                 .collect();
             while inits.len() < *size {
                 inits.push(zero_static_init_for_type(element));
             }
             TackyStaticInit::Aggregate(inits)
         }
+        (Expr::InitializerList(items), Type::Struct(tag)) => {
+            let members = crate::codegen::type_table::members_in_order(tag);
+            let mut inits = Vec::new();
+            let mut offset = 0;
+            for (idx, member) in members.iter().enumerate() {
+                if member.offset > offset {
+                    inits.push(TackyStaticInit::StringBytes(vec![
+                        0;
+                        (member.offset - offset)
+                            as usize
+                    ]));
+                }
+                let init = items
+                    .get(idx)
+                    .cloned()
+                    .map(|item| static_init_for_type(item, &member.member_type, ctx))
+                    .unwrap_or_else(|| zero_static_init_for_type(&member.member_type));
+                inits.push(init);
+                offset = member.offset + member.member_type.clone().size();
+            }
+            let size = target_ty.clone().size();
+            if size > offset {
+                inits.push(TackyStaticInit::StringBytes(vec![
+                    0;
+                    (size - offset) as usize
+                ]));
+            }
+            TackyStaticInit::Aggregate(inits)
+        }
         (expr, Type::Array { .. }) => {
-            static_init_for_type(Expr::InitializerList(vec![expr]), target_ty)
+            static_init_for_type(Expr::InitializerList(vec![expr]), target_ty, ctx)
         }
         (expr, ty) => scalar_static_init_for(expr, type_to_operand_type(ty.clone())),
     }
@@ -246,6 +281,7 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
             TopLevelItem::Variable(_) => {
                 // Already collected in the first pass.
             }
+            TopLevelItem::StructDecl(_) => {}
         }
     }
     let mut static_variables: Vec<TackyStaticVariable> = globals
@@ -263,7 +299,7 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
             }
             let global = matches!(storage, StorageClass::Auto);
             let init = match init {
-                Some(expr) => static_init_for_type(expr, &_ast_ty),
+                Some(expr) => static_init_for_type(expr, &_ast_ty, &mut ctx),
                 None => zero_static_init_for_type(&_ast_ty),
                 // Non-constant initializers rejected by resolve pass.
             };
@@ -314,6 +350,9 @@ fn merge_global_decl(
         type_to_operand_type(var.ty.clone()),
         var.ty.clone(),
     ));
+    if entry.0 == StorageClass::Extern && var.storage != StorageClass::Extern {
+        entry.0 = var.storage;
+    }
     if entry.1.is_none() && var.init.is_some() {
         entry.0 = var.storage;
         entry.1 = var.init.clone();
@@ -529,7 +568,7 @@ fn lower_block_items(items: &[BlockItem], ctx: &mut LowerCtx) -> Result<Vec<Inst
                     let init = decl
                         .init
                         .clone()
-                        .map(|expr| static_init_for_type(expr, &decl.ty))
+                        .map(|expr| static_init_for_type(expr, &decl.ty, ctx))
                         .unwrap_or_else(|| zero_static_init_for_type(&decl.ty));
                     ctx.local_statics.push(TackyStaticVariable {
                         name: decl.name.clone(),
@@ -540,8 +579,10 @@ fn lower_block_items(items: &[BlockItem], ctx: &mut LowerCtx) -> Result<Vec<Inst
                     continue;
                 }
                 if let Some(expr) = &decl.init {
-                    if matches!(decl.ty, Type::Array { .. }) {
-                        out.extend(lower_array_initializer(&decl.name, &decl.ty, expr, ctx)?);
+                    if matches!(decl.ty, Type::Array { .. } | Type::Struct(_)) {
+                        out.extend(lower_aggregate_initializer(
+                            &decl.name, &decl.ty, expr, ctx,
+                        )?);
                         continue;
                     }
                     let (instrs, val) = lower_expr(expr, ctx)?;
@@ -555,6 +596,7 @@ fn lower_block_items(items: &[BlockItem], ctx: &mut LowerCtx) -> Result<Vec<Inst
                 }
             }
             BlockItem::FunctionDecl(_) => {}
+            BlockItem::StructDecl(_) => {}
         }
     }
     Ok(out)
@@ -703,8 +745,8 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
                             .entry(decl.name.clone())
                             .or_insert(decl.ty.clone());
                         if let Some(expr) = &decl.init {
-                            if matches!(decl.ty, Type::Array { .. }) {
-                                out.extend(lower_array_initializer(
+                            if matches!(decl.ty, Type::Array { .. } | Type::Struct(_)) {
+                                out.extend(lower_aggregate_initializer(
                                     &decl.name, &decl.ty, expr, ctx,
                                 )?);
                             } else {
@@ -1119,6 +1161,8 @@ fn lower_expr(expr: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)
         Expr::AddressOf(inner) => lower_addr_of(inner, ctx),
         Expr::Dereference(inner) => lower_dereference(inner, ctx),
         Expr::Subscript { base, index } => lower_subscript(base, index, ctx),
+        Expr::Dot { structure, member } => lower_member_access(structure, member, false, ctx),
+        Expr::Arrow { structure, member } => lower_member_access(structure, member, true, ctx),
         Expr::InitializerList(_) => Err(anyhow::anyhow!(
             "lower: initializer list cannot be used as expression"
         )),
@@ -1317,7 +1361,7 @@ fn lower_subscript(
     Ok((instrs, Val::Var(dst)))
 }
 
-fn lower_array_initializer(
+fn lower_aggregate_initializer(
     name: &str,
     ty: &Type,
     init: &Expr,
@@ -1332,12 +1376,12 @@ fn lower_array_initializer(
         });
         dst
     });
-    zero_initialize_array(base.clone(), ty, &mut out, ctx)?;
-    initialize_array_elements(base, ty, init, &mut out, ctx)?;
+    zero_initialize_aggregate(base.clone(), ty, &mut out, ctx)?;
+    initialize_aggregate_elements(base, ty, init, &mut out, ctx)?;
     Ok(out)
 }
 
-fn zero_initialize_array(
+fn zero_initialize_aggregate(
     base: Val,
     ty: &Type,
     out: &mut Vec<Instruction>,
@@ -1350,10 +1394,24 @@ fn zero_initialize_array(
     {
         for idx in 0..*size {
             let ptr = add_const_index(base.clone(), idx, element, out, ctx);
-            if matches!(**element, Type::Array { .. }) {
-                zero_initialize_array(ptr, element, out, ctx)?;
+            if matches!(**element, Type::Array { .. } | Type::Struct(_)) {
+                zero_initialize_aggregate(ptr, element, out, ctx)?;
             } else {
                 let zero = zero_value_for_type(element, out, ctx);
+                out.push(Instruction::Store {
+                    src: zero,
+                    dst_pointer: ptr,
+                });
+            }
+        }
+        Ok(())
+    } else if let Type::Struct(tag) = ty {
+        for member in crate::codegen::type_table::members_in_order(tag) {
+            let ptr = add_const_byte_offset(base.clone(), member.offset, out, ctx);
+            if matches!(member.member_type, Type::Array { .. } | Type::Struct(_)) {
+                zero_initialize_aggregate(ptr, &member.member_type, out, ctx)?;
+            } else {
+                let zero = zero_value_for_type(&member.member_type, out, ctx);
                 out.push(Instruction::Store {
                     src: zero,
                     dst_pointer: ptr,
@@ -1379,54 +1437,100 @@ fn zero_value_for_type(ty: &Type, out: &mut Vec<Instruction>, ctx: &mut LowerCtx
     }
 }
 
-fn initialize_array_elements(
+fn initialize_aggregate_elements(
     base: Val,
     ty: &Type,
     init: &Expr,
     out: &mut Vec<Instruction>,
     ctx: &mut LowerCtx,
 ) -> Result<()> {
-    let Type::Array {
+    if let Type::Array {
         element,
         size: Some(size),
     } = ty
-    else {
-        return Err(anyhow::anyhow!("lower: initializer target is not array"));
-    };
-    let Expr::InitializerList(items) = init else {
-        if let Expr::StringLiteral(value) = init {
-            if is_char_type(element) {
-                initialize_string_bytes(base, value, *size, out, ctx);
-                return Ok(());
+    {
+        let Expr::InitializerList(items) = init else {
+            if let Expr::StringLiteral(value) = init {
+                if is_char_type(element) {
+                    initialize_string_bytes(base, value, *size, out, ctx);
+                    return Ok(());
+                }
+            }
+            return Err(anyhow::anyhow!("type error: scalar initializer for array"));
+        };
+        if items.len() > *size {
+            return Err(anyhow::anyhow!("type error: too many array initializers"));
+        }
+        for (idx, item) in items.iter().enumerate() {
+            let ptr = add_const_index(base.clone(), idx, element, out, ctx);
+            if matches!(**element, Type::Array { .. } | Type::Struct(_)) {
+                initialize_aggregate_elements(ptr, element, item, out, ctx)?;
+            } else {
+                let (instrs, value) = lower_expr(item, ctx)?;
+                out.extend(instrs);
+                let value_ty = type_of_val(&value, ctx);
+                let value = convert_to_type(
+                    value,
+                    value_ty,
+                    type_to_operand_type((**element).clone()),
+                    out,
+                    ctx,
+                );
+                out.push(Instruction::Store {
+                    src: value,
+                    dst_pointer: ptr,
+                });
             }
         }
-        return Err(anyhow::anyhow!("type error: scalar initializer for array"));
-    };
-    if items.len() > *size {
-        return Err(anyhow::anyhow!("type error: too many array initializers"));
-    }
-    for (idx, item) in items.iter().enumerate() {
-        let ptr = add_const_index(base.clone(), idx, element, out, ctx);
-        if matches!(**element, Type::Array { .. }) {
-            initialize_array_elements(ptr, element, item, out, ctx)?;
-        } else {
-            let (instrs, value) = lower_expr(item, ctx)?;
+        Ok(())
+    } else if let Type::Struct(tag) = ty {
+        if !matches!(init, Expr::InitializerList(_)) {
+            let (instrs, src_ptr) = match lower_lvalue_address(init, ctx) {
+                Ok((instrs, ptr, _)) => (instrs, ptr),
+                Err(_) => lower_expr(init, ctx)?,
+            };
             out.extend(instrs);
-            let value_ty = type_of_val(&value, ctx);
-            let value = convert_to_type(
-                value,
-                value_ty,
-                type_to_operand_type((**element).clone()),
-                out,
-                ctx,
-            );
-            out.push(Instruction::Store {
-                src: value,
-                dst_pointer: ptr,
+            out.push(Instruction::CopyBytes {
+                src_pointer: src_ptr,
+                dst_pointer: base,
+                size: ty.clone().size(),
             });
+            return Ok(());
         }
+        let Expr::InitializerList(items) = init else {
+            unreachable!()
+        };
+        let members = crate::codegen::type_table::members_in_order(tag);
+        if items.len() > members.len() {
+            return Err(anyhow::anyhow!("type error: too many struct initializers"));
+        }
+        for (item, member) in items.iter().zip(members.iter()) {
+            let ptr = add_const_byte_offset(base.clone(), member.offset, out, ctx);
+            if matches!(member.member_type, Type::Array { .. } | Type::Struct(_)) {
+                initialize_aggregate_elements(ptr, &member.member_type, item, out, ctx)?;
+            } else {
+                let (instrs, value) = lower_expr(item, ctx)?;
+                out.extend(instrs);
+                let value_ty = type_of_val(&value, ctx);
+                let value = convert_to_type(
+                    value,
+                    value_ty,
+                    type_to_operand_type(member.member_type.clone()),
+                    out,
+                    ctx,
+                );
+                out.push(Instruction::Store {
+                    src: value,
+                    dst_pointer: ptr,
+                });
+            }
+        }
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!(
+            "lower: initializer target is not aggregate"
+        ))
     }
-    Ok(())
 }
 
 fn initialize_string_bytes(
@@ -1463,6 +1567,25 @@ fn add_const_index(
         ptr: base,
         index: Val::Constant(index as i64),
         scale: element.clone().size(),
+        dst: dst.clone(),
+    });
+    Val::Var(dst)
+}
+
+fn add_const_byte_offset(
+    base: Val,
+    offset: i64,
+    out: &mut Vec<Instruction>,
+    ctx: &mut LowerCtx,
+) -> Val {
+    if offset == 0 {
+        return base;
+    }
+    let dst = ctx.fresh_typed_tmp(OperandType::Long);
+    out.push(Instruction::AddPtr {
+        ptr: base,
+        index: Val::Constant(offset),
+        scale: 1,
         dst: dst.clone(),
     });
     Val::Var(dst)
@@ -1530,6 +1653,21 @@ fn lower_assign(
     value: &Expr,
     ctx: &mut LowerCtx,
 ) -> Result<(Vec<Instruction>, Val)> {
+    let target_ast_ty = expr_type(target, ctx);
+    if op == AssignOp::Assign && matches!(target_ast_ty, Type::Struct(_)) {
+        let (mut instrs, dst_pointer, _) = lower_lvalue_address(target, ctx)?;
+        let (src_instrs, src_pointer) = match lower_lvalue_address(value, ctx) {
+            Ok((src_instrs, src_pointer, _)) => (src_instrs, src_pointer),
+            Err(_) => lower_expr(value, ctx)?,
+        };
+        instrs.extend(src_instrs);
+        instrs.push(Instruction::CopyBytes {
+            src_pointer: src_pointer.clone(),
+            dst_pointer,
+            size: target_ast_ty.size(),
+        });
+        return Ok((instrs, src_pointer));
+    }
     if let Some((mut instrs, dst_pointer, target_ty)) = lower_indirect_lvalue(target, ctx)? {
         if op != AssignOp::Assign {
             let (load_instrs, lhs) = lower_expr(target, ctx)?;
@@ -1659,8 +1797,141 @@ fn lower_indirect_lvalue(
                 type_to_operand_type(element_ty),
             )))
         }
+        Expr::Dot { .. } | Expr::Arrow { .. } => {
+            let (instrs, ptr, ty) = lower_lvalue_address(target, ctx)?;
+            Ok(Some((instrs, ptr, type_to_operand_type(ty))))
+        }
         _ => Ok(None),
     }
+}
+
+fn lower_lvalue_address(
+    target: &Expr,
+    ctx: &mut LowerCtx,
+) -> Result<(Vec<Instruction>, Val, Type)> {
+    match target {
+        Expr::Paren(inner) => lower_lvalue_address(inner, ctx),
+        Expr::Var(name) => {
+            let dst = ctx.fresh_typed_tmp(OperandType::Long);
+            let ty = ctx.ast_type_env.get(name).cloned().unwrap_or(Type::Int);
+            Ok((
+                vec![Instruction::GetAddress {
+                    src: name.clone(),
+                    dst: dst.clone(),
+                }],
+                Val::Var(dst),
+                ty,
+            ))
+        }
+        Expr::Dereference(inner) => {
+            let (instrs, ptr) = lower_expr(inner, ctx)?;
+            let ty = expr_type(target, ctx);
+            Ok((instrs, ptr, ty))
+        }
+        Expr::Subscript { .. } | Expr::Dot { .. } | Expr::Arrow { .. } => {
+            lower_member_or_subscript_address(target, ctx)
+        }
+        _ => Err(anyhow::anyhow!(
+            "lower: expression is not an addressable lvalue"
+        )),
+    }
+}
+
+fn lower_member_access(
+    structure: &Expr,
+    member: &str,
+    arrow: bool,
+    ctx: &mut LowerCtx,
+) -> Result<(Vec<Instruction>, Val)> {
+    let (mut instrs, ptr, member_ty) = lower_member_address(structure, member, arrow, ctx)?;
+    if matches!(member_ty, Type::Array { .. } | Type::Struct(_)) {
+        return Ok((instrs, ptr));
+    }
+    let dst = ctx.fresh_typed_tmp(type_to_operand_type(member_ty));
+    instrs.push(Instruction::Load {
+        src_pointer: ptr,
+        dst: dst.clone(),
+    });
+    Ok((instrs, Val::Var(dst)))
+}
+
+fn lower_member_or_subscript_address(
+    target: &Expr,
+    ctx: &mut LowerCtx,
+) -> Result<(Vec<Instruction>, Val, Type)> {
+    match target {
+        Expr::Subscript { base, index } => {
+            let base_ty = expr_type(base, ctx).decay();
+            let index_ty = expr_type(index, ctx).decay();
+            let (pointer_expr, offset_expr, element_ty) = match (base_ty, index_ty) {
+                (Type::Pointer(pointee), offset_ty) if offset_ty.clone().is_integer() => {
+                    (base.as_ref(), index.as_ref(), *pointee)
+                }
+                (offset_ty, Type::Pointer(pointee)) if offset_ty.clone().is_integer() => {
+                    (index.as_ref(), base.as_ref(), *pointee)
+                }
+                _ => (
+                    base.as_ref(),
+                    index.as_ref(),
+                    subscript_element_type(base, ctx),
+                ),
+            };
+            let (mut instrs, base_val) = lower_expr(pointer_expr, ctx)?;
+            let (idx_instrs, index_val) = lower_expr(offset_expr, ctx)?;
+            instrs.extend(idx_instrs);
+            let pointer_tmp = ctx.fresh_typed_tmp(OperandType::Long);
+            instrs.push(Instruction::AddPtr {
+                ptr: base_val,
+                index: index_val,
+                scale: element_ty.clone().size(),
+                dst: pointer_tmp.clone(),
+            });
+            Ok((instrs, Val::Var(pointer_tmp), element_ty))
+        }
+        Expr::Dot { structure, member } => lower_member_address(structure, member, false, ctx),
+        Expr::Arrow { structure, member } => lower_member_address(structure, member, true, ctx),
+        _ => Err(anyhow::anyhow!(
+            "lower: unsupported member/subscript lvalue"
+        )),
+    }
+}
+
+fn lower_member_address(
+    structure: &Expr,
+    member: &str,
+    arrow: bool,
+    ctx: &mut LowerCtx,
+) -> Result<(Vec<Instruction>, Val, Type)> {
+    let (mut instrs, base_ptr, base_ty) = if arrow {
+        let (instrs, ptr) = lower_expr(structure, ctx)?;
+        let ty = match expr_type(structure, ctx).decay() {
+            Type::Pointer(pointee) => *pointee,
+            _ => Type::Int,
+        };
+        (instrs, ptr, ty)
+    } else {
+        match lower_lvalue_address(structure, ctx) {
+            Ok(parts) => parts,
+            Err(_) if matches!(expr_type(structure, ctx), Type::Struct(_)) => {
+                let ty = expr_type(structure, ctx);
+                let (instrs, ptr) = lower_expr(structure, ctx)?;
+                (instrs, ptr, ty)
+            }
+            Err(err) => return Err(err),
+        }
+    };
+    let tag = match base_ty {
+        Type::Struct(tag) => tag,
+        Type::Pointer(pointee) => match *pointee {
+            Type::Struct(tag) => tag,
+            _ => return Err(anyhow::anyhow!("lower: member access on non-struct")),
+        },
+        _ => return Err(anyhow::anyhow!("lower: member access on non-struct")),
+    };
+    let entry = crate::codegen::type_table::member(&tag, member)
+        .ok_or_else(|| anyhow::anyhow!("lower: unknown struct member '{member}'"))?;
+    let ptr = add_const_byte_offset(base_ptr, entry.offset, &mut instrs, ctx);
+    Ok((instrs, ptr, entry.member_type))
 }
 
 /// Convert a value to `target_ty`: truncate long → int via `Truncate`,
@@ -1840,6 +2111,41 @@ fn lower_conditional(
 ) -> Result<(Vec<Instruction>, Val)> {
     let else_label = ctx.labels.next_with_prefix("cond_else");
     let end_label = ctx.labels.next_with_prefix("cond_end");
+    let result_ast_ty = expr_type(then_expr, ctx);
+    if matches!(result_ast_ty, Type::Struct(_)) {
+        let (cond_instrs, cond_val) = lower_expr(condition, ctx)?;
+        let (mut then_instrs, then_ptr, _) = lower_lvalue_address(then_expr, ctx)?;
+        let (mut else_instrs, else_ptr, _) = lower_lvalue_address(else_expr, ctx)?;
+        let result = ctx.fresh_typed_tmp(type_to_operand_type(result_ast_ty.clone()));
+        let result_addr = ctx.fresh_typed_tmp(OperandType::Long);
+        let mut out = cond_instrs;
+        out.push(Instruction::GetAddress {
+            src: result.clone(),
+            dst: result_addr.clone(),
+        });
+        out.push(Instruction::JumpIfZero {
+            condition: cond_val,
+            target: else_label.clone(),
+        });
+        then_instrs.push(Instruction::CopyBytes {
+            src_pointer: then_ptr,
+            dst_pointer: Val::Var(result_addr.clone()),
+            size: result_ast_ty.clone().size(),
+        });
+        then_instrs.push(Instruction::Jump {
+            target: end_label.clone(),
+        });
+        out.extend(then_instrs);
+        out.push(Instruction::Label(else_label));
+        else_instrs.push(Instruction::CopyBytes {
+            src_pointer: else_ptr,
+            dst_pointer: Val::Var(result_addr.clone()),
+            size: result_ast_ty.size(),
+        });
+        out.extend(else_instrs);
+        out.push(Instruction::Label(end_label));
+        return Ok((out, Val::Var(result_addr)));
+    }
     let (cond_instrs, cond_val) = lower_expr(condition, ctx)?;
     let (mut then_instrs, then_val) = lower_expr(then_expr, ctx)?;
     let (mut else_instrs, else_val) = lower_expr(else_expr, ctx)?;
@@ -2115,7 +2421,9 @@ fn expr_type(expr: &Expr, ctx: &LowerCtx) -> Type {
         } => {
             let then_ty = expr_type(then_expr, ctx);
             let else_ty = expr_type(else_expr, ctx);
-            if matches!(then_ty, Type::Pointer(_)) {
+            if matches!(then_ty, Type::Struct(_)) && then_ty == else_ty {
+                then_ty
+            } else if matches!(then_ty, Type::Pointer(_)) {
                 then_ty
             } else if matches!(else_ty, Type::Pointer(_)) {
                 else_ty
@@ -2176,6 +2484,21 @@ fn expr_type(expr: &Expr, ctx: &LowerCtx) -> Type {
             _ => Type::Int,
         },
         Expr::Subscript { base, .. } => subscript_element_type(base, ctx),
+        Expr::Dot { structure, member } => match expr_type(structure, ctx) {
+            Type::Struct(tag) => crate::codegen::type_table::member(&tag, member)
+                .map(|entry| entry.member_type)
+                .unwrap_or(Type::Int),
+            _ => Type::Int,
+        },
+        Expr::Arrow { structure, member } => match expr_type(structure, ctx).decay() {
+            Type::Pointer(pointee) => match *pointee {
+                Type::Struct(tag) => crate::codegen::type_table::member(&tag, member)
+                    .map(|entry| entry.member_type)
+                    .unwrap_or(Type::Int),
+                _ => Type::Int,
+            },
+            _ => Type::Int,
+        },
         Expr::InitializerList(_) => Type::Int,
     }
 }

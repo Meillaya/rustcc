@@ -1566,6 +1566,46 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
                 store,
             ]
         }
+        Instruction::CopyBytes {
+            src_pointer,
+            dst_pointer,
+            size,
+        } => {
+            let mut out = vec![
+                Instr::Movq {
+                    src: convert_val(src_pointer, ctx),
+                    dst: Operand::Reg(Reg::R8),
+                },
+                Instr::Movq {
+                    src: convert_val(dst_pointer, ctx),
+                    dst: Operand::Reg(Reg::R9),
+                },
+            ];
+            let mut offset = 0;
+            while offset + 8 <= *size {
+                out.push(Instr::Movq {
+                    src: Operand::Memory(Reg::R8, offset as i32),
+                    dst: Operand::Reg(Reg::R10),
+                });
+                out.push(Instr::Movq {
+                    src: Operand::Reg(Reg::R10),
+                    dst: Operand::Memory(Reg::R9, offset as i32),
+                });
+                offset += 8;
+            }
+            while offset < *size {
+                out.push(Instr::MovByte {
+                    src: Operand::Memory(Reg::R8, offset as i32),
+                    dst: Operand::Reg(Reg::R10),
+                });
+                out.push(Instr::MovByte {
+                    src: Operand::Reg(Reg::R10),
+                    dst: Operand::Memory(Reg::R9, offset as i32),
+                });
+                offset += 1;
+            }
+            out
+        }
         Instruction::GetAddress { src, dst } => vec![Instr::Lea {
             src: Operand::Pseudo(src.clone()),
             dst: Operand::Pseudo(dst.clone()),

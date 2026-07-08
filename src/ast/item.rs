@@ -7,7 +7,7 @@
 //! file-scope variable declaration like `int g = 5;` or `static int h;`
 //! (chapter 10).  Chapter 13 will add structs.
 
-use super::decl::{Function, GlobalDecl, GlobalVarDecl};
+use super::decl::{Function, GlobalDecl, GlobalVarDecl, StructDecl};
 
 /// A single top-level item in the translation unit.
 ///
@@ -21,6 +21,7 @@ pub(crate) enum TopLevelItem {
     Function(Function),
     Declaration(GlobalDecl),
     Variable(GlobalVarDecl),
+    StructDecl(StructDecl),
 }
 
 /// The complete AST for a translation unit.

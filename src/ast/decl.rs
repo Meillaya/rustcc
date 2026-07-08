@@ -90,6 +90,18 @@ pub(crate) struct GlobalVarDecl {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub(crate) struct MemberDecl {
+    pub(crate) name: String,
+    pub(crate) ty: Type,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct StructDecl {
+    pub(crate) tag: String,
+    pub(crate) members: Vec<MemberDecl>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum BlockItem {
     Declaration(VarDecl),
     Statement(Statement),
@@ -98,6 +110,7 @@ pub(crate) enum BlockItem {
     /// can register the name (and arity) in the per-block scope; the
     /// lowerer treats this as a no-op.
     FunctionDecl(GlobalDecl),
+    StructDecl(StructDecl),
 }
 
 #[derive(Debug, Clone, PartialEq)]

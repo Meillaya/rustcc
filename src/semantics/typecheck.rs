@@ -11,8 +11,9 @@ use anyhow::{Result, bail};
 
 use crate::ast::{
     AssignOp, BinaryOp, BlockItem, Expr, ForInit, GlobalDecl, GlobalVarDecl, Program, Statement,
-    StorageClass, TopLevelItem, Type, UnaryOp, VarDecl,
+    StorageClass, StructDecl, TopLevelItem, Type, UnaryOp, VarDecl,
 };
+use crate::codegen::type_table::{self, MemberEntry, StructEntry};
 
 use super::resolve::ResolvedProgram;
 
@@ -28,6 +29,7 @@ struct TypeCtx {
 }
 
 pub fn typecheck(ast: &ResolvedProgram) -> Result<TypedProgram> {
+    type_table::reset();
     let mut ctx = TypeCtx {
         objects: HashMap::new(),
         funcs: HashMap::new(),
@@ -38,6 +40,12 @@ pub fn typecheck(ast: &ResolvedProgram) -> Result<TypedProgram> {
             TopLevelItem::Function(func) => {
                 let param_tys: Vec<Type> = func.params.iter().map(|p| p.ty.clone()).collect();
                 validate_function_signature(&func.name, &param_tys, &func.ret_ty, &ctx)?;
+                if func.body.is_some()
+                    && !matches!(func.ret_ty, Type::Void)
+                    && !func.ret_ty.clone().is_complete()
+                {
+                    bail!("type error: function definition has incomplete return type");
+                }
                 ctx.funcs
                     .insert(func.name.clone(), (param_tys, func.ret_ty.clone()));
             }
@@ -49,6 +57,9 @@ pub fn typecheck(ast: &ResolvedProgram) -> Result<TypedProgram> {
             }
             TopLevelItem::Variable(var) => {
                 validate_global_var(var, &mut ctx)?;
+            }
+            TopLevelItem::StructDecl(sd) => {
+                typecheck_struct_decl(sd)?;
             }
         }
     }
@@ -66,7 +77,7 @@ pub fn typecheck(ast: &ResolvedProgram) -> Result<TypedProgram> {
                 ctx.objects = saved;
             }
             TopLevelItem::Declaration(decl) => validate_function_decl(decl)?,
-            TopLevelItem::Variable(_) => {}
+            TopLevelItem::Variable(_) | TopLevelItem::StructDecl(_) => {}
         }
     }
     Ok(TypedProgram {
@@ -96,14 +107,18 @@ fn validate_function_signature(
 }
 
 fn validate_global_var(var: &GlobalVarDecl, ctx: &mut TypeCtx) -> Result<()> {
-    validate_object_type(&var.ty)?;
+    if var.storage == StorageClass::Extern {
+        validate_type(&var.ty)?;
+    } else {
+        validate_object_type(&var.ty)?;
+    }
     if let Some(existing) = ctx.objects.get(&var.name) {
         if existing != &var.ty {
             bail!("type error: conflicting declarations for '{}'", var.name);
         }
     }
     if let Some(init) = &var.init {
-        if matches!(var.ty, Type::Array { .. }) {
+        if matches!(var.ty, Type::Array { .. } | Type::Struct(_)) {
             if var.storage == StorageClass::Static && !initializer_is_constant(init) {
                 bail!("type error: static array initializer must be constant");
             }
@@ -139,6 +154,7 @@ fn check_block(items: &[BlockItem], ctx: &mut TypeCtx) -> Result<()> {
 fn check_block_item(item: &BlockItem, ctx: &mut TypeCtx) -> Result<()> {
     match item {
         BlockItem::Declaration(decl) => check_var_decl(decl, ctx),
+        BlockItem::StructDecl(sd) => typecheck_struct_decl(sd),
         BlockItem::FunctionDecl(decl) => {
             let param_tys: Vec<Type> = decl.params.iter().map(|p| p.ty.clone()).collect();
             validate_function_signature(&decl.name, &param_tys, &decl.ret_ty, ctx)?;
@@ -151,7 +167,11 @@ fn check_block_item(item: &BlockItem, ctx: &mut TypeCtx) -> Result<()> {
 }
 
 fn check_var_decl(decl: &VarDecl, ctx: &mut TypeCtx) -> Result<()> {
-    validate_object_type(&decl.ty)?;
+    if decl.storage == StorageClass::Extern {
+        validate_type(&decl.ty)?;
+    } else {
+        validate_object_type(&decl.ty)?;
+    }
     if decl.storage == StorageClass::Extern {
         if let Some(existing) = ctx.objects.get(&decl.name) {
             if existing != &decl.ty {
@@ -161,7 +181,7 @@ fn check_var_decl(decl: &VarDecl, ctx: &mut TypeCtx) -> Result<()> {
     }
     ctx.objects.insert(decl.name.clone(), decl.ty.clone());
     if let Some(init) = &decl.init {
-        if matches!(decl.ty, Type::Array { .. }) {
+        if matches!(decl.ty, Type::Array { .. } | Type::Struct(_)) {
             if decl.storage == StorageClass::Static && !initializer_is_constant(init) {
                 bail!("type error: static array initializer must be constant");
             }
@@ -218,7 +238,10 @@ fn check_statement(stmt: &Statement, ctx: &mut TypeCtx) -> Result<()> {
                 match init {
                     ForInit::Declaration(decl) => check_var_decl(decl, ctx)?,
                     ForInit::Expr(expr) => {
-                        type_of_expr(expr, ctx)?;
+                        let ty = type_of_expr(expr, ctx)?;
+                        if !matches!(ty, Type::Void) && !ty.is_complete() {
+                            bail!("type error: full expression has incomplete type");
+                        }
                     }
                 }
             }
@@ -260,7 +283,10 @@ fn check_statement(stmt: &Statement, ctx: &mut TypeCtx) -> Result<()> {
             Ok(())
         }
         Statement::Expr(Some(expr)) => {
-            type_of_expr(expr, ctx)?;
+            let ty = type_of_expr(expr, ctx)?;
+            if !matches!(ty, Type::Void) && !ty.is_complete() {
+                bail!("type error: full expression has incomplete type");
+            }
             Ok(())
         }
         Statement::Expr(None)
@@ -272,7 +298,7 @@ fn check_statement(stmt: &Statement, ctx: &mut TypeCtx) -> Result<()> {
 
 fn type_of_scalar(expr: &Expr, ctx: &TypeCtx) -> Result<Type> {
     let ty = type_of_expr(expr, ctx)?;
-    if matches!(ty, Type::Void) {
+    if !is_scalar_type(&ty) {
         bail!("type error: scalar expression expected");
     }
     Ok(ty)
@@ -402,6 +428,27 @@ fn type_of_expr(expr: &Expr, ctx: &TypeCtx) -> Result<Type> {
                 _ => bail!("type error: subscript base must be pointer or array"),
             }
         }
+        Expr::Dot { structure, member } => {
+            let structure_ty = type_of_expr(structure, ctx)?;
+            let Type::Struct(tag) = structure_ty else {
+                bail!("type error: dot operator requires structure type");
+            };
+            type_table::member(&tag, member)
+                .map(|entry| entry.member_type)
+                .ok_or_else(|| anyhow::anyhow!("type error: struct has no member '{member}'"))
+        }
+        Expr::Arrow { structure, member } => {
+            let structure_ty = type_of_expr(structure, ctx)?.decay();
+            let Type::Pointer(pointee) = structure_ty else {
+                bail!("type error: arrow operator requires pointer to structure");
+            };
+            let Type::Struct(tag) = *pointee else {
+                bail!("type error: arrow operator requires pointer to structure");
+            };
+            type_table::member(&tag, member)
+                .map(|entry| entry.member_type)
+                .ok_or_else(|| anyhow::anyhow!("type error: struct has no member '{member}'"))
+        }
         Expr::InitializerList(_) => {
             bail!("type error: initializer list is only valid in an initializer")
         }
@@ -411,7 +458,7 @@ fn type_of_expr(expr: &Expr, ctx: &TypeCtx) -> Result<Type> {
 fn type_unary(op: UnaryOp, expr: &Expr, ctx: &TypeCtx) -> Result<Type> {
     let ty = type_of_expr(expr, ctx)?;
     match op {
-        UnaryOp::Not if matches!(ty, Type::Void) => {
+        UnaryOp::Not if !is_scalar_type(&ty) => {
             bail!("type error: logical not requires scalar operand")
         }
         UnaryOp::Not => Ok(Type::Int),
@@ -556,7 +603,13 @@ fn validate_cast(source: &Type, target: &Type) -> Result<()> {
         bail!("type error: cannot cast pointer to double");
     }
     if matches!(target, Type::Void) {
-        return Ok(());
+        if matches!(source, Type::Void) || source.clone().is_complete() {
+            return Ok(());
+        }
+        bail!("type error: cannot cast incomplete type");
+    }
+    if !source.clone().is_complete() {
+        bail!("type error: cannot cast incomplete type");
     }
     if !is_scalar_type(&source) {
         bail!("type error: can only cast scalar expressions to non-void type");
@@ -575,6 +628,7 @@ fn can_assign(expr: &Expr, source: &Type, target: &Type) -> bool {
         || (matches!((&source, &target), (Type::Pointer(a), Type::Pointer(b)) if a == b))
         || (matches!((&source, &target), (Type::Pointer(a), Type::Pointer(_)) if matches!(**a, Type::Void)))
         || (matches!((&source, &target), (Type::Pointer(_), Type::Pointer(b)) if matches!(**b, Type::Void)))
+        || matches!((&source, &target), (Type::Struct(a), Type::Struct(b)) if a == b)
         || (source.clone().is_integer() && target.clone().is_integer())
         || ((source.clone().is_integer() || matches!(source, Type::Double))
             && (target.clone().is_integer() || matches!(target, Type::Double))
@@ -611,6 +665,16 @@ fn validate_initializer(init: &Expr, target: &Type, ctx: &TypeCtx) -> Result<()>
             Ok(())
         }
         (Type::Array { .. }, _) => bail!("type error: scalar initializer for array"),
+        (Type::Struct(tag), Expr::InitializerList(items)) => {
+            let members = type_table::members_in_order(tag);
+            if items.len() > members.len() {
+                bail!("type error: too many struct initializers");
+            }
+            for (item, member) in items.iter().zip(members.iter()) {
+                validate_initializer(item, &member.member_type, ctx)?;
+            }
+            Ok(())
+        }
         (_, Expr::InitializerList(_)) => bail!("type error: initializer list for scalar"),
         (target, expr) => {
             let source = type_of_expr(expr, ctx)?;
@@ -647,7 +711,7 @@ fn comparable(left: &Expr, left_ty: &Type, right: &Expr, right_ty: &Type) -> Res
     let left_ty = left_ty.clone().decay();
     let right_ty = right_ty.clone().decay();
     if left_ty == right_ty {
-        if matches!(left_ty, Type::Void) {
+        if !is_scalar_type(&left_ty) {
             bail!("type error: cannot compare void expressions");
         }
         return Ok(());
@@ -731,13 +795,14 @@ fn is_char_type(ty: &Type) -> bool {
 }
 
 fn ensure_scalar(ty: &Type) -> Result<()> {
-    if matches!(ty, Type::Void | Type::Array { .. }) {
+    if !is_scalar_type(ty) {
         bail!("type error: scalar expression expected");
     }
     Ok(())
 }
 
 fn is_scalar_type(ty: &Type) -> bool {
+    let ty = ty.clone().decay();
     matches!(ty, Type::Pointer(_)) || ty.clone().is_integer() || matches!(ty, Type::Double)
 }
 
@@ -756,6 +821,8 @@ fn validate_type(ty: &Type) -> Result<()> {
     match ty {
         Type::Array { element, .. } => validate_object_type(element),
         Type::Pointer(pointee) => validate_type(pointee),
+        Type::Struct(tag) if type_table::is_declared(tag) => Ok(()),
+        Type::Struct(tag) => bail!("type error: undeclared struct tag '{tag}'"),
         _ => Ok(()),
     }
 }
@@ -770,6 +837,57 @@ fn validate_object_type(ty: &Type) -> Result<()> {
         }
         Type::Pointer(pointee) => validate_type(pointee),
         Type::Void => bail!("type error: object has void type"),
+        Type::Struct(_) if !ty.clone().is_complete() => {
+            bail!("type error: object has incomplete struct type")
+        }
         _ => Ok(()),
     }
+}
+
+fn typecheck_struct_decl(sd: &StructDecl) -> Result<()> {
+    if sd.members.is_empty() {
+        type_table::declare(&sd.tag);
+        return Ok(());
+    }
+    if type_table::contains(&sd.tag) {
+        bail!("type error: duplicate struct definition '{}'", sd.tag);
+    }
+    type_table::declare(&sd.tag);
+    let mut offset = 0;
+    let mut alignment = 1;
+    let mut members = std::collections::HashMap::new();
+    let mut order = Vec::new();
+    for member in &sd.members {
+        if members.contains_key(&member.name) {
+            bail!("type error: duplicate struct member '{}'", member.name);
+        }
+        validate_object_type(&member.ty)?;
+        let member_alignment = member.ty.clone().alignment();
+        offset = round_up(offset, member_alignment);
+        members.insert(
+            member.name.clone(),
+            MemberEntry {
+                member_type: member.ty.clone(),
+                offset,
+            },
+        );
+        order.push(member.name.clone());
+        alignment = alignment.max(member_alignment);
+        offset += member.ty.clone().size();
+    }
+    let size = round_up(offset, alignment);
+    type_table::add(
+        sd.tag.clone(),
+        StructEntry {
+            size,
+            alignment,
+            members,
+            order,
+        },
+    );
+    Ok(())
+}
+
+fn round_up(value: i64, alignment: i64) -> i64 {
+    ((value + alignment - 1) / alignment) * alignment
 }

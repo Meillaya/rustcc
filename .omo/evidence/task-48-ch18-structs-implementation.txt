@@ -1,0 +1,55 @@
+Task 48 / W19-T1 Chapter 18 core structs implementation evidence
+Date: 2026-07-08
+Workspace: /home/mei/projects/rustcc
+
+Baseline before edits
+- Read .omo/plans/c-compiler-rust.md task 48, docs/book/ch18-structures.md, docs/stages/ch18-structures.md, and the OCaml reference files under nqcc2/lib/ requested by the task.
+- cargo build --release: PASS.
+- cargo test --release: PASS, 10 unit tests.
+- ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only: FAIL at baseline with 73 failures, all caused by lack of Chapter 18 struct parsing/semantics (first failures were parser errors on Struct tokens).
+
+Implementation changes
+- Added AST support for struct tags/types, top-level and block struct declarations, member declarations, and postfix member access expressions `.` / `->`.
+- Added native type-table support in src/codegen/type_table.rs for declared/complete struct tags, member order, member offsets, struct size, and alignment.
+- Added parser support for `struct tag`, `struct tag { ... };`, member declaration lists, and postfix `.` / `->`.
+- Added resolver support for block/file tag scopes, tag renaming, struct member type resolution, and local extern incomplete declarations.
+- Added typechecking for complete vs incomplete struct uses, duplicate members/definitions, member lookup, struct object declarations, struct copy/assignment compatibility, struct/array initializer validation, sizeof structs, scalar restrictions, and incomplete-type cast restrictions.
+- Added TACKY/lowering support for struct objects, aggregate initializers, member address calculation by offset, struct lvalues/rvalues, struct copy via byte-copy, struct conditional temporaries, static struct initializers, and string-pointer static initializers.
+- Added backend byte-copy lowering and memory-to-memory pseudo replacement support needed by struct copies and member stores.
+
+Verification after implementation
+- cargo build --release: PASS.
+- cargo test --release: PASS, 10 unit tests.
+- LSP diagnostics on modified Rust files (AST, parser, resolver, typechecker, lowerer, TACKY, codegen, replace_pseudos, type_table): PASS, no diagnostics found.
+- Core Chapter 18 no-struct-ABI gate: PASS.
+  Command: PYTHONPATH=tests python3 /tmp/run_ch18_core.py
+  Scope: dynamically built chapter 18 unittest suite excluding only `test_valid/parameters*` and `test_valid/params_and_returns*` because W19-T3 owns struct ABI parameters/returns.
+  Result: Ran 161 tests, OK.
+- Full chapter 18 latest-only gate: EXPECTED OUT-OF-SCOPE FAIL.
+  Command: ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only
+  Result: Ran 192 tests; FAILED (failures=25, errors=5).
+  Classification: all listed failures/errors are under valid/parameters or valid/params_and_returns, i.e. struct ABI parameter/return work owned by W19-T3. Five errors are missing page-boundary assembly fixtures in those same ABI directories.
+- Chapter 17 regression gate: PASS.
+  Command: ./tests/test_compiler ./target/release/rustcc --chapter 17 --latest-only
+  Result: Ran 70 tests, OK.
+- Chapter 16 regression gate: PASS.
+  Command: ./tests/test_compiler ./target/release/rustcc --chapter 16 --latest-only
+  Result: Ran 72 tests, OK (assembler warning in existing chars explicit-casts test only).
+- Forbidden bridge scan: PASS for no source-content bridge.
+  Command: rg -n "nqcc2|ocaml|source-content|source_content|Command::new|std::process|python|bridge" src
+  Result: only existing OCaml-reference comments and normal gcc toolchain process calls; no source-content bridge or runtime OCaml/nqcc2 invocation added.
+
+Manual QA
+- Acceptance example:
+  `struct s { int a; int b; }; int main(void) { struct s x; x.a = 5; x.b = 10; return x.a + x.b; }`
+  Compiled with ./target/release/rustcc /tmp/ch18_accept.c and ran with exit 15.
+- Nested/member-offset/sizeof probe:
+  struct outer containing char, nested struct, and char array compiled and ran with exit 13 (`o.in.i + o.arr[2]`), after validating offsets 4/8/14 and sizeof(struct outer) == 16.
+- Invalid member probe:
+  `struct s { int a; }; int main(void) { struct s x; return x.b; }`
+  Rejected with exit 1 and stderr `type error: struct has no member 'b'`.
+
+Remaining blockers / risks
+- Struct ABI parameters and returns are intentionally not implemented in this task; W19-T3 owns them. Full chapter 18 latest-only remains red only in valid/parameters and valid/params_and_returns.
+- The type table is process-global and reset at the start of typechecking; this matches the current single-compile pipeline but would need revisiting for concurrent compilation within one process.
+- The full chapter 18 gate emits assembler truncation warnings for existing large integer-to-smaller-static-initializer cases; tests still pass in the core subset.

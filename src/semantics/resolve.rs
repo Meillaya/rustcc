@@ -61,7 +61,7 @@ use anyhow::{Result, bail};
 
 use crate::ast::{
     BlockItem, Expr, ForInit, Function, GlobalDecl, GlobalVarDecl, Program, Statement,
-    StorageClass, TopLevelItem, VarDecl,
+    StorageClass, StructDecl, TopLevelItem, Type, VarDecl,
 };
 
 /// Thin wrapper that carries a `Program` after resolution.
@@ -114,6 +114,7 @@ type GlobalTable = HashMap<String, GlobalEntry>;
 /// behaviour of the canonical OCaml reference).
 pub fn resolve_program(ast: &Program) -> Result<ResolvedProgram> {
     let mut globals: GlobalTable = HashMap::new();
+    let mut tags = TagScopes::new();
     let mut resolved_items: Vec<TopLevelItem> = Vec::with_capacity(ast.top_level_items.len());
     for item in &ast.top_level_items {
         match item {
@@ -135,7 +136,7 @@ pub fn resolve_program(ast: &Program) -> Result<ResolvedProgram> {
                         linkage: linkage_of(func.storage),
                     },
                 );
-                let resolved = resolve_function(func, &globals)?;
+                let resolved = resolve_function(func, &globals, &mut tags)?;
                 resolved_items.push(TopLevelItem::Function(resolved));
             }
             TopLevelItem::Declaration(decl) => {
@@ -158,21 +159,32 @@ pub fn resolve_program(ast: &Program) -> Result<ResolvedProgram> {
                         linkage: linkage_of(decl.storage),
                     },
                 );
+                let params = resolve_param_types(&decl.params, &tags)?;
                 resolved_items.push(TopLevelItem::Declaration(GlobalDecl {
                     name: decl.name.clone(),
-                    ret_ty: decl.ret_ty.clone(),
-                    params: decl.params.clone(),
+                    ret_ty: tags.resolve_type(&decl.ret_ty)?,
+                    params,
                     storage: decl.storage,
                 }));
             }
             TopLevelItem::Variable(var) => {
-                resolve_global_variable(var, &mut globals)?;
+                let ty = tags.resolve_type(&var.ty)?;
+                let resolved_var = GlobalVarDecl {
+                    name: var.name.clone(),
+                    ty,
+                    init: var.init.clone(),
+                    storage: var.storage,
+                };
+                resolve_global_variable(&resolved_var, &mut globals)?;
                 resolved_items.push(TopLevelItem::Variable(GlobalVarDecl {
                     name: var.name.clone(),
-                    ty: var.ty.clone(),
+                    ty: resolved_var.ty,
                     init: var.init.clone(),
                     storage: var.storage,
                 }));
+            }
+            TopLevelItem::StructDecl(sd) => {
+                resolved_items.push(TopLevelItem::StructDecl(tags.resolve_struct_decl(sd)?));
             }
         }
     }
@@ -317,26 +329,36 @@ fn resolve_global_init(expr: &Expr) -> Result<Expr> {
     }
 }
 
-fn resolve_function(func: &Function, globals: &GlobalTable) -> Result<Function> {
+fn resolve_function(
+    func: &Function,
+    globals: &GlobalTable,
+    tags: &mut TagScopes,
+) -> Result<Function> {
     let mut scopes = ScopeStack::new(&func.name);
     check_duplicate_params(&func.params)?;
+    let ret_ty = tags.resolve_type(&func.ret_ty)?;
     let mut resolved_params: Vec<VarDecl> = Vec::with_capacity(func.params.len());
     for param in &func.params {
         let unique = scopes.declare(&param.name)?;
         resolved_params.push(VarDecl {
             name: unique,
-            ty: param.ty.clone(),
+            ty: tags.resolve_type(&param.ty)?,
             init: None,
             storage: StorageClass::Auto,
         });
     }
     let body = match &func.body {
-        Some(items) => Some(resolve_block(items, &mut scopes, globals)?),
+        Some(items) => {
+            tags.push();
+            let resolved = resolve_block(items, &mut scopes, globals, tags);
+            tags.pop();
+            Some(resolved?)
+        }
         None => None,
     };
     Ok(Function {
         name: func.name.clone(),
-        ret_ty: func.ret_ty.clone(),
+        ret_ty,
         params: resolved_params,
         body,
         storage: func.storage,
@@ -508,10 +530,11 @@ fn resolve_block(
     items: &[BlockItem],
     scopes: &mut ScopeStack,
     globals: &GlobalTable,
+    tags: &mut TagScopes,
 ) -> Result<Vec<BlockItem>> {
     let mut out = Vec::with_capacity(items.len());
     for item in items {
-        out.push(resolve_block_item(item, scopes, globals)?);
+        out.push(resolve_block_item(item, scopes, globals, tags)?);
     }
     Ok(out)
 }
@@ -520,10 +543,11 @@ fn resolve_block_item(
     item: &BlockItem,
     scopes: &mut ScopeStack,
     globals: &GlobalTable,
+    tags: &mut TagScopes,
 ) -> Result<BlockItem> {
     match item {
         BlockItem::Statement(stmt) => Ok(BlockItem::Statement(resolve_statement(
-            stmt, scopes, globals,
+            stmt, scopes, globals, tags,
         )?)),
         BlockItem::Declaration(var_decl) => match var_decl.storage {
             StorageClass::Extern => {
@@ -533,22 +557,10 @@ fn resolve_block_item(
                         name = var_decl.name
                     );
                 }
-                if !matches!(
-                    globals.get(&var_decl.name),
-                    Some(GlobalEntry {
-                        kind: GlobalKind::Variable,
-                        ..
-                    })
-                ) {
-                    bail!(
-                        "resolve error: extern declaration of '{name}' has no prior file-scope variable",
-                        name = var_decl.name
-                    );
-                }
                 let name = scopes.declare_extern(&var_decl.name)?;
                 Ok(BlockItem::Declaration(VarDecl {
                     name,
-                    ty: var_decl.ty.clone(),
+                    ty: tags.resolve_type(&var_decl.ty)?,
                     init: None,
                     storage: StorageClass::Extern,
                 }))
@@ -556,12 +568,12 @@ fn resolve_block_item(
             StorageClass::Static | StorageClass::Auto => {
                 let new_name = scopes.declare(&var_decl.name)?;
                 let new_init = match &var_decl.init {
-                    Some(expr) => Some(resolve_expr(expr, scopes, globals)?),
+                    Some(expr) => Some(resolve_expr(expr, scopes, globals, tags)?),
                     None => None,
                 };
                 Ok(BlockItem::Declaration(VarDecl {
                     name: new_name,
-                    ty: var_decl.ty.clone(),
+                    ty: tags.resolve_type(&var_decl.ty)?,
                     init: new_init,
                     storage: var_decl.storage,
                 }))
@@ -583,11 +595,12 @@ fn resolve_block_item(
             scopes.declare_fun(&fd.name, fd.params.len())?;
             Ok(BlockItem::FunctionDecl(GlobalDecl {
                 name: fd.name.clone(),
-                ret_ty: fd.ret_ty.clone(),
-                params: fd.params.clone(),
+                ret_ty: tags.resolve_type(&fd.ret_ty)?,
+                params: resolve_param_types(&fd.params, tags)?,
                 storage: fd.storage,
             }))
         }
+        BlockItem::StructDecl(sd) => Ok(BlockItem::StructDecl(tags.resolve_struct_decl(sd)?)),
     }
 }
 
@@ -595,22 +608,23 @@ fn resolve_for_init(
     init: &ForInit,
     scopes: &mut ScopeStack,
     globals: &GlobalTable,
+    tags: &mut TagScopes,
 ) -> Result<ForInit> {
     match init {
         ForInit::Declaration(var_decl) => {
             let new_name = scopes.declare(&var_decl.name)?;
             let new_init = match &var_decl.init {
-                Some(expr) => Some(resolve_expr(expr, scopes, globals)?),
+                Some(expr) => Some(resolve_expr(expr, scopes, globals, tags)?),
                 None => None,
             };
             Ok(ForInit::Declaration(VarDecl {
                 name: new_name,
-                ty: var_decl.ty.clone(),
+                ty: tags.resolve_type(&var_decl.ty)?,
                 init: new_init,
                 storage: var_decl.storage,
             }))
         }
-        ForInit::Expr(expr) => Ok(ForInit::Expr(resolve_expr(expr, scopes, globals)?)),
+        ForInit::Expr(expr) => Ok(ForInit::Expr(resolve_expr(expr, scopes, globals, tags)?)),
     }
 }
 
@@ -618,11 +632,12 @@ fn resolve_statement(
     stmt: &Statement,
     scopes: &mut ScopeStack,
     globals: &GlobalTable,
+    tags: &mut TagScopes,
 ) -> Result<Statement> {
     match stmt {
         Statement::Return(expr) => Ok(Statement::Return(
             expr.as_ref()
-                .map(|expr| resolve_expr(expr, scopes, globals))
+                .map(|expr| resolve_expr(expr, scopes, globals, tags))
                 .transpose()?,
         )),
         Statement::If {
@@ -630,18 +645,23 @@ fn resolve_statement(
             then_branch,
             else_branch,
         } => Ok(Statement::If {
-            condition: resolve_expr(condition, scopes, globals)?,
-            then_branch: Box::new(resolve_statement(then_branch, scopes, globals)?),
+            condition: resolve_expr(condition, scopes, globals, tags)?,
+            then_branch: Box::new(resolve_statement(then_branch, scopes, globals, tags)?),
             else_branch: match else_branch {
-                Some(else_branch) => {
-                    Some(Box::new(resolve_statement(else_branch, scopes, globals)?))
-                }
+                Some(else_branch) => Some(Box::new(resolve_statement(
+                    else_branch,
+                    scopes,
+                    globals,
+                    tags,
+                )?)),
                 None => None,
             },
         }),
         Statement::Block(items) => {
             scopes.push();
-            let result = resolve_block(items, scopes, globals);
+            tags.push();
+            let result = resolve_block(items, scopes, globals, tags);
+            tags.pop();
             scopes.pop();
             Ok(Statement::Block(result?))
         }
@@ -650,8 +670,8 @@ fn resolve_statement(
             body,
             label,
         } => Ok(Statement::While {
-            condition: resolve_expr(condition, scopes, globals)?,
-            body: Box::new(resolve_statement(body, scopes, globals)?),
+            condition: resolve_expr(condition, scopes, globals, tags)?,
+            body: Box::new(resolve_statement(body, scopes, globals, tags)?),
             label: label.clone(),
         }),
         Statement::DoWhile {
@@ -659,8 +679,8 @@ fn resolve_statement(
             condition,
             label,
         } => Ok(Statement::DoWhile {
-            body: Box::new(resolve_statement(body, scopes, globals)?),
-            condition: resolve_expr(condition, scopes, globals)?,
+            body: Box::new(resolve_statement(body, scopes, globals, tags)?),
+            condition: resolve_expr(condition, scopes, globals, tags)?,
             label: label.clone(),
         }),
         Statement::For {
@@ -671,19 +691,21 @@ fn resolve_statement(
             label,
         } => {
             scopes.push();
+            tags.push();
             let resolved_init = match init {
-                Some(init) => Some(resolve_for_init(init, scopes, globals)?),
+                Some(init) => Some(resolve_for_init(init, scopes, globals, tags)?),
                 None => None,
             };
             let resolved_condition = match condition {
-                Some(expr) => Some(resolve_expr(expr, scopes, globals)?),
+                Some(expr) => Some(resolve_expr(expr, scopes, globals, tags)?),
                 None => None,
             };
             let resolved_post = match post {
-                Some(expr) => Some(resolve_expr(expr, scopes, globals)?),
+                Some(expr) => Some(resolve_expr(expr, scopes, globals, tags)?),
                 None => None,
             };
-            let body_result = resolve_statement(body, scopes, globals);
+            let body_result = resolve_statement(body, scopes, globals, tags);
+            tags.pop();
             scopes.pop();
             Ok(Statement::For {
                 init: resolved_init,
@@ -696,25 +718,25 @@ fn resolve_statement(
         Statement::Break(target) => Ok(Statement::Break(target.clone())),
         Statement::Continue(target) => Ok(Statement::Continue(target.clone())),
         Statement::Switch { expr, body, label } => Ok(Statement::Switch {
-            expr: resolve_expr(expr, scopes, globals)?,
-            body: Box::new(resolve_statement(body, scopes, globals)?),
+            expr: resolve_expr(expr, scopes, globals, tags)?,
+            body: Box::new(resolve_statement(body, scopes, globals, tags)?),
             label: label.clone(),
         }),
         Statement::Case { value, statement } => Ok(Statement::Case {
-            value: resolve_expr(value, scopes, globals)?,
-            statement: Box::new(resolve_statement(statement, scopes, globals)?),
+            value: resolve_expr(value, scopes, globals, tags)?,
+            statement: Box::new(resolve_statement(statement, scopes, globals, tags)?),
         }),
         Statement::Default { statement } => Ok(Statement::Default {
-            statement: Box::new(resolve_statement(statement, scopes, globals)?),
+            statement: Box::new(resolve_statement(statement, scopes, globals, tags)?),
         }),
         Statement::Goto(target) => Ok(Statement::Goto(target.clone())),
         Statement::Labeled { label, statement } => Ok(Statement::Labeled {
             label: label.clone(),
-            statement: Box::new(resolve_statement(statement, scopes, globals)?),
+            statement: Box::new(resolve_statement(statement, scopes, globals, tags)?),
         }),
         Statement::Expr(maybe_expr) => {
             let resolved = match maybe_expr {
-                Some(expr) => Some(resolve_expr(expr, scopes, globals)?),
+                Some(expr) => Some(resolve_expr(expr, scopes, globals, tags)?),
                 None => None,
             };
             Ok(Statement::Expr(resolved))
@@ -722,7 +744,12 @@ fn resolve_statement(
     }
 }
 
-fn resolve_expr(expr: &Expr, scopes: &mut ScopeStack, globals: &GlobalTable) -> Result<Expr> {
+fn resolve_expr(
+    expr: &Expr,
+    scopes: &mut ScopeStack,
+    globals: &GlobalTable,
+    tags: &mut TagScopes,
+) -> Result<Expr> {
     match expr {
         Expr::Constant(n) => Ok(Expr::Constant(*n)),
         Expr::LongConstant(n) => Ok(Expr::LongConstant(*n)),
@@ -733,14 +760,16 @@ fn resolve_expr(expr: &Expr, scopes: &mut ScopeStack, globals: &GlobalTable) -> 
             target_type,
             expr: inner,
         } => Ok(Expr::Cast {
-            target_type: target_type.clone(),
-            expr: Box::new(resolve_expr(inner, scopes, globals)?),
+            target_type: tags.resolve_type(target_type)?,
+            expr: Box::new(resolve_expr(inner, scopes, globals, tags)?),
         }),
         Expr::SizeOfExpr(inner) => Ok(Expr::SizeOfExpr(Box::new(resolve_expr(
-            inner, scopes, globals,
+            inner, scopes, globals, tags,
         )?))),
-        Expr::SizeOfType(ty) => Ok(Expr::SizeOfType(ty.clone())),
-        Expr::Paren(inner) => Ok(Expr::Paren(Box::new(resolve_expr(inner, scopes, globals)?))),
+        Expr::SizeOfType(ty) => Ok(Expr::SizeOfType(tags.resolve_type(ty)?)),
+        Expr::Paren(inner) => Ok(Expr::Paren(Box::new(resolve_expr(
+            inner, scopes, globals, tags,
+        )?))),
         Expr::Var(name) => {
             if let Some(unique) = scopes.lookup(name) {
                 return Ok(Expr::Var(unique));
@@ -776,7 +805,7 @@ fn resolve_expr(expr: &Expr, scopes: &mut ScopeStack, globals: &GlobalTable) -> 
             }
             let resolved_args = args
                 .iter()
-                .map(|a| resolve_expr(a, scopes, globals))
+                .map(|a| resolve_expr(a, scopes, globals, tags))
                 .collect::<Result<Vec<_>>>()?;
             Ok(Expr::Call {
                 name: name.clone(),
@@ -785,54 +814,153 @@ fn resolve_expr(expr: &Expr, scopes: &mut ScopeStack, globals: &GlobalTable) -> 
         }
         Expr::Unary { op, expr: inner } => Ok(Expr::Unary {
             op: *op,
-            expr: Box::new(resolve_expr(inner, scopes, globals)?),
+            expr: Box::new(resolve_expr(inner, scopes, globals, tags)?),
         }),
         Expr::PreInc(inner) => Ok(Expr::PreInc(Box::new(resolve_expr(
-            inner, scopes, globals,
+            inner, scopes, globals, tags,
         )?))),
         Expr::PreDec(inner) => Ok(Expr::PreDec(Box::new(resolve_expr(
-            inner, scopes, globals,
+            inner, scopes, globals, tags,
         )?))),
         Expr::PostInc(inner) => Ok(Expr::PostInc(Box::new(resolve_expr(
-            inner, scopes, globals,
+            inner, scopes, globals, tags,
         )?))),
         Expr::PostDec(inner) => Ok(Expr::PostDec(Box::new(resolve_expr(
-            inner, scopes, globals,
+            inner, scopes, globals, tags,
         )?))),
         Expr::Assign { op, target, value } => Ok(Expr::Assign {
             op: *op,
-            target: Box::new(resolve_expr(target, scopes, globals)?),
-            value: Box::new(resolve_expr(value, scopes, globals)?),
+            target: Box::new(resolve_expr(target, scopes, globals, tags)?),
+            value: Box::new(resolve_expr(value, scopes, globals, tags)?),
         }),
         Expr::Conditional {
             condition,
             then_expr,
             else_expr,
         } => Ok(Expr::Conditional {
-            condition: Box::new(resolve_expr(condition, scopes, globals)?),
-            then_expr: Box::new(resolve_expr(then_expr, scopes, globals)?),
-            else_expr: Box::new(resolve_expr(else_expr, scopes, globals)?),
+            condition: Box::new(resolve_expr(condition, scopes, globals, tags)?),
+            then_expr: Box::new(resolve_expr(then_expr, scopes, globals, tags)?),
+            else_expr: Box::new(resolve_expr(else_expr, scopes, globals, tags)?),
         }),
         Expr::Binary { op, left, right } => Ok(Expr::Binary {
             op: *op,
-            left: Box::new(resolve_expr(left, scopes, globals)?),
-            right: Box::new(resolve_expr(right, scopes, globals)?),
+            left: Box::new(resolve_expr(left, scopes, globals, tags)?),
+            right: Box::new(resolve_expr(right, scopes, globals, tags)?),
         }),
         Expr::AddressOf(inner) => Ok(Expr::AddressOf(Box::new(resolve_expr(
-            inner, scopes, globals,
+            inner, scopes, globals, tags,
         )?))),
         Expr::Dereference(inner) => Ok(Expr::Dereference(Box::new(resolve_expr(
-            inner, scopes, globals,
+            inner, scopes, globals, tags,
         )?))),
         Expr::Subscript { base, index } => Ok(Expr::Subscript {
-            base: Box::new(resolve_expr(base, scopes, globals)?),
-            index: Box::new(resolve_expr(index, scopes, globals)?),
+            base: Box::new(resolve_expr(base, scopes, globals, tags)?),
+            index: Box::new(resolve_expr(index, scopes, globals, tags)?),
+        }),
+        Expr::Dot { structure, member } => Ok(Expr::Dot {
+            structure: Box::new(resolve_expr(structure, scopes, globals, tags)?),
+            member: member.clone(),
+        }),
+        Expr::Arrow { structure, member } => Ok(Expr::Arrow {
+            structure: Box::new(resolve_expr(structure, scopes, globals, tags)?),
+            member: member.clone(),
         }),
         Expr::InitializerList(items) => Ok(Expr::InitializerList(
             items
                 .iter()
-                .map(|item| resolve_expr(item, scopes, globals))
+                .map(|item| resolve_expr(item, scopes, globals, tags))
                 .collect::<Result<Vec<_>>>()?,
         )),
     }
+}
+
+#[derive(Debug)]
+struct TagScopes {
+    scopes: Vec<HashMap<String, String>>,
+    next_id: u32,
+}
+
+impl TagScopes {
+    fn new() -> Self {
+        Self {
+            scopes: vec![HashMap::new()],
+            next_id: 0,
+        }
+    }
+
+    fn push(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    fn pop(&mut self) {
+        self.scopes.pop();
+    }
+
+    fn resolve_struct_decl(&mut self, sd: &StructDecl) -> Result<StructDecl> {
+        let unique = if let Some(existing) = self
+            .scopes
+            .last()
+            .and_then(|scope| scope.get(&sd.tag).cloned())
+        {
+            existing
+        } else {
+            let unique = format!("struct.{}.{}", sd.tag, self.next_id);
+            self.next_id += 1;
+            self.scopes
+                .last_mut()
+                .ok_or_else(|| anyhow::anyhow!("resolve error: missing struct tag scope"))?
+                .insert(sd.tag.clone(), unique.clone());
+            unique
+        };
+        let members = sd
+            .members
+            .iter()
+            .map(|member| {
+                Ok(crate::ast::MemberDecl {
+                    name: member.name.clone(),
+                    ty: self.resolve_type(&member.ty)?,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(StructDecl {
+            tag: unique,
+            members,
+        })
+    }
+
+    fn resolve_type(&self, ty: &Type) -> Result<Type> {
+        match ty {
+            Type::Pointer(inner) => Ok(Type::Pointer(Box::new(self.resolve_type(inner)?))),
+            Type::Array { element, size } => Ok(Type::Array {
+                element: Box::new(self.resolve_type(element)?),
+                size: *size,
+            }),
+            Type::Struct(tag) => self
+                .lookup(tag)
+                .map(Type::Struct)
+                .ok_or_else(|| anyhow::anyhow!("resolve error: undeclared struct tag '{tag}'")),
+            other => Ok(other.clone()),
+        }
+    }
+
+    fn lookup(&self, tag: &str) -> Option<String> {
+        self.scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(tag).cloned())
+    }
+}
+
+fn resolve_param_types(params: &[VarDecl], tags: &TagScopes) -> Result<Vec<VarDecl>> {
+    params
+        .iter()
+        .map(|param| {
+            Ok(VarDecl {
+                name: param.name.clone(),
+                ty: tags.resolve_type(&param.ty)?,
+                init: param.init.clone(),
+                storage: param.storage,
+            })
+        })
+        .collect()
 }
