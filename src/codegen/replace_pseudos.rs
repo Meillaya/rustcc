@@ -121,6 +121,19 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
                 dst,
             },
         ],
+        Instr::Lea {
+            src,
+            dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
+        } => vec![
+            Instr::Lea {
+                src,
+                dst: Operand::Reg(Reg::R10),
+            },
+            Instr::Movq {
+                src: Operand::Reg(Reg::R10),
+                dst,
+            },
+        ],
         Instr::BinaryOp {
             op,
             src: src @ (Operand::Stack(_) | Operand::Data(_)),

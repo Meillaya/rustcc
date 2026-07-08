@@ -15,14 +15,14 @@
 // Mirrors nqcc2/lib/parse.ml chapter 9 grammar (~lines 1-50 of parse_program).
 // Recursive-descent, Result-returning.
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 use crate::ast::{
     AssignOp, BinaryOp, BlockItem, Expr, ForInit, Function, GlobalDecl, GlobalVarDecl, Program,
     Statement, StorageClass, TopLevelItem, Type, UnaryOp, VarDecl,
 };
 use crate::lex::{Token, TokenKind};
-use crate::parse::precedence::{Precedence, precedence_of};
+use crate::parse::precedence::{precedence_of, Precedence};
 
 pub(crate) fn parse_program(tokens: Vec<Token>) -> Result<Program> {
     Parser::new(tokens).parse_program()
@@ -31,6 +31,34 @@ pub(crate) fn parse_program(tokens: Vec<Token>) -> Result<Program> {
 struct Parser {
     tokens: Vec<Token>,
     current: usize,
+}
+
+#[derive(Debug, Clone)]
+enum Declarator {
+    Ident(String),
+    Pointer(Box<Declarator>),
+    Function {
+        params: Vec<VarDecl>,
+        inner: Box<Declarator>,
+    },
+}
+
+#[derive(Debug, Clone)]
+enum AbstractDeclarator {
+    Base,
+    Pointer(Box<AbstractDeclarator>),
+}
+
+enum DeclShape {
+    Object {
+        name: String,
+        ty: Type,
+    },
+    Function {
+        name: String,
+        ret_ty: Type,
+        params: Vec<VarDecl>,
+    },
 }
 
 impl Parser {
@@ -71,53 +99,57 @@ impl Parser {
         // `int static long`, `long int static`).  Loop until
         // we've consumed both classes of tokens, accumulating the
         // storage class.
-        let (ty, storage) = self.parse_specifiers_interleaved()?;
-        let name = self.expect_identifier("function or variable name")?;
-        if self.check(&TokenKind::OpenParen) {
-            self.current += 1;
-            let params = self.parse_param_list()?;
-            self.expect_exact(&TokenKind::CloseParen, "')' after parameter list")?;
-            if self.match_exact(&TokenKind::Semicolon) {
-                Ok(TopLevelItem::Declaration(GlobalDecl {
-                    name,
-                    ret_ty: ty,
-                    params,
-                    storage,
-                }))
-            } else {
-                self.expect_exact(&TokenKind::OpenBrace, "'{' to start function body")?;
-                let mut body: Vec<BlockItem> = Vec::new();
-                while !self.check(&TokenKind::CloseBrace) {
-                    if self.check(&TokenKind::Eof) {
-                        bail!("parse error: expected '}}' to close function body");
+        let (base_ty, storage) = self.parse_specifiers_interleaved()?;
+        let decl = self.parse_declarator()?;
+        match self.process_declarator(decl, base_ty)? {
+            DeclShape::Function {
+                name,
+                ret_ty,
+                params,
+            } => {
+                if self.match_exact(&TokenKind::Semicolon) {
+                    Ok(TopLevelItem::Declaration(GlobalDecl {
+                        name,
+                        ret_ty,
+                        params,
+                        storage,
+                    }))
+                } else {
+                    self.expect_exact(&TokenKind::OpenBrace, "'{' to start function body")?;
+                    let mut body: Vec<BlockItem> = Vec::new();
+                    while !self.check(&TokenKind::CloseBrace) {
+                        if self.check(&TokenKind::Eof) {
+                            bail!("parse error: expected '}}' to close function body");
+                        }
+                        body.push(self.parse_block_item()?);
                     }
-                    body.push(self.parse_block_item()?);
+                    self.expect_exact(&TokenKind::CloseBrace, "'}' to close function body")?;
+                    Ok(TopLevelItem::Function(Function {
+                        name,
+                        ret_ty,
+                        params,
+                        body: Some(body),
+                        storage,
+                    }))
                 }
-                self.expect_exact(&TokenKind::CloseBrace, "'}' to close function body")?;
-                Ok(TopLevelItem::Function(Function {
+            }
+            DeclShape::Object { name, ty } => {
+                let init = if self.match_exact(&TokenKind::Equal) {
+                    Some(self.parse_expr()?)
+                } else {
+                    None
+                };
+                self.expect_exact(
+                    &TokenKind::Semicolon,
+                    "';' after file-scope variable declaration",
+                )?;
+                Ok(TopLevelItem::Variable(GlobalVarDecl {
                     name,
-                    ret_ty: ty,
-                    params,
-                    body: Some(body),
+                    ty,
+                    init,
                     storage,
                 }))
             }
-        } else {
-            let init = if self.match_exact(&TokenKind::Equal) {
-                Some(self.parse_expr()?)
-            } else {
-                None
-            };
-            self.expect_exact(
-                &TokenKind::Semicolon,
-                "';' after file-scope variable declaration",
-            )?;
-            Ok(TopLevelItem::Variable(GlobalVarDecl {
-                name,
-                ty,
-                init,
-                storage,
-            }))
         }
     }
 
@@ -323,6 +355,85 @@ impl Parser {
         }
     }
 
+    fn parse_declarator(&mut self) -> Result<Declarator> {
+        if self.match_exact(&TokenKind::Star) {
+            return Ok(Declarator::Pointer(Box::new(self.parse_declarator()?)));
+        }
+        self.parse_direct_declarator()
+    }
+
+    fn parse_direct_declarator(&mut self) -> Result<Declarator> {
+        let mut decl = if self.match_exact(&TokenKind::OpenParen) {
+            let inner = self.parse_declarator()?;
+            self.expect_exact(&TokenKind::CloseParen, "')' after declarator")?;
+            inner
+        } else {
+            Declarator::Ident(self.expect_identifier("function or variable name")?)
+        };
+        if self.check(&TokenKind::OpenParen) {
+            self.current += 1;
+            let params = self.parse_param_list()?;
+            self.expect_exact(&TokenKind::CloseParen, "')' after parameter list")?;
+            decl = Declarator::Function {
+                params,
+                inner: Box::new(decl),
+            };
+        }
+        Ok(decl)
+    }
+
+    fn process_declarator(&self, decl: Declarator, base_type: Type) -> Result<DeclShape> {
+        match decl {
+            Declarator::Ident(name) => Ok(DeclShape::Object {
+                name,
+                ty: base_type,
+            }),
+            Declarator::Pointer(inner) => {
+                self.process_declarator(*inner, Type::Pointer(Box::new(base_type)))
+            }
+            Declarator::Function { params, inner } => match *inner {
+                Declarator::Ident(name) => Ok(DeclShape::Function {
+                    name,
+                    ret_ty: base_type,
+                    params,
+                }),
+                other => match self.process_declarator(other, base_type)? {
+                    DeclShape::Object { name, ty } => Ok(DeclShape::Function {
+                        name,
+                        ret_ty: ty,
+                        params,
+                    }),
+                    DeclShape::Function { .. } => {
+                        bail!("parse error: function cannot return function")
+                    }
+                },
+            },
+        }
+    }
+
+    fn parse_abstract_declarator(&mut self) -> Result<AbstractDeclarator> {
+        if self.match_exact(&TokenKind::Star) {
+            return Ok(AbstractDeclarator::Pointer(Box::new(
+                self.parse_abstract_declarator()?,
+            )));
+        }
+        if self.match_exact(&TokenKind::OpenParen) {
+            let inner = self.parse_abstract_declarator()?;
+            self.expect_exact(&TokenKind::CloseParen, "')' after abstract declarator")?;
+            return Ok(inner);
+        }
+        Ok(AbstractDeclarator::Base)
+    }
+
+    fn process_abstract_declarator(&self, decl: AbstractDeclarator, base_type: Type) -> Type {
+        match decl {
+            AbstractDeclarator::Base => base_type,
+            AbstractDeclarator::Pointer(inner) => {
+                self.process_abstract_declarator(*inner, Type::Pointer(Box::new(base_type)))
+            }
+        }
+    }
+
     /// If a storage-class specifier follows `int`, combine it with
     /// `previous`.  Rejects `static int extern foo;` and friends that
     /// carry two specifiers at the same time.  Mirrors the OCaml
@@ -357,8 +468,14 @@ impl Parser {
         }
         let mut params = Vec::new();
         loop {
-            let ty = self.parse_type_specifier()?;
-            let name = self.expect_identifier("parameter name")?;
+            let base_ty = self.parse_type_specifier()?;
+            let decl = self.parse_declarator()?;
+            let (name, ty) = match self.process_declarator(decl, base_ty)? {
+                DeclShape::Object { name, ty } => (name, ty),
+                DeclShape::Function { .. } => {
+                    bail!("parse error: function parameters cannot be function declarators")
+                }
+            };
             params.push(VarDecl {
                 name,
                 ty,
@@ -385,17 +502,18 @@ impl Parser {
             || self.peek().kind == TokenKind::Static
             || self.peek().kind == TokenKind::Extern
         {
-            let (ty, storage) = self.parse_specifiers_interleaved()?;
-            if let TokenKind::Identifier(_) = self.peek().kind {
-                let name = self.expect_identifier("function or variable name")?;
-                if self.check(&TokenKind::OpenParen) {
-                    self.current += 1; // consume `(`
-                    let params = self.parse_param_list()?;
-                    self.expect_exact(&TokenKind::CloseParen, "')' after parameter list")?;
+            let (base_ty, storage) = self.parse_specifiers_interleaved()?;
+            let decl = self.parse_declarator()?;
+            match self.process_declarator(decl, base_ty)? {
+                DeclShape::Function {
+                    name,
+                    ret_ty,
+                    params,
+                } => {
                     if self.match_exact(&TokenKind::Semicolon) {
                         return Ok(BlockItem::FunctionDecl(GlobalDecl {
                             name,
-                            ret_ty: ty,
+                            ret_ty,
                             params,
                             storage,
                         }));
@@ -403,23 +521,21 @@ impl Parser {
                     // Nested function definitions are illegal in C.
                     bail!("parse error: nested function definitions are not allowed");
                 }
-                let init = if self.match_exact(&TokenKind::Equal) {
-                    Some(self.parse_expr()?)
-                } else {
-                    None
-                };
-                self.expect_exact(&TokenKind::Semicolon, "';'")?;
-                return Ok(BlockItem::Declaration(VarDecl {
-                    name,
-                    ty,
-                    init,
-                    storage,
-                }));
+                DeclShape::Object { name, ty } => {
+                    let init = if self.match_exact(&TokenKind::Equal) {
+                        Some(self.parse_expr()?)
+                    } else {
+                        None
+                    };
+                    self.expect_exact(&TokenKind::Semicolon, "';'")?;
+                    return Ok(BlockItem::Declaration(VarDecl {
+                        name,
+                        ty,
+                        init,
+                        storage,
+                    }));
+                }
             }
-            bail!(
-                "parse error: expected identifier after type specifier, found {:?}",
-                self.peek().kind
-            );
         }
         Ok(BlockItem::Statement(self.parse_statement()?))
     }
@@ -541,8 +657,14 @@ impl Parser {
                 | TokenKind::Signed
                 | TokenKind::Double
         ) {
-            let ty = self.parse_type_specifier()?;
-            let name = self.expect_identifier("for-loop variable name")?;
+            let base_ty = self.parse_type_specifier()?;
+            let decl = self.parse_declarator()?;
+            let (name, ty) = match self.process_declarator(decl, base_ty)? {
+                DeclShape::Object { name, ty } => (name, ty),
+                DeclShape::Function { .. } => {
+                    bail!("parse error: for-loop initializer cannot declare a function")
+                }
+            };
             let init = if self.match_exact(&TokenKind::Equal) {
                 Some(self.parse_expr()?)
             } else {
@@ -720,6 +842,14 @@ impl Parser {
                     expr: Box::new(self.parse_unary_expr()?),
                 })
             }
+            TokenKind::Ampersand => {
+                self.current += 1;
+                Ok(Expr::AddressOf(Box::new(self.parse_unary_expr()?)))
+            }
+            TokenKind::Star => {
+                self.current += 1;
+                Ok(Expr::Dereference(Box::new(self.parse_unary_expr()?)))
+            }
             TokenKind::PlusPlus => {
                 self.current += 1;
                 Ok(Expr::PreInc(Box::new(self.parse_unary_expr()?)))
@@ -741,7 +871,13 @@ impl Parser {
                         | TokenKind::Signed
                         | TokenKind::Double
                 ) {
-                    let target_type = self.parse_type_specifier()?;
+                    let base_type = self.parse_type_specifier()?;
+                    let target_type = if self.check(&TokenKind::CloseParen) {
+                        base_type
+                    } else {
+                        let abstract_decl = self.parse_abstract_declarator()?;
+                        self.process_abstract_declarator(abstract_decl, base_type)
+                    };
                     self.expect_exact(&TokenKind::CloseParen, "')' after cast type")?;
                     let inner = self.parse_unary_expr()?;
                     let mut expr = Expr::Cast {

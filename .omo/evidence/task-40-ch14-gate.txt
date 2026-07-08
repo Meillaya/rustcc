@@ -1,0 +1,8 @@
+=== cargo build --release ===
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 2.20s
+=== chapter 14 --latest-only ===
+----------------------------------------------------------------------
+Ran 53 tests in 0.904s
+
+OK

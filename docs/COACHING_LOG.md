@@ -920,3 +920,24 @@ Added NaN-aware Chapter 13 double comparisons for the `--nan` extra. The backend
 - `.omo/evidence/task-38-ch13-nan-gate.txt`
 - `.omo/evidence/task-38-manual-qa.txt`
 - `.omo/evidence/task-38-code-review.txt`
+
+## Wave 15 / Chapter 14 pointers (task 40)
+
+Added Chapter 14 pointer support: pointer declarators and abstract pointer casts, address-of/dereference expressions, pointer lvalue assignment through `*p`, pointer/null comparison checks, TACKY `GetAddress`/`Load`/`Store`, and x86-64 `leaq` plus indirect memory loads/stores.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `cargo build --release` | exit 0, zero warnings |
+| `cargo test --release` | 9 passed, 0 failed |
+| chapter 14 `--latest-only` | `Ran 53 tests … OK` |
+| chapter 13 `--latest-only --nan` | `Ran 51 tests … OK` |
+| chapter 5 `--latest-only --bitwise --compound --increment` | `Ran 82 tests … OK` |
+| manual pointer read/store | read exits 5; store-through-pointer exits 10 |
+
+### Evidence
+- `.omo/evidence/task-40-ch14-gate.txt`
+- `.omo/evidence/task-40-manual-qa.txt`
+- `.omo/evidence/task-40-regressions.txt`
+- `.omo/evidence/task-40-code-review.txt`

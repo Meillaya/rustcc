@@ -51,6 +51,7 @@ fn type_to_operand_type(ty: Type) -> OperandType {
         Type::UnsignedInt => OperandType::UInt,
         Type::UnsignedLong => OperandType::ULong,
         Type::Double => OperandType::Double,
+        Type::Pointer(_) => OperandType::Long,
         _ => OperandType::Int,
     }
 }
@@ -77,8 +78,15 @@ fn static_init_for(expr: Expr, target_ty: OperandType) -> TackyStaticInit {
 pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
     let mut ctx = LowerCtx::new();
     let mut functions: Vec<TackyFunction> = Vec::new();
-    let mut globals: HashMap<String, (StorageClass, Option<Expr>, crate::ir::tacky::OperandType)> =
-        HashMap::new();
+    let mut globals: HashMap<
+        String,
+        (
+            StorageClass,
+            Option<Expr>,
+            crate::ir::tacky::OperandType,
+            Type,
+        ),
+    > = HashMap::new();
     // Two-pass walk: gather file-scope variables first so each
     // function can seed its type env with their declared widths.
     for item in &ast.top_level_items {
@@ -102,14 +110,14 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
             .map(|p| type_to_operand_type(p.ty.clone()))
             .collect();
         ctx.func_sigs.insert(name.clone(), param_tys);
-        ctx.func_returns.insert(
-            name,
-            type_to_operand_type(match item {
-                TopLevelItem::Function(f) => f.ret_ty.clone(),
-                TopLevelItem::Declaration(d) => d.ret_ty.clone(),
-                _ => Type::Int,
-            }),
-        );
+        let return_type = match item {
+            TopLevelItem::Function(f) => f.ret_ty.clone(),
+            TopLevelItem::Declaration(d) => d.ret_ty.clone(),
+            _ => Type::Int,
+        };
+        ctx.func_returns
+            .insert(name.clone(), type_to_operand_type(return_type.clone()));
+        ctx.func_return_types.insert(name, return_type);
     }
     for item in &ast.top_level_items {
         match item {
@@ -121,6 +129,7 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
                     ctx.current_function = Some(func.name.clone());
                     ctx.current_return_ty = type_to_operand_type(func.ret_ty.clone());
                     ctx.type_env.clear();
+                    ctx.ast_type_env.clear();
                     ctx.const_counter = 0;
                     // Seed the env with the parameter types so the
                     // body can refer to each parameter by its declared
@@ -128,12 +137,17 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
                     for param in &func.params {
                         ctx.type_env
                             .insert(param.name.clone(), type_to_operand_type(param.ty.clone()));
+                        ctx.ast_type_env
+                            .insert(param.name.clone(), param.ty.clone());
                     }
                     // Also seed the env with file-scope variable
                     // types so `Copy` / `Add` / etc. of a `long`
                     // global pick the 64-bit instruction width.
-                    for (gname, (_sc, _init, gty)) in &globals {
+                    for (gname, (_sc, _init, gty, ast_ty)) in &globals {
                         ctx.type_env.entry(gname.clone()).or_insert(*gty);
+                        ctx.ast_type_env
+                            .entry(gname.clone())
+                            .or_insert(ast_ty.clone());
                     }
                     let body = lower_block_items(body_items, &mut ctx)?;
                     let body = ensure_trailing_return(body);
@@ -160,7 +174,7 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
     }
     let mut static_variables: Vec<TackyStaticVariable> = globals
         .into_iter()
-        .filter_map(|(name, (storage, init, ty))| {
+        .filter_map(|(name, (storage, init, ty, _ast_ty))| {
             // Chapter 9 / 10: an `extern` declaration at file scope
             // is a *reference* to a definition provided elsewhere; it
             // must NOT emit its own `.data` / `.bss` entry or the
@@ -203,12 +217,21 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
 /// dedup in `nqcc2/lib/symbols.ml`.
 fn merge_global_decl(
     var: &GlobalVarDecl,
-    globals: &mut HashMap<String, (StorageClass, Option<Expr>, crate::ir::tacky::OperandType)>,
+    globals: &mut HashMap<
+        String,
+        (
+            StorageClass,
+            Option<Expr>,
+            crate::ir::tacky::OperandType,
+            Type,
+        ),
+    >,
 ) {
     let entry = globals.entry(var.name.clone()).or_insert((
         var.storage,
         var.init.clone(),
         type_to_operand_type(var.ty.clone()),
+        var.ty.clone(),
     ));
     if entry.1.is_none() && var.init.is_some() {
         entry.0 = var.storage;
@@ -312,6 +335,7 @@ struct LowerCtx {
     /// 64-bit instructions.  Emitted with the function so the
     /// codegen pass can look up types without re-walking the AST.
     type_env: TypeEnv,
+    ast_type_env: HashMap<String, Type>,
     /// Monotonic counter for the synthetic names used to materialise
     /// long-typed constant values into the IR (each long constant
     /// gets a fresh `const.<n>` name and a matching env entry).
@@ -325,6 +349,7 @@ struct LowerCtx {
     /// types used by `typecheck.ml::typecheck_fun_call`.
     func_sigs: HashMap<String, Vec<crate::ir::tacky::OperandType>>,
     func_returns: HashMap<String, crate::ir::tacky::OperandType>,
+    func_return_types: HashMap<String, Type>,
     local_statics: Vec<TackyStaticVariable>,
 }
 
@@ -340,9 +365,11 @@ impl LowerCtx {
             current_function: None,
             current_return_ty: OperandType::Int,
             type_env: HashMap::new(),
+            ast_type_env: HashMap::new(),
             const_counter: 0,
             func_sigs: HashMap::new(),
             func_returns: HashMap::new(),
+            func_return_types: HashMap::new(),
             local_statics: Vec::new(),
         }
     }
@@ -391,6 +418,9 @@ fn lower_block_items(items: &[BlockItem], ctx: &mut LowerCtx) -> Result<Vec<Inst
             BlockItem::Declaration(decl) => {
                 let decl_ty = type_to_operand_type(decl.ty.clone());
                 ctx.type_env.entry(decl.name.clone()).or_insert(decl_ty);
+                ctx.ast_type_env
+                    .entry(decl.name.clone())
+                    .or_insert(decl.ty.clone());
                 if decl.storage == StorageClass::Static {
                     let init = decl
                         .init
@@ -553,6 +583,9 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
                         ctx.type_env
                             .entry(decl.name.clone())
                             .or_insert(type_to_operand_type(decl.ty.clone()));
+                        ctx.ast_type_env
+                            .entry(decl.name.clone())
+                            .or_insert(decl.ty.clone());
                         if let Some(expr) = &decl.init {
                             let (instrs, val) = lower_expr(expr, ctx)?;
                             out.extend(instrs);
@@ -988,6 +1021,12 @@ fn lower_addr_of(inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, 
     if !inner.is_lvalue() {
         return Err(anyhow::anyhow!("lower: cannot take address of non-lvalue"));
     }
+    if let Expr::Dereference(ptr_expr) = inner {
+        return lower_expr(ptr_expr, ctx);
+    }
+    if let Expr::Paren(paren_inner) = inner {
+        return lower_addr_of(paren_inner, ctx);
+    }
     let (instrs, inner_val) = lower_expr(inner, ctx)?;
     let dst = ctx.fresh_typed_tmp(OperandType::Long);
     let mut out = instrs;
@@ -1010,7 +1049,11 @@ fn lower_addr_of(inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, 
 /// `emit_dereference` in `nqcc2/lib/tacky_gen.ml:327-329`.
 fn lower_dereference(inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)> {
     let (instrs, ptr) = lower_expr(inner, ctx)?;
-    let dst = ctx.fresh_typed_tmp(OperandType::Int);
+    let dst_ty = match expr_type(inner, ctx) {
+        Type::Pointer(pointee) => type_to_operand_type(*pointee),
+        _ => OperandType::Int,
+    };
+    let dst = ctx.fresh_typed_tmp(dst_ty);
     let mut out = instrs;
     out.push(Instruction::Load {
         src_pointer: ptr,
@@ -1098,6 +1141,39 @@ fn lower_assign(
     value: &Expr,
     ctx: &mut LowerCtx,
 ) -> Result<(Vec<Instruction>, Val)> {
+    if let Some((mut instrs, dst_pointer, target_ty)) = lower_indirect_lvalue(target, ctx)? {
+        if op != AssignOp::Assign {
+            let (load_instrs, lhs) = lower_expr(target, ctx)?;
+            instrs.extend(load_instrs);
+            let (rhs_instrs, rhs_val) = lower_expr(value, ctx)?;
+            instrs.extend(rhs_instrs);
+            let bin_op = compound_binop(op)
+                .ok_or_else(|| anyhow::anyhow!("lower: invalid compound assignment operator"))?;
+            let rhs_ty = type_of_val(&rhs_val, ctx);
+            let (lhs_for_copy, rhs_for_op, dst_ty) =
+                promote_for_binary(lhs, rhs_val, target_ty, rhs_ty, &mut instrs, ctx);
+            let tmp = ctx.fresh_typed_tmp(dst_ty);
+            instrs.push(Instruction::Copy {
+                src: lhs_for_copy,
+                dst: tmp.clone(),
+            });
+            instrs.push(binary_to_tacky(bin_op, rhs_for_op, tmp.clone()));
+            instrs.push(Instruction::Store {
+                src: Val::Var(tmp.clone()),
+                dst_pointer,
+            });
+            return Ok((instrs, Val::Var(tmp)));
+        }
+        let (rhs_instrs, rhs_val) = lower_expr(value, ctx)?;
+        instrs.extend(rhs_instrs);
+        let rhs_ty = type_of_val(&rhs_val, ctx);
+        let rhs_val = narrow_to_target(rhs_val, rhs_ty, target_ty, &mut instrs, ctx);
+        instrs.push(Instruction::Store {
+            src: rhs_val.clone(),
+            dst_pointer,
+        });
+        return Ok((instrs, rhs_val));
+    }
     let target_name = target
         .lvalue_name()
         .ok_or_else(|| anyhow::anyhow!("lower: invalid lvalue in assignment target"))?
@@ -1145,6 +1221,24 @@ fn lower_assign(
         dst: target_name,
     });
     Ok((instrs, Val::Var(tmp)))
+}
+
+fn lower_indirect_lvalue(
+    target: &Expr,
+    ctx: &mut LowerCtx,
+) -> Result<Option<(Vec<Instruction>, Val, OperandType)>> {
+    match target {
+        Expr::Paren(inner) => lower_indirect_lvalue(inner, ctx),
+        Expr::Dereference(inner) => {
+            let (instrs, ptr) = lower_expr(inner, ctx)?;
+            let target_ty = match expr_type(target, ctx) {
+                Type::Pointer(_) => OperandType::Long,
+                ty => type_to_operand_type(ty),
+            };
+            Ok(Some((instrs, ptr, target_ty)))
+        }
+        _ => Ok(None),
+    }
 }
 
 /// Convert a value to `target_ty`: truncate long → int via `Truncate`,
@@ -1414,6 +1508,91 @@ fn type_of_val(val: &Val, ctx: &LowerCtx) -> OperandType {
         Val::Constant(_) => OperandType::Int,
         Val::ConstantDouble(_) => OperandType::Double,
         Val::Var(name) => ctx.type_env.get(name).copied().unwrap_or(OperandType::Int),
+    }
+}
+
+fn expr_type(expr: &Expr, ctx: &LowerCtx) -> Type {
+    match expr {
+        Expr::Constant(_) => Type::Int,
+        Expr::LongConstant(_) => Type::Long,
+        Expr::UIntConstant(_, is_long) => {
+            if *is_long {
+                Type::UnsignedLong
+            } else {
+                Type::UnsignedInt
+            }
+        }
+        Expr::DoubleConstant(_) => Type::Double,
+        Expr::Var(name) => ctx.ast_type_env.get(name).cloned().unwrap_or(Type::Int),
+        Expr::Paren(inner) => expr_type(inner, ctx),
+        Expr::Cast { target_type, .. } => target_type.clone(),
+        Expr::Unary {
+            op: UnaryOp::Not, ..
+        } => Type::Int,
+        Expr::Unary { expr, .. }
+        | Expr::PreInc(expr)
+        | Expr::PreDec(expr)
+        | Expr::PostInc(expr)
+        | Expr::PostDec(expr) => expr_type(expr, ctx),
+        Expr::Assign { target, .. } => expr_type(target, ctx),
+        Expr::Conditional {
+            then_expr,
+            else_expr,
+            ..
+        } => {
+            let then_ty = expr_type(then_expr, ctx);
+            let else_ty = expr_type(else_expr, ctx);
+            if matches!(then_ty, Type::Pointer(_)) {
+                then_ty
+            } else if matches!(else_ty, Type::Pointer(_)) {
+                else_ty
+            } else if matches!(then_ty, Type::Double) || matches!(else_ty, Type::Double) {
+                Type::Double
+            } else if matches!(then_ty, Type::UnsignedLong) || matches!(else_ty, Type::UnsignedLong)
+            {
+                Type::UnsignedLong
+            } else if matches!(then_ty, Type::Long) || matches!(else_ty, Type::Long) {
+                Type::Long
+            } else if matches!(then_ty, Type::UnsignedInt) || matches!(else_ty, Type::UnsignedInt) {
+                Type::UnsignedInt
+            } else {
+                Type::Int
+            }
+        }
+        Expr::Binary { op, left, right } => {
+            if is_cmp_op(*op) || matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
+                Type::Int
+            } else {
+                let left_ty = expr_type(left, ctx);
+                let right_ty = expr_type(right, ctx);
+                if matches!(left_ty, Type::Double) || matches!(right_ty, Type::Double) {
+                    Type::Double
+                } else if matches!(left_ty, Type::UnsignedLong)
+                    || matches!(right_ty, Type::UnsignedLong)
+                {
+                    Type::UnsignedLong
+                } else if matches!(left_ty, Type::Long) || matches!(right_ty, Type::Long) {
+                    Type::Long
+                } else if matches!(left_ty, Type::UnsignedInt)
+                    || matches!(right_ty, Type::UnsignedInt)
+                {
+                    Type::UnsignedInt
+                } else {
+                    Type::Int
+                }
+            }
+        }
+        Expr::Call { name, .. } => ctx
+            .func_return_types
+            .get(name)
+            .cloned()
+            .unwrap_or(Type::Int),
+        Expr::AddressOf(inner) => Type::Pointer(Box::new(expr_type(inner, ctx))),
+        Expr::Dereference(inner) => match expr_type(inner, ctx) {
+            Type::Pointer(pointee) => *pointee,
+            _ => Type::Int,
+        },
+        Expr::Subscript { .. } => Type::Int,
     }
 }
 

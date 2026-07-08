@@ -1,0 +1,101 @@
+Task 40 code review / slop and adversarial evidence
+
+Scope fidelity:
+- Implemented Chapter 14 pointer support only: pointer declarators/abstract casts, & address-of, * dereference, pointer assignment lvalue behavior, pointer comparisons/null conversions, TACKY GetAddress/Load/Store, and x86-64 leaq/indirect mov lowering.
+- Did not implement arrays/subscript semantics, char/string behavior, sizeof, structs/unions, -> member access, optimization, register allocation, non-System-V ABI changes, or beyond-SSE2 platform work.
+- Kept broad incidental cargo-fmt churn out of the source diff before commit.
+
+No speculative abstraction:
+- Parser declarator helpers are local to parser.rs and mirror nqcc2 declarator processing.
+- Type checking uses a minimal chapter-14 expression-type walk; no new dependency, global framework, or optimizer/regalloc abstractions.
+- Backend changes are direct instruction-selection arms for existing TACKY variants.
+
+Stale/misleading evidence:
+- Baseline chapter 14 failure was captured before edits in task-40-baseline.txt.
+- The Python harness returned process exit 0 even when unittest output contained FAIL during intermediate attempts; final gate evidence was refreshed and manually inspected for `OK`.
+- Final gate evidence includes fresh build plus chapter 14 OK after removing formatting churn.
+
+Adversarial probes:
+- stale_state: rebuilt release binary after source edits and after cleanup; final manual QA uses the rebuilt target/release/rustcc.
+- dirty_worktree: git status captured before baseline and pre-final gates; unrelated .omo orchestration/evidence changes were preserved and not reverted.
+- malformed_input: manual QA rejects `int *p = 1;` and `return *x;` with type errors; chapter 14 invalid_parse/invalid_types suites are included in the 53-test gate.
+- long_external_commands: cargo/harness commands were run with explicit WORKING phase announcements and captured to evidence files.
+- misleading_success_output: intermediate unittest FAIL with process exit 0 was treated as failure; final evidence requires textual `OK`.
+- flaky_tests: chapter 14, chapter 13 NaN, chapter 5 lvalue sanity, cargo build, and cargo test were rerun after the final code changes.
+- scope_fidelity: diff scan checked for forbidden scope keywords/patterns; remaining hits are pre-existing enum arms/docs or explicit out-of-scope rejection text, not new feature implementation.
+
+Cleanup receipt:
+- Temporary manual C files and compiled binaries were created under mktemp directories and removed; task-40-manual-qa.txt records `cleanup done: removed temp C files and binaries`.
+- No debug print/dump leftovers were found in changed source paths.
+
+Raw review command output follows.
+=== changed source stat ===
+ docs/COACHING_LOG.md           |  21 ++
+ src/codegen/codegen.rs         |  58 +++++
+ src/codegen/emit.rs            |   5 +
+ src/codegen/replace_pseudos.rs |  13 ++
+ src/ir/lower.rs                | 196 +++++++++++++++--
+ src/parse/parser.rs            | 276 ++++++++++++++++++------
+ src/semantics/resolve.rs       |   6 +-
+ src/semantics/typecheck.rs     | 479 +++++++++++++++++++++++++++++++++++++++--
+ 8 files changed, 948 insertions(+), 106 deletions(-)
+=== debug/temp leftover scan ===
+src/main.rs:21:        eprintln!("{err:#}");
+src/driver.rs:168:        println!("{text}");
+=== scope scan: forbidden chapter 15+ syntax/features added ===
+74:@@ -279,6 +279,11 @@ fn format_instruction(instr: &Instr) -> Result<String> {
+90:@@ -120,6 +120,19 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
+114:@@ -51,6 +51,7 @@ fn type_to_operand_type(ty: Type) -> OperandType {
+122:@@ -77,8 +78,15 @@ fn static_init_for(expr: Expr, target_ty: OperandType) -> TackyStaticInit {
+123: pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
+140:@@ -102,14 +110,14 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
+163:@@ -121,6 +129,7 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
+171:@@ -128,12 +137,17 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
+190:@@ -160,7 +174,7 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
+199:@@ -203,12 +217,13 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
+242:@@ -391,6 +410,9 @@ fn lower_block_items(items: &[BlockItem], ctx: &mut LowerCtx) -> Result<Vec<Inst
+252:@@ -553,6 +575,9 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
+262:@@ -988,6 +1013,12 @@ fn lower_addr_of(inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>,
+275:@@ -1010,7 +1041,11 @@ fn lower_addr_of(inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>,
+277: fn lower_dereference(inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)> {
+291: ) -> Result<(Vec<Instruction>, Val)> {
+335:+) -> Result<Option<(Vec<Instruction>, Val, OperandType)>> {
+353:@@ -1417,6 +1503,88 @@ fn type_of_val(val: &Val, ctx: &LowerCtx) -> OperandType {
+357:+fn expr_type(expr: &Expr, ctx: &LowerCtx) -> Type {
+435:+        Expr::Subscript { .. } => Type::Int,
+479:     fn new(tokens: Vec<Token>) -> Self {
+584:+    fn parse_declarator(&mut self) -> Result<Declarator> {
+591:+    fn parse_direct_declarator(&mut self) -> Result<Declarator> {
+611:+    fn process_declarator(&self, decl: Declarator, base_type: Type) -> Result<DeclShape> {
+640:+    fn parse_abstract_declarator(&mut self) -> Result<AbstractDeclarator> {
+654:+    fn process_abstract_declarator(&self, decl: AbstractDeclarator, base_type: Type) -> Type {
+848: pub fn typecheck(ast: &ResolvedProgram) -> Result<TypedProgram> {
+893:+fn validate_global_var(var: &GlobalVarDecl, ctx: &mut TypeCtx) -> Result<()> {
+904:+fn validate_function_decl(decl: &GlobalDecl) -> Result<()> {
+913:+fn check_block(items: &[BlockItem], ctx: &mut TypeCtx) -> Result<()> {
+920:+fn check_block_item(item: &BlockItem, ctx: &mut TypeCtx) -> Result<()> {
+934:+fn check_var_decl(decl: &VarDecl, ctx: &mut TypeCtx) -> Result<()> {
+945:+fn check_statement(stmt: &Statement, ctx: &mut TypeCtx) -> Result<()> {
+1027:+fn type_of_scalar(expr: &Expr, ctx: &TypeCtx) -> Result<Type> {
+1035:+fn type_of_expr(expr: &Expr, ctx: &TypeCtx) -> Result<Type> {
+1107:+        Expr::Subscript { .. } => bail!("type error: arrays/subscript are out of chapter-14 scope"),
+1111:+fn type_unary(op: UnaryOp, expr: &Expr, ctx: &TypeCtx) -> Result<Type> {
+1132:+fn type_assignment(op: AssignOp, target: &Expr, value: &Expr, ctx: &TypeCtx) -> Result<Type> {
+1151:+fn type_binary(op: BinaryOp, left: &Expr, right: &Expr, ctx: &TypeCtx) -> Result<Type> {
+1196:+fn compound_to_binary(op: AssignOp) -> Result<BinaryOp> {
+1212:+fn validate_cast(source: &Type, target: &Type) -> Result<()> {
+1222:+fn can_assign(expr: &Expr, source: &Type, target: &Type) -> bool {
+1231:+fn is_null_pointer_constant(expr: &Expr) -> bool {
+1239:+fn comparable(left: &Expr, left_ty: &Type, right: &Expr, right_ty: &Type) -> Result<()> {
+1260:+fn common_type(left: &Expr, left_ty: &Type, right: &Expr, right_ty: &Type) -> Result<Type> {
+1273:+fn common_arithmetic(left: &Type, right: &Type) -> Result<Type> {
+1290:+fn ensure_scalar(ty: &Type) -> Result<()> {
+1291:+    if matches!(ty, Type::Void | Type::Array { .. }) {
+=== pure LOC of modified source files ===
+src/parse/parser.rs 904
+src/semantics/typecheck.rs 444
+src/semantics/resolve.rs 633
+src/ir/lower.rs 1410
+src/codegen/codegen.rs 1275
+src/codegen/emit.rs 417
+src/codegen/replace_pseudos.rs 391

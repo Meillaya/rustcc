@@ -1,0 +1,11 @@
+=== manual pointer read ===
+compile read exit=0
+run read exit=5
+=== manual pointer store ===
+compile store exit=0
+run store exit=10
+=== malformed pointer probes ===
+bad int-to-pointer exit=1
+bad deref-non-pointer exit=1
+tmp=/tmp/tmp.BlsDk1pfar
+cleanup done: removed temp C files and binaries

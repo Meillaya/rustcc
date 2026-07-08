@@ -1336,6 +1336,64 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
         // Chapter 4 short-circuit `&&` / `||` lowering materialises
         // forward labels for the join point.
         Instruction::Label(name) => vec![Instr::Label(name.clone())],
+        Instruction::Load { src_pointer, dst } => {
+            let dst_ty = type_of_val(&Val::Var(dst.clone()), env);
+            let dst_op = Operand::Pseudo(dst.clone());
+            let load = if dst_ty == OperandType::Double {
+                Instr::Movsd {
+                    src: Operand::Memory(Reg::R9, 0),
+                    dst: dst_op,
+                }
+            } else if dst_ty.is_long_word() {
+                Instr::Movq {
+                    src: Operand::Memory(Reg::R9, 0),
+                    dst: dst_op,
+                }
+            } else {
+                Instr::Mov {
+                    src: Operand::Memory(Reg::R9, 0),
+                    dst: dst_op,
+                }
+            };
+            vec![
+                Instr::Movq {
+                    src: convert_val(src_pointer, ctx),
+                    dst: Operand::Reg(Reg::R9),
+                },
+                load,
+            ]
+        }
+        Instruction::Store { src, dst_pointer } => {
+            let src_ty = type_of_val(src, env);
+            let src_op = convert_val(src, ctx);
+            let store = if src_ty == OperandType::Double {
+                Instr::Movsd {
+                    src: src_op,
+                    dst: Operand::Memory(Reg::R9, 0),
+                }
+            } else if src_ty.is_long_word() {
+                Instr::Movq {
+                    src: src_op,
+                    dst: Operand::Memory(Reg::R9, 0),
+                }
+            } else {
+                Instr::Mov {
+                    src: src_op,
+                    dst: Operand::Memory(Reg::R9, 0),
+                }
+            };
+            vec![
+                Instr::Movq {
+                    src: convert_val(dst_pointer, ctx),
+                    dst: Operand::Reg(Reg::R9),
+                },
+                store,
+            ]
+        }
+        Instruction::GetAddress { src, dst } => vec![Instr::Lea {
+            src: Operand::Pseudo(src.clone()),
+            dst: Operand::Pseudo(dst.clone()),
+        }],
         Instruction::Call { name, args, dst } => lower_call(name, args, dst, env, ctx),
         _ => Vec::new(),
     }

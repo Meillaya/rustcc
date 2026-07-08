@@ -37,7 +37,7 @@
 // with a trailing newline so the file is line-terminated like every
 // other hand-written or book-emitted `.s` source.
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 
 use crate::codegen::assembly::{
     AsmProgram, BinaryOpInstr, ConditionCode, Instr, Operand, Reg, TopLevel, UnaryOpInstr,
@@ -276,6 +276,11 @@ fn format_instruction(instr: &Instr) -> Result<String> {
         )),
         Instr::Movsd { src, dst } => Ok(format!(
             "movsd {}, {}",
+            format_quad_operand(src)?,
+            format_quad_operand(dst)?
+        )),
+        Instr::Lea { src, dst } => Ok(format!(
+            "leaq {}, {}",
             format_quad_operand(src)?,
             format_quad_operand(dst)?
         )),

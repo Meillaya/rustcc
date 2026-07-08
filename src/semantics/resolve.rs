@@ -57,7 +57,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 use crate::ast::{
     BlockItem, Expr, ForInit, Function, GlobalDecl, GlobalVarDecl, Program, Statement,
@@ -225,10 +225,10 @@ fn check_function_conflict(
                 GlobalKind::Function { defined, .. } => defined,
                 _ => unreachable!(),
             };
-            if entry_arity == arity && !entry_defined {
-                Ok(())
-            } else if entry_arity == arity && entry_defined && defined {
+            if entry_arity == arity && entry_defined && defined {
                 bail!("resolve error: duplicate definition of function '{name}'")
+            } else if entry_arity == arity {
+                Ok(())
             } else {
                 bail!(
                     "resolve error: conflicting declaration of '{name}' (previous arity {entry_arity}, new arity {arity})"
