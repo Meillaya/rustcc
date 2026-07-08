@@ -60,8 +60,8 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, bail};
 
 use crate::ast::{
-    BlockItem, Expr, ForInit, Function, GlobalDecl, GlobalVarDecl, Program, Statement, TopLevelItem,
-    VarDecl,
+    BlockItem, Expr, ForInit, Function, GlobalDecl, GlobalVarDecl, Program, Statement,
+    StorageClass, TopLevelItem, VarDecl,
 };
 
 /// Thin wrapper that carries a `Program` after resolution.
@@ -70,19 +70,33 @@ pub struct ResolvedProgram {
     pub program: Program,
 }
 
-/// A function entry in the global table: records the declared arity and
-/// whether the function has been *defined* (has a body).  A function
-/// declaration without a body sets `defined = false`; a subsequent
-/// definition with the matching arity flips it to `true`.  A second
-/// definition, or a declaration with a different arity, is rejected by
-/// the resolve pass before the table is updated.
+/// Linkage of a global symbol, per C17 6.2.2.  Mirrors the OCaml
+/// `has_linkage` + `storage_class` discrimination in
+/// `nqcc2/lib/semantic_analysis/resolve.ml`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct FunctionEntry {
-    arity: usize,
-    defined: bool,
+enum Linkage {
+    External,
+    Internal,
 }
 
-type FunctionTable = HashMap<String, FunctionEntry>;
+/// Kind of a global declaration — function or variable.  Mirrors the
+/// two arms of `resolve_global_declaration` in OCaml.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GlobalKind {
+    Function { arity: usize, defined: bool },
+    Variable,
+}
+
+/// One row in the file-scope symbol table.  The row remembers the kind
+/// (function/variable) and the linkage (external/internal) so a second
+/// declaration can detect a kind or linkage conflict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct GlobalEntry {
+    kind: GlobalKind,
+    linkage: Linkage,
+}
+
+type GlobalTable = HashMap<String, GlobalEntry>;
 
 /// Resolve identifiers, declarations, and goto/label consistency (chapter 5
 /// covers identifier resolution; chapter 7 extends the scope model to nested
@@ -99,35 +113,55 @@ type FunctionTable = HashMap<String, FunctionEntry>;
 /// translation unit (matching C's single-pass visibility rule and the
 /// behaviour of the canonical OCaml reference).
 pub fn resolve_program(ast: &Program) -> Result<ResolvedProgram> {
-    let mut table: FunctionTable = HashMap::new();
-    let mut globals: HashMap<String, bool> = HashMap::new();
+    let mut globals: GlobalTable = HashMap::new();
     let mut resolved_items: Vec<TopLevelItem> = Vec::with_capacity(ast.top_level_items.len());
     for item in &ast.top_level_items {
         match item {
             TopLevelItem::Function(func) => {
-                let arity = func.params.len();
-                check_function_conflict(&table, &func.name, arity)?;
-                table.insert(
+                check_function_conflict(
+                    &globals,
+                    &func.name,
+                    func.params.len(),
+                    true,
+                    linkage_of(func.storage),
+                )?;
+                globals.insert(
                     func.name.clone(),
-                    FunctionEntry { arity, defined: true },
+                    GlobalEntry {
+                        kind: GlobalKind::Function {
+                            arity: func.params.len(),
+                            defined: true,
+                        },
+                        linkage: linkage_of(func.storage),
+                    },
                 );
-                let resolved = resolve_function(func, &table, &globals)?;
+                let resolved = resolve_function(func, &globals)?;
                 resolved_items.push(TopLevelItem::Function(resolved));
             }
             TopLevelItem::Declaration(decl) => {
                 let arity = decl.params.len();
-                check_function_conflict(&table, &decl.name, arity)?;
-                table.insert(
+                check_function_conflict(
+                    &globals,
+                    &decl.name,
+                    arity,
+                    false,
+                    linkage_of(decl.storage),
+                )?;
+                check_duplicate_params(&decl.params)?;
+                globals.insert(
                     decl.name.clone(),
-                    FunctionEntry {
-                        arity,
-                        defined: false,
+                    GlobalEntry {
+                        kind: GlobalKind::Function {
+                            arity,
+                            defined: false,
+                        },
+                        linkage: linkage_of(decl.storage),
                     },
                 );
-                check_duplicate_params(&decl.params)?;
                 resolved_items.push(TopLevelItem::Declaration(GlobalDecl {
                     name: decl.name.clone(),
                     params: decl.params.clone(),
+                    storage: decl.storage,
                 }));
             }
             TopLevelItem::Variable(var) => {
@@ -148,26 +182,58 @@ pub fn resolve_program(ast: &Program) -> Result<ResolvedProgram> {
     })
 }
 
-/// Reject adding `name` with `arity` to a table that already contains a
-/// conflicting entry.  A previous *declaration* with the same arity is
-/// allowed (multiple declarations are legal C); a previous *definition*
-/// is rejected as a duplicate definition.  Any entry with a different
-/// arity is rejected as a conflicting declaration.
+fn linkage_of(storage: StorageClass) -> Linkage {
+    match storage {
+        StorageClass::Static => Linkage::Internal,
+        StorageClass::Extern | StorageClass::Auto => Linkage::External,
+    }
+}
+
+/// Reject adding `name` (with `arity`, `defined`, `linkage`) to a table
+/// that already contains a conflicting entry.  Mirrors the OCaml
+/// `resolve_function_declaration` rules plus the chapter-10 extension
+/// that detects kind (function vs variable) and linkage (external vs
+/// internal) conflicts.
 fn check_function_conflict(
-    table: &FunctionTable,
+    table: &GlobalTable,
     name: &str,
     arity: usize,
+    defined: bool,
+    linkage: Linkage,
 ) -> Result<()> {
     match table.get(name) {
         None => Ok(()),
-        Some(entry) if entry.arity == arity && !entry.defined => Ok(()),
-        Some(entry) if entry.arity == arity && entry.defined => bail!(
-            "resolve error: duplicate definition of function '{name}'"
-        ),
-        Some(entry) => bail!(
-            "resolve error: conflicting declaration of '{name}' (previous arity {}, new arity {arity})",
-            entry.arity
-        ),
+        Some(entry) => {
+            // Mismatched kind (function vs variable) is always an error.
+            if !matches!(entry.kind, GlobalKind::Function { .. }) {
+                bail!(
+                    "resolve error: conflicting declarations of '{name}' (function and variable)"
+                );
+            }
+            // Mismatched linkage (external vs internal) is always an error.
+            if entry.linkage != linkage {
+                bail!(
+                    "resolve error: conflicting linkage for '{name}' (function declared with both external and internal linkage)"
+                );
+            }
+            let entry_arity = match entry.kind {
+                GlobalKind::Function { arity, .. } => arity,
+                _ => unreachable!(),
+            };
+            let entry_defined = match entry.kind {
+                GlobalKind::Function { defined, .. } => defined,
+                _ => unreachable!(),
+            };
+            if entry_arity == arity && !entry_defined {
+                Ok(())
+            } else if entry_arity == arity && entry_defined && defined {
+                bail!("resolve error: duplicate definition of function '{name}'")
+            } else {
+                bail!(
+                    "resolve error: conflicting declaration of '{name}' (previous arity {entry_arity}, new arity {arity})"
+                )
+            }
+        }
     }
 }
 
@@ -191,31 +257,43 @@ fn check_duplicate_params(params: &[VarDecl]) -> Result<()> {
 
 /// Resolve a file-scope variable declaration.  Mirrors
 /// `resolve_file_scope_variable_declaration` in OCaml resolve.ml.
-/// Multiple tentative declarations of the same name are merged by
-/// the lowerer; only an *initialized* second declaration is
-/// rejected.
+/// Rejects kind / linkage conflicts with a function of the same
+/// name and linkage conflicts with a variable of the same name.
+/// The chapter-10 multi-declaration (tentative-definition) merging
+/// is handled in the lowerer; the resolve pass only blocks
+/// pathological cases.
 fn resolve_global_variable(
     var: &GlobalVarDecl,
-    globals: &mut HashMap<String, bool>,
+    globals: &mut GlobalTable,
 ) -> Result<()> {
-    let has_init_now = var.init.is_some();
-    if let Some(&previously_initialized) = globals.get(&var.name) {
-        if previously_initialized && has_init_now {
-            bail!(
-                "resolve error: duplicate definition of file-scope variable '{}' (already initialized)",
-                var.name
-            );
+    let new_linkage = linkage_of(var.storage);
+    if let Some(entry) = globals.get(&var.name).copied() {
+        match entry.kind {
+            GlobalKind::Function { .. } => bail!(
+                "resolve error: conflicting declarations of '{name}' (function and variable)",
+                name = var.name
+            ),
+            GlobalKind::Variable => {
+                if entry.linkage != new_linkage {
+                    bail!(
+                        "resolve error: conflicting linkage for '{name}' (variable declared with both external and internal linkage)",
+                        name = var.name
+                    );
+                }
+            }
         }
     }
     let resolved_init = match &var.init {
         Some(expr) => Some(resolve_global_init(expr)?),
         None => None,
     };
-    if has_init_now {
-        globals.insert(var.name.clone(), true);
-    } else {
-        globals.entry(var.name.clone()).or_insert(false);
-    }
+    globals.insert(
+        var.name.clone(),
+        GlobalEntry {
+            kind: GlobalKind::Variable,
+            linkage: new_linkage,
+        },
+    );
     let _ = resolved_init;
     Ok(())
 }
@@ -233,8 +311,7 @@ fn resolve_global_init(expr: &Expr) -> Result<Expr> {
 
 fn resolve_function(
     func: &Function,
-    table: &FunctionTable,
-    globals: &HashMap<String, bool>,
+    globals: &GlobalTable,
 ) -> Result<Function> {
     let mut scopes = ScopeStack::new();
     check_duplicate_params(&func.params)?;
@@ -244,16 +321,18 @@ fn resolve_function(
         resolved_params.push(VarDecl {
             name: unique,
             init: None,
+            storage: StorageClass::Auto,
         });
     }
     let body = match &func.body {
-        Some(items) => Some(resolve_block(items, &mut scopes, table, globals)?),
+        Some(items) => Some(resolve_block(items, &mut scopes, globals)?),
         None => None,
     };
     Ok(Function {
         name: func.name.clone(),
         params: resolved_params,
         body,
+        storage: func.storage,
     })
 }
 
@@ -339,6 +418,33 @@ impl ScopeStack {
         Ok(unique)
     }
 
+    /// Insert a block-scope `extern` reference.  The unique name is
+    /// the source name (no mangling) so the variable resolves to the
+    /// file-scope symbol of the same name.  Mirrors the OCaml
+    /// `has_linkage = true` path in `resolve_local_var_helper`.
+    fn declare_extern(&mut self, name: &str) -> Result<String> {
+        let fun_set = self
+            .fun_decls
+            .last()
+            .expect("scope stack missing root scope");
+        if fun_set.contains_key(name) {
+            bail!(
+                "resolve error: variable '{name}' conflicts with function declaration in the same scope"
+            );
+        }
+        let current = self
+            .scopes
+            .last_mut()
+            .expect("scope stack missing root scope");
+        // Multiple `extern int x;` in the same block are allowed; a
+        // second declaration just re-asserts the same linkage.
+        if current.contains_key(name) {
+            return Ok(name.to_string());
+        }
+        current.insert(name.to_string(), name.to_string());
+        Ok(name.to_string())
+    }
+
     /// Record `name` as a function prototype (with the given arity) in
     /// the innermost scope.  Rejects a same-scope collision with a
     /// variable declaration.  A second prototype in the same scope is
@@ -397,12 +503,11 @@ impl ScopeStack {
 fn resolve_block(
     items: &[BlockItem],
     scopes: &mut ScopeStack,
-    table: &FunctionTable,
-    globals: &HashMap<String, bool>,
+    globals: &GlobalTable,
 ) -> Result<Vec<BlockItem>> {
     let mut out = Vec::with_capacity(items.len());
     for item in items {
-        out.push(resolve_block_item(item, scopes, table, globals)?);
+        out.push(resolve_block_item(item, scopes, globals)?);
     }
     Ok(out)
 }
@@ -410,35 +515,66 @@ fn resolve_block(
 fn resolve_block_item(
     item: &BlockItem,
     scopes: &mut ScopeStack,
-    table: &FunctionTable,
-    globals: &HashMap<String, bool>,
+    globals: &GlobalTable,
 ) -> Result<BlockItem> {
     match item {
         BlockItem::Statement(stmt) => Ok(BlockItem::Statement(resolve_statement(
-            stmt, scopes, table, globals,
+            stmt, scopes, globals,
         )?)),
-        BlockItem::Declaration(var_decl) => {
-            // C99 rule: the declarator's scope begins at the end of the
-            // declarator, so `int a = a + 1` references the new `a` —
-            // declare first, then resolve the init against the new
-            // scope.  This matches the OCaml `resolve_local_var_helper`
-            // ordering.
-            let new_name = scopes.declare(&var_decl.name)?;
-            let new_init = match &var_decl.init {
-                Some(expr) => Some(resolve_expr(expr, scopes, table, globals)?),
-                None => None,
-            };
-            Ok(BlockItem::Declaration(VarDecl {
-                name: new_name,
-                init: new_init,
-            }))
-        }
+        BlockItem::Declaration(var_decl) => match var_decl.storage {
+            StorageClass::Extern => {
+                if var_decl.init.is_some() {
+                    bail!(
+                        "resolve error: extern variable '{name}' may not have an initializer",
+                        name = var_decl.name
+                    );
+                }
+                if !matches!(globals.get(&var_decl.name), Some(GlobalEntry { kind: GlobalKind::Variable, .. })) {
+                    bail!(
+                        "resolve error: extern declaration of '{name}' has no prior file-scope variable",
+                        name = var_decl.name
+                    );
+                }
+                let name = scopes.declare_extern(&var_decl.name)?;
+                Ok(BlockItem::Declaration(VarDecl {
+                    name,
+                    init: None,
+                    storage: StorageClass::Extern,
+                }))
+            }
+            StorageClass::Static | StorageClass::Auto => {
+                let new_name = scopes.declare(&var_decl.name)?;
+                let new_init = match &var_decl.init {
+                    Some(expr) => Some(resolve_expr(expr, scopes, globals)?),
+                    None => None,
+                };
+                Ok(BlockItem::Declaration(VarDecl {
+                    name: new_name,
+                    init: new_init,
+                    storage: var_decl.storage,
+                }))
+            }
+        },
         BlockItem::FunctionDecl(fd) => {
             check_duplicate_params(&fd.params)?;
+            if fd.storage == StorageClass::Static {
+                bail!(
+                    "resolve error: static keyword not allowed on local function declaration"
+                );
+            }
+            if let Some(entry) = globals.get(&fd.name) {
+                if !matches!(entry.kind, GlobalKind::Function { .. }) {
+                    bail!(
+                        "resolve error: conflicting declarations of '{name}' (function and variable)",
+                        name = fd.name
+                    );
+                }
+            }
             scopes.declare_fun(&fd.name, fd.params.len())?;
             Ok(BlockItem::FunctionDecl(GlobalDecl {
                 name: fd.name.clone(),
                 params: fd.params.clone(),
+                storage: fd.storage,
             }))
         }
     }
@@ -447,57 +583,51 @@ fn resolve_block_item(
 fn resolve_for_init(
     init: &ForInit,
     scopes: &mut ScopeStack,
-    table: &FunctionTable,
-    globals: &HashMap<String, bool>,
+    globals: &GlobalTable,
 ) -> Result<ForInit> {
     match init {
         ForInit::Declaration(var_decl) => {
             let new_name = scopes.declare(&var_decl.name)?;
             let new_init = match &var_decl.init {
-                Some(expr) => Some(resolve_expr(expr, scopes, table, globals)?),
+                Some(expr) => Some(resolve_expr(expr, scopes, globals)?),
                 None => None,
             };
             Ok(ForInit::Declaration(VarDecl {
                 name: new_name,
                 init: new_init,
+                storage: var_decl.storage,
             }))
         }
-        ForInit::Expr(expr) => Ok(ForInit::Expr(resolve_expr(expr, scopes, table, globals)?)),
+        ForInit::Expr(expr) => Ok(ForInit::Expr(resolve_expr(expr, scopes, globals)?)),
     }
 }
 
 fn resolve_statement(
     stmt: &Statement,
     scopes: &mut ScopeStack,
-    table: &FunctionTable,
-    globals: &HashMap<String, bool>,
+    globals: &GlobalTable,
 ) -> Result<Statement> {
     match stmt {
         Statement::Return(expr) => {
-            Ok(Statement::Return(resolve_expr(expr, scopes, table, globals)?))
+            Ok(Statement::Return(resolve_expr(expr, scopes, globals)?))
         }
         Statement::If {
             condition,
             then_branch,
             else_branch,
         } => Ok(Statement::If {
-            condition: resolve_expr(condition, scopes, table, globals)?,
-            then_branch: Box::new(resolve_statement(then_branch, scopes, table, globals)?),
+            condition: resolve_expr(condition, scopes, globals)?,
+            then_branch: Box::new(resolve_statement(then_branch, scopes, globals)?),
             else_branch: match else_branch {
                 Some(else_branch) => {
-                    Some(Box::new(resolve_statement(else_branch, scopes, table, globals)?))
+                    Some(Box::new(resolve_statement(else_branch, scopes, globals)?))
                 }
                 None => None,
             },
         }),
         Statement::Block(items) => {
-            // Blocks open a fresh inner scope, just like the OCaml
-            // reference.  The inner `declare` calls get fresh unique
-            // names, so an inner `int x` shadows the outer `x` for
-            // references inside the block; once the block exits, the
-            // outer scope's binding is visible again.
             scopes.push();
-            let result = resolve_block(items, scopes, table, globals);
+            let result = resolve_block(items, scopes, globals);
             scopes.pop();
             Ok(Statement::Block(result?))
         }
@@ -506,8 +636,8 @@ fn resolve_statement(
             body,
             label,
         } => Ok(Statement::While {
-            condition: resolve_expr(condition, scopes, table, globals)?,
-            body: Box::new(resolve_statement(body, scopes, table, globals)?),
+            condition: resolve_expr(condition, scopes, globals)?,
+            body: Box::new(resolve_statement(body, scopes, globals)?),
             label: label.clone(),
         }),
         Statement::DoWhile {
@@ -515,8 +645,8 @@ fn resolve_statement(
             condition,
             label,
         } => Ok(Statement::DoWhile {
-            body: Box::new(resolve_statement(body, scopes, table, globals)?),
-            condition: resolve_expr(condition, scopes, table, globals)?,
+            body: Box::new(resolve_statement(body, scopes, globals)?),
+            condition: resolve_expr(condition, scopes, globals)?,
             label: label.clone(),
         }),
         Statement::For {
@@ -528,18 +658,18 @@ fn resolve_statement(
         } => {
             scopes.push();
             let resolved_init = match init {
-                Some(init) => Some(resolve_for_init(init, scopes, table, globals)?),
+                Some(init) => Some(resolve_for_init(init, scopes, globals)?),
                 None => None,
             };
             let resolved_condition = match condition {
-                Some(expr) => Some(resolve_expr(expr, scopes, table, globals)?),
+                Some(expr) => Some(resolve_expr(expr, scopes, globals)?),
                 None => None,
             };
             let resolved_post = match post {
-                Some(expr) => Some(resolve_expr(expr, scopes, table, globals)?),
+                Some(expr) => Some(resolve_expr(expr, scopes, globals)?),
                 None => None,
             };
-            let body_result = resolve_statement(body, scopes, table, globals);
+            let body_result = resolve_statement(body, scopes, globals);
             scopes.pop();
             Ok(Statement::For {
                 init: resolved_init,
@@ -552,25 +682,25 @@ fn resolve_statement(
         Statement::Break(target) => Ok(Statement::Break(target.clone())),
         Statement::Continue(target) => Ok(Statement::Continue(target.clone())),
         Statement::Switch { expr, body, label } => Ok(Statement::Switch {
-            expr: resolve_expr(expr, scopes, table, globals)?,
-            body: Box::new(resolve_statement(body, scopes, table, globals)?),
+            expr: resolve_expr(expr, scopes, globals)?,
+            body: Box::new(resolve_statement(body, scopes, globals)?),
             label: label.clone(),
         }),
         Statement::Case { value, statement } => Ok(Statement::Case {
-            value: resolve_expr(value, scopes, table, globals)?,
-            statement: Box::new(resolve_statement(statement, scopes, table, globals)?),
+            value: resolve_expr(value, scopes, globals)?,
+            statement: Box::new(resolve_statement(statement, scopes, globals)?),
         }),
         Statement::Default { statement } => Ok(Statement::Default {
-            statement: Box::new(resolve_statement(statement, scopes, table, globals)?),
+            statement: Box::new(resolve_statement(statement, scopes, globals)?),
         }),
         Statement::Goto(target) => Ok(Statement::Goto(target.clone())),
         Statement::Labeled { label, statement } => Ok(Statement::Labeled {
             label: label.clone(),
-            statement: Box::new(resolve_statement(statement, scopes, table, globals)?),
+            statement: Box::new(resolve_statement(statement, scopes, globals)?),
         }),
         Statement::Expr(maybe_expr) => {
             let resolved = match maybe_expr {
-                Some(expr) => Some(resolve_expr(expr, scopes, table, globals)?),
+                Some(expr) => Some(resolve_expr(expr, scopes, globals)?),
                 None => None,
             };
             Ok(Statement::Expr(resolved))
@@ -581,23 +711,21 @@ fn resolve_statement(
 fn resolve_expr(
     expr: &Expr,
     scopes: &mut ScopeStack,
-    table: &FunctionTable,
-    globals: &HashMap<String, bool>,
+    globals: &GlobalTable,
 ) -> Result<Expr> {
     match expr {
         Expr::Constant(n) => Ok(Expr::Constant(*n)),
         Expr::Paren(inner) => {
-            Ok(Expr::Paren(Box::new(resolve_expr(inner, scopes, table, globals)?)))
+            Ok(Expr::Paren(Box::new(resolve_expr(inner, scopes, globals)?)))
         }
         Expr::Var(name) => {
-            // Locals shadow globals; an undeclared local reference
-            // then falls back to the file-scope variable set so
-            // `return g;` inside a function can read `int g = 5;`
-            // declared earlier in the translation unit.
             if let Some(unique) = scopes.lookup(name) {
                 return Ok(Expr::Var(unique));
             }
-            if globals.contains_key(name) {
+            if matches!(
+                globals.get(name),
+                Some(GlobalEntry { kind: GlobalKind::Variable, .. })
+            ) {
                 return Ok(Expr::Var(name.clone()));
             }
             bail!("resolve error: undeclared variable '{name}'")
@@ -605,8 +733,12 @@ fn resolve_expr(
         Expr::Call { name, args } => {
             let arity = if let Some(arity) = scopes.lookup_fun_arity(name) {
                 arity
-            } else if let Some(entry) = table.get(name) {
-                entry.arity
+            } else if let Some(GlobalEntry {
+                kind: GlobalKind::Function { arity, .. },
+                ..
+            }) = globals.get(name)
+            {
+                *arity
             } else {
                 bail!("resolve error: call to undeclared function '{name}'")
             };
@@ -618,7 +750,7 @@ fn resolve_expr(
             }
             let resolved_args = args
                 .iter()
-                .map(|a| resolve_expr(a, scopes, table, globals))
+                .map(|a| resolve_expr(a, scopes, globals))
                 .collect::<Result<Vec<_>>>()?;
             Ok(Expr::Call {
                 name: name.clone(),
@@ -627,30 +759,30 @@ fn resolve_expr(
         }
         Expr::Unary { op, expr: inner } => Ok(Expr::Unary {
             op: *op,
-            expr: Box::new(resolve_expr(inner, scopes, table, globals)?),
+            expr: Box::new(resolve_expr(inner, scopes, globals)?),
         }),
-        Expr::PreInc(inner) => Ok(Expr::PreInc(Box::new(resolve_expr(inner, scopes, table, globals)?))),
-        Expr::PreDec(inner) => Ok(Expr::PreDec(Box::new(resolve_expr(inner, scopes, table, globals)?))),
-        Expr::PostInc(inner) => Ok(Expr::PostInc(Box::new(resolve_expr(inner, scopes, table, globals)?))),
-        Expr::PostDec(inner) => Ok(Expr::PostDec(Box::new(resolve_expr(inner, scopes, table, globals)?))),
+        Expr::PreInc(inner) => Ok(Expr::PreInc(Box::new(resolve_expr(inner, scopes, globals)?))),
+        Expr::PreDec(inner) => Ok(Expr::PreDec(Box::new(resolve_expr(inner, scopes, globals)?))),
+        Expr::PostInc(inner) => Ok(Expr::PostInc(Box::new(resolve_expr(inner, scopes, globals)?))),
+        Expr::PostDec(inner) => Ok(Expr::PostDec(Box::new(resolve_expr(inner, scopes, globals)?))),
         Expr::Assign { op, target, value } => Ok(Expr::Assign {
             op: *op,
-            target: Box::new(resolve_expr(target, scopes, table, globals)?),
-            value: Box::new(resolve_expr(value, scopes, table, globals)?),
+            target: Box::new(resolve_expr(target, scopes, globals)?),
+            value: Box::new(resolve_expr(value, scopes, globals)?),
         }),
         Expr::Conditional {
             condition,
             then_expr,
             else_expr,
         } => Ok(Expr::Conditional {
-            condition: Box::new(resolve_expr(condition, scopes, table, globals)?),
-            then_expr: Box::new(resolve_expr(then_expr, scopes, table, globals)?),
-            else_expr: Box::new(resolve_expr(else_expr, scopes, table, globals)?),
+            condition: Box::new(resolve_expr(condition, scopes, globals)?),
+            then_expr: Box::new(resolve_expr(then_expr, scopes, globals)?),
+            else_expr: Box::new(resolve_expr(else_expr, scopes, globals)?),
         }),
         Expr::Binary { op, left, right } => Ok(Expr::Binary {
             op: *op,
-            left: Box::new(resolve_expr(left, scopes, table, globals)?),
-            right: Box::new(resolve_expr(right, scopes, table, globals)?),
+            left: Box::new(resolve_expr(left, scopes, globals)?),
+            right: Box::new(resolve_expr(right, scopes, globals)?),
         }),
     }
 }

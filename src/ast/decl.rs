@@ -13,6 +13,11 @@ use super::{expr::Expr, stmt::Statement, ty::Type};
 pub(crate) struct VarDecl {
     pub(crate) name: String,
     pub(crate) init: Option<Expr>,
+    /// Chapter-10 storage-class specifier.  `Auto` for plain
+    /// `int x = 0;`, `Static` for `static int x;` (file-scope tentative
+    /// or block-scope local), and `Extern` for `extern int x;`
+    /// references inside a block.
+    pub(crate) storage: StorageClass,
 }
 
 /// A function definition.  Mirrors `function_declaration { body = Some ... }`.
@@ -21,6 +26,12 @@ pub(crate) struct Function {
     pub(crate) name: String,
     pub(crate) params: Vec<VarDecl>,
     pub(crate) body: Option<Vec<BlockItem>>,
+    /// Chapter-10 storage-class specifier on a function definition.
+    /// `Auto` (the default for plain `int foo(void) { ... }`) carries
+    /// external linkage; `Static` carries internal linkage.  Block
+    /// scopes never see a function definition (C forbids nested
+    /// functions) so this field is only meaningful at file scope.
+    pub(crate) storage: StorageClass,
 }
 
 /// A function declaration without a body.  Mirrors
@@ -32,6 +43,11 @@ pub(crate) struct Function {
 pub(crate) struct GlobalDecl {
     pub(crate) name: String,
     pub(crate) params: Vec<VarDecl>,
+    /// Chapter-10 storage-class specifier on a function declaration.
+    /// `Static` is rejected at resolve time for local declarations
+    /// (`static int f(void);` inside a block); `Extern` and `Auto` are
+    /// treated identically.
+    pub(crate) storage: StorageClass,
 }
 
 /// Storage-class specifier attached to a file-scope variable declaration.

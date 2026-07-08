@@ -8,7 +8,7 @@
       "plan_name": "c-compiler-rust",
       "status": "active",
       "started_at": "2026-07-07T19:15:31.671Z",
-      "updated_at": "2026-07-08T02:02:37.931Z",
+      "updated_at": "2026-07-08T02:35:00.424Z",
       "session_ids": [
         "opencode:ses_0c241b468ffeuCkDS36rF8DZEG",
         "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2",
@@ -26,7 +26,8 @@
         "opencode:ses_0c17a961dffeJpdd5FnWJ42kYG",
         "opencode:ses_0c0e0598affeqxApUZNGWpXBZM",
         "opencode:ses_0c0c35afeffesiXGtwPnW3WFIv",
-        "opencode:ses_0c0a4fb49ffeOA8p7Nz8bEps4h"
+        "opencode:ses_0c0a4fb49ffeOA8p7Nz8bEps4h",
+        "opencode:ses_0c087570bffe33v68gidwbRqLW"
       ],
       "session_origins": {
         "opencode:ses_0c241b468ffeuCkDS36rF8DZEG": "direct",
@@ -45,7 +46,8 @@
         "opencode:ses_0c17a961dffeJpdd5FnWJ42kYG": "appended",
         "opencode:ses_0c0e0598affeqxApUZNGWpXBZM": "appended",
         "opencode:ses_0c0c35afeffesiXGtwPnW3WFIv": "appended",
-        "opencode:ses_0c0a4fb49ffeOA8p7Nz8bEps4h": "appended"
+        "opencode:ses_0c0a4fb49ffeOA8p7Nz8bEps4h": "appended",
+        "opencode:ses_0c087570bffe33v68gidwbRqLW": "appended"
       },
       "agent": "atlas",
       "task_sessions": {
@@ -182,12 +184,12 @@
           "task_key": "todo:18",
           "task_label": "18",
           "task_title": "W6-T1: Chapter 5 - local variables, assignment, lvalues + `--compound` extra (`+= -= *= /= %= &= |= ^= <<= >>=`) + `--increment` extra (`++ --` prefix/postfix)",
-          "session_id": "opencode:ses_0c0a4fb49ffeOA8p7Nz8bEps4h",
+          "session_id": "opencode:ses_0c087570bffe33v68gidwbRqLW",
           "agent": "Sisyphus-Junior",
-          "category": "unspecified-high",
+          "category": "deep",
           "started_at": "2026-07-08T01:28:48.217Z",
           "status": "running",
-          "updated_at": "2026-07-08T02:02:37.931Z"
+          "updated_at": "2026-07-08T02:35:00.424Z"
         }
       }
     }
@@ -195,7 +197,7 @@
   "active_plan": "/home/mei/projects/rustcc/.omo/plans/c-compiler-rust.md",
   "started_at": "2026-07-07T19:15:31.671Z",
   "status": "active",
-  "updated_at": "2026-07-08T02:02:37.931Z",
+  "updated_at": "2026-07-08T02:35:00.424Z",
   "session_ids": [
     "opencode:ses_0c241b468ffeuCkDS36rF8DZEG",
     "opencode:ses_0c1efd732ffe0Zc4KIhmSqs6D2",
@@ -213,7 +215,8 @@
     "opencode:ses_0c17a961dffeJpdd5FnWJ42kYG",
     "opencode:ses_0c0e0598affeqxApUZNGWpXBZM",
     "opencode:ses_0c0c35afeffesiXGtwPnW3WFIv",
-    "opencode:ses_0c0a4fb49ffeOA8p7Nz8bEps4h"
+    "opencode:ses_0c0a4fb49ffeOA8p7Nz8bEps4h",
+    "opencode:ses_0c087570bffe33v68gidwbRqLW"
   ],
   "session_origins": {
     "opencode:ses_0c241b468ffeuCkDS36rF8DZEG": "direct",
@@ -232,7 +235,8 @@
     "opencode:ses_0c17a961dffeJpdd5FnWJ42kYG": "appended",
     "opencode:ses_0c0e0598affeqxApUZNGWpXBZM": "appended",
     "opencode:ses_0c0c35afeffesiXGtwPnW3WFIv": "appended",
-    "opencode:ses_0c0a4fb49ffeOA8p7Nz8bEps4h": "appended"
+    "opencode:ses_0c0a4fb49ffeOA8p7Nz8bEps4h": "appended",
+    "opencode:ses_0c087570bffe33v68gidwbRqLW": "appended"
   },
   "plan_name": "c-compiler-rust",
   "task_sessions": {
@@ -369,12 +373,12 @@
       "task_key": "todo:18",
       "task_label": "18",
       "task_title": "W6-T1: Chapter 5 - local variables, assignment, lvalues + `--compound` extra (`+= -= *= /= %= &= |= ^= <<= >>=`) + `--increment` extra (`++ --` prefix/postfix)",
-      "session_id": "opencode:ses_0c0a4fb49ffeOA8p7Nz8bEps4h",
+      "session_id": "opencode:ses_0c087570bffe33v68gidwbRqLW",
       "agent": "Sisyphus-Junior",
-      "category": "unspecified-high",
+      "category": "deep",
       "started_at": "2026-07-08T01:28:48.217Z",
       "status": "running",
-      "updated_at": "2026-07-08T02:02:37.931Z"
+      "updated_at": "2026-07-08T02:35:00.424Z"
     }
   },
   "agent": "atlas"

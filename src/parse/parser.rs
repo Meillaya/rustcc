@@ -66,26 +66,22 @@ impl Parser {
     /// `nqcc2/lib/parse.ml` `parse_function_or_variable_declaration`
     /// (~lines 798-823) for chapter-10 surface.
     fn parse_top_level_item(&mut self) -> Result<TopLevelItem> {
-        // Storage-class specifiers may appear on either side of `int`.
-        let mut storage = StorageClass::Auto;
-        if self.match_exact(&TokenKind::Static) {
-            storage = StorageClass::Static;
-        } else if self.match_exact(&TokenKind::Extern) {
-            storage = StorageClass::Extern;
-        }
+        let storage = self.parse_optional_storage_class_top_level()?;
         self.expect_exact(&TokenKind::Int, "type 'int' or storage-class specifier")?;
-        if self.match_exact(&TokenKind::Static) {
-            storage = StorageClass::Static;
-        } else if self.match_exact(&TokenKind::Extern) {
-            storage = StorageClass::Extern;
-        }
+        // After `int` we may see another storage-class specifier.  The
+        // OCaml grammar accepts both `static int x;` and `int static x;`.
+        let storage = self.combine_storage_class(storage)?;
         let name = self.expect_identifier("function or variable name")?;
         if self.check(&TokenKind::OpenParen) {
             self.current += 1;
             let params = self.parse_param_list()?;
             self.expect_exact(&TokenKind::CloseParen, "')' after parameter list")?;
             if self.match_exact(&TokenKind::Semicolon) {
-                Ok(TopLevelItem::Declaration(GlobalDecl { name, params }))
+                Ok(TopLevelItem::Declaration(GlobalDecl {
+                    name,
+                    params,
+                    storage,
+                }))
             } else {
                 self.expect_exact(&TokenKind::OpenBrace, "'{' to start function body")?;
                 let mut body: Vec<BlockItem> = Vec::new();
@@ -100,6 +96,7 @@ impl Parser {
                     name,
                     params,
                     body: Some(body),
+                    storage,
                 }))
             }
         } else {
@@ -118,6 +115,48 @@ impl Parser {
         }
     }
 
+    /// Parse an optional storage-class specifier at the start of a
+    /// top-level item or a block-level declaration.  Returns `Auto` if
+    /// no specifier is present.
+    fn parse_optional_storage_class(&mut self) -> Result<StorageClass> {
+        if self.match_exact(&TokenKind::Static) {
+            Ok(StorageClass::Static)
+        } else if self.match_exact(&TokenKind::Extern) {
+            Ok(StorageClass::Extern)
+        } else {
+            Ok(StorageClass::Auto)
+        }
+    }
+
+    /// Same as [`parse_optional_storage_class`] but used at top level
+    /// where the specifier is the very first token (so we don't have to
+    /// distinguish "no specifier" from "saw `int` and then no specifier").
+    fn parse_optional_storage_class_top_level(&mut self) -> Result<StorageClass> {
+        self.parse_optional_storage_class()
+    }
+
+    /// If a storage-class specifier follows `int`, combine it with
+    /// `previous`.  Rejects `static int extern foo;` and friends that
+    /// carry two specifiers at the same time.  Mirrors the OCaml
+    /// partition of specifiers into type-specifiers and storage-class
+    /// specifiers: if both buckets end up with more than one token the
+    /// grammar is malformed.
+    fn combine_storage_class(&mut self, previous: StorageClass) -> Result<StorageClass> {
+        if self.match_exact(&TokenKind::Static) {
+            if previous != StorageClass::Auto {
+                bail!("parse error: multiple storage-class specifiers in declaration");
+            }
+            Ok(StorageClass::Static)
+        } else if self.match_exact(&TokenKind::Extern) {
+            if previous != StorageClass::Auto {
+                bail!("parse error: multiple storage-class specifiers in declaration");
+            }
+            Ok(StorageClass::Extern)
+        } else {
+            Ok(previous)
+        }
+    }
+
     /// Parse the parameter list inside `(...)` after the function name.
     ///
     /// The grammar allows either `(void)` (no parameters) or a comma-
@@ -132,7 +171,11 @@ impl Parser {
         loop {
             self.expect_exact(&TokenKind::Int, "parameter type 'int'")?;
             let name = self.expect_identifier("parameter name")?;
-            params.push(VarDecl { name, init: None });
+            params.push(VarDecl {
+                name,
+                init: None,
+                storage: StorageClass::Auto,
+            });
             if !self.match_exact(&TokenKind::Comma) {
                 break;
             }
@@ -141,19 +184,21 @@ impl Parser {
     }
 
 fn parse_block_item(&mut self) -> Result<BlockItem> {
-        // Chapter 9: a block-level `int foo(int x);` is a local
-        // function declaration (no body, only a prototype).  The
-        // name becomes visible to subsequent expressions in this
-        // scope, even though it has no runtime effect.  We parse
-        // the prototype here (consuming the trailing `;`) and
-        // surface it as a `BlockItem::FunctionDecl` so the resolve
-        // pass can register it in the per-block scope alongside
-        // the variable declarations.
-        if self.check(&TokenKind::Int) {
-            // Peek ahead: after `int NAME ( params )` is there a
-            // `;` (declaration) or a `{` (definition)?
-            let save = self.current;
-            self.current += 1; // consume `int`
+        // Chapter 9 + 10: a block-level declaration can be
+        //   [static|extern] int NAME ...
+        //   int [static|extern] NAME ...   (type-before-storage-class)
+        // followed by either `(` (function declaration) or `=`/`;`
+        // (variable declaration).
+        let storage_prefix = self.parse_optional_storage_class()?;
+        if self.match_exact(&TokenKind::Int) {
+            let storage_suffix = self.parse_optional_storage_class()?;
+            let storage = if storage_prefix == StorageClass::Auto {
+                storage_suffix
+            } else if storage_suffix == StorageClass::Auto {
+                storage_prefix
+            } else {
+                bail!("parse error: multiple storage-class specifiers in declaration");
+            };
             if let TokenKind::Identifier(_) = self.peek().kind {
                 let name = self.expect_identifier("function or variable name")?;
                 if self.check(&TokenKind::OpenParen) {
@@ -161,38 +206,38 @@ fn parse_block_item(&mut self) -> Result<BlockItem> {
                     let params = self.parse_param_list()?;
                     self.expect_exact(&TokenKind::CloseParen, "')' after parameter list")?;
                     if self.match_exact(&TokenKind::Semicolon) {
-                        return Ok(BlockItem::FunctionDecl(GlobalDecl { name, params }));
+                        return Ok(BlockItem::FunctionDecl(GlobalDecl {
+                            name,
+                            params,
+                            storage,
+                        }));
                     }
-                    // Not a declaration — fall through to definition.
-                    self.expect_exact(&TokenKind::OpenBrace, "'{' to start function body")?;
-                    let mut body: Vec<BlockItem> = Vec::new();
-                    while !self.check(&TokenKind::CloseBrace) {
-                        if self.check(&TokenKind::Eof) {
-                            bail!("parse error: expected '}}' to close nested function body");
-                        }
-                        body.push(self.parse_block_item()?);
-                    }
-                    self.expect_exact(&TokenKind::CloseBrace, "'}' to close function body")?;
                     // Nested function definitions are illegal in C.
                     bail!("parse error: nested function definitions are not allowed");
                 }
-                // Not a function — fall through to plain
-                // declaration.  Reset to the saved position.
-                self.current = save;
-                self.current += 1; // consume `int`
-                let name = self.expect_identifier("variable name")?;
                 let init = if self.match_exact(&TokenKind::Equal) {
                     Some(self.parse_expr()?)
                 } else {
                     None
                 };
                 self.expect_exact(&TokenKind::Semicolon, "';'")?;
-                return Ok(BlockItem::Declaration(VarDecl { name, init }));
+                return Ok(BlockItem::Declaration(VarDecl {
+                    name,
+                    init,
+                    storage,
+                }));
             }
-            // No identifier after `int` — error.
-            self.current = save;
             bail!(
                 "parse error: expected identifier after 'int', found {:?}",
+                self.peek().kind
+            );
+        }
+        // No `int` here: if a storage class was present but `int` is
+        // missing, that's a malformed declaration.  Otherwise this is a
+        // plain statement.
+        if storage_prefix != StorageClass::Auto {
+            bail!(
+                "parse error: expected 'int' after storage-class specifier, found {:?}",
                 self.peek().kind
             );
         }
@@ -320,7 +365,11 @@ fn parse_block_item(&mut self) -> Result<BlockItem> {
                 None
             };
             self.expect_exact(&TokenKind::Semicolon, "';' after for declaration")?;
-            Some(ForInit::Declaration(VarDecl { name, init }))
+            Some(ForInit::Declaration(VarDecl {
+                name,
+                init,
+                storage: StorageClass::Auto,
+            }))
         } else {
             let expr = self.parse_expr()?;
             self.expect_exact(&TokenKind::Semicolon, "';' after for init")?;
