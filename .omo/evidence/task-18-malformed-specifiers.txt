@@ -1,0 +1,44 @@
+# Task 18 malformed specifier baseline/final evidence
+2026-07-08T12:19:54-04:00
+## Baseline before fix edits
+$ git status --short
+ M .omo/boulder.json
+ M .omo/run-continuation/ses_0c241b468ffeuCkDS36rF8DZEG.json
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-fix-initial-inspection.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/evidence/task-18-malformed-specifiers.txt
+?? .omo/start-work/
+?? .omo/tmp/
+### double_int baseline
+$ ./target/release/rustcc .omo/tmp/task18-fix/double_int.c
+exit=0
+stdout:
+stderr:
+### int_double baseline
+$ ./target/release/rustcc .omo/tmp/task18-fix/int_double.c
+exit=0
+stdout:
+stderr:
+
+## Final after parser/lower fix
+2026-07-08T12:21:24-04:00
+$ cargo build --release
+passed earlier in this turn; rerun captured in gate evidence
+### double_int final
+$ ./target/release/rustcc .omo/tmp/task18-fix/double_int.c
+exit=1
+stdout:
+stderr:
+parse error: expected expression, found Double ("double")
+### int_double final
+$ ./target/release/rustcc .omo/tmp/task18-fix/int_double.c
+exit=1
+stdout:
+stderr:
+parse error: 'double' cannot be combined with other type specifiers
+
+## Cleanup receipt
+2026-07-08T12:22:13-04:00
+$ rm -rf .omo/tmp/task18-fix
+cleanup: removed .omo/tmp/task18-fix temporary C files and compiler outputs

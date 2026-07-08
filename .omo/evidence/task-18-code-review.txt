@@ -1,0 +1,28 @@
+# Task 18 scoped code-review / anti-slop self-review
+
+Timestamp: 2026-07-08T12:22:00-04:00
+Scope: verifier-blocker repair only for W6-T1 chapter 5 local variables/assignment/increment.
+
+## Review result
+- PASS: The parser fix rejects malformed `double int` / `int double` specifier combinations instead of silently accepting them.
+- PASS: The task-18 parser drift that admitted chapter-13 local `double` declarations, for-loop `double` declarations, double constants, and `(double)` casts through chapter-5 paths was removed/quarantined.
+- PASS: The task-18 lowerer drift that added double binary promotion via `IntToDouble` / `UIntToDouble` was removed.
+- PASS: Misleading lowerer comments that claimed NaN/SSE/double-specific comparison or arithmetic selection were removed; `binary_to_tacky` and `cmp_to_tacky` no longer carry an unused `_operand_ty` parameter.
+- PASS: Existing chapter-5 assignment/compound/increment lowering shape was preserved.
+
+## Programming skill coverage
+- Rust reference loaded before edits.
+- No new dependency, unsafe, unwrap, expect, panic, or broad abstraction added.
+- Modified behavior is at the parser boundary: malformed declarations are rejected before lower/codegen.
+- Exhaustive enum matches were preserved; no wildcard broadening was added.
+- File-size warning acknowledged: `src/parse/parser.rs` and `src/ir/lower.rs` are pre-existing large compiler phase files; this fix deletes drift and keeps the delta narrow rather than broadening with a structural split.
+
+## remove-ai-slops-style coverage
+- Removed inaccurate comments rather than adding explanatory bloat.
+- Removed unused plumbing (`_operand_ty`) rather than pretending it affected instruction selection.
+- Avoided broad rewrites and did not touch harnesses or unrelated orchestrator state.
+- Evidence files are explicit and task-specific for the next independent verifier.
+
+## Residual risks
+- Pre-existing repository state still contains other chapter-13 type variants and lexer/IR enum surfaces outside this task's parser/lower drift; this fix does not remove those broader checked-history surfaces.
+- `cargo fmt --check` across the whole repo reports pre-existing formatting drift in many unrelated files; only `src/parse/parser.rs` and `src/ir/lower.rs` were formatted to avoid unrelated churn.

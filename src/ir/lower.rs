@@ -1109,7 +1109,7 @@ fn lower_assign(
         src: lhs_for_copy,
         dst: tmp.clone(),
     });
-    instrs.push(binary_to_tacky(bin_op, target_ty, rhs_for_op, tmp.clone()));
+    instrs.push(binary_to_tacky(bin_op, rhs_for_op, tmp.clone()));
     instrs.push(Instruction::Copy {
         src: Val::Var(tmp.clone()),
         dst: target_name,
@@ -1299,31 +1299,21 @@ fn lower_binary(
             // tmp is correctly tagged.
             let _ = (left_ty, right_ty);
             if is_cmp_op(op) {
-                // Comparisons always produce an `int` result
-                // (0 or 1).  When the operands are double, the
-                // `cmp_to_tacky` mapping picks the unsigned
-                // condition codes (A/AE/B/BE) so the post-cmp
-                // `setCC` returns false for NaN operands; the
-                // OCaml reference uses the same shape.
                 let tmp = ctx.fresh_typed_tmp(OperandType::Int);
                 instrs.push(Instruction::Copy {
                     src: left_val.clone(),
                     dst: tmp.clone(),
                 });
-                instrs.push(cmp_to_tacky(op, dst_ty, left_val, right_val, tmp.clone()));
+                instrs.push(cmp_to_tacky(op, left_val, right_val, tmp.clone()));
                 Ok((instrs, Val::Var(tmp)))
             } else {
-                // Arithmetic on doubles produces a double result;
-                // the binary_to_tacky mapping picks the SSE
-                // variants (AddDouble/SubDouble/etc.) when the
-                // dst_ty is Double.
                 let tmp_ty = dst_ty;
                 let tmp = ctx.fresh_typed_tmp(tmp_ty);
                 instrs.push(Instruction::Copy {
                     src: left_val,
                     dst: tmp.clone(),
                 });
-                instrs.push(binary_to_tacky(op, dst_ty, right_val, tmp.clone()));
+                instrs.push(binary_to_tacky(op, right_val, tmp.clone()));
                 Ok((instrs, Val::Var(tmp)))
             }
         }
@@ -1345,13 +1335,10 @@ fn type_of_val(val: &Val, ctx: &LowerCtx) -> OperandType {
     }
 }
 
-/// Usual arithmetic conversion for int / long / double.  When one
-/// operand is double, the other is converted via `IntToDouble` /
-/// `UIntToDouble` into a fresh tmp and the result type is double.
-/// When one operand is long, the other is sign-extended into a fresh
-/// tmp and the result type is long.  When both are int, the
-/// operands are left as-is.  Mirrors `convert_to` + the
-/// chapter-11/13 `get_common_type` path in
+/// Usual arithmetic conversion for int / long.  When one operand is
+/// long, the other is sign-extended into a fresh tmp and the result
+/// type is long.  When both are int, the operands are left as-is.
+/// Mirrors `convert_to` + the chapter-11 `get_common_type` path in
 /// `nqcc2/lib/semantic_analysis/typecheck.ml`.
 fn promote_for_binary(
     left_val: Val,
@@ -1377,44 +1364,6 @@ fn promote_for_binary(
                 dst: tmp.clone(),
             });
             (left_val, Val::Var(tmp), OperandType::Long)
-        }
-        // Chapter 13: when one operand is double, the other is
-        // converted to double via `IntToDouble` (signed int) or
-        // `UIntToDouble` (unsigned int).  The result type is double.
-        (OperandType::Double, _) | (_, OperandType::Double) => {
-            // Pick the operand to convert: the non-double side.
-            let is_left_double = left_ty == OperandType::Double;
-            let (src_val, src_ty) = if is_left_double {
-                (right_val.clone(), right_ty)
-            } else {
-                (left_val.clone(), left_ty)
-            };
-            let tmp = ctx.fresh_typed_tmp(OperandType::Double);
-            let cast = match src_ty {
-                OperandType::Int | OperandType::Long => Instruction::IntToDouble {
-                    src: src_val,
-                    dst: tmp.clone(),
-                },
-                OperandType::UInt | OperandType::ULong => Instruction::UIntToDouble {
-                    src: src_val,
-                    dst: tmp.clone(),
-                },
-                OperandType::Double => {
-                    // `(Double, Double)` already matches the
-                    // outer arm; if we reach here the conversion
-                    // is a no-op, so use a plain Copy.
-                    Instruction::Copy {
-                        src: src_val,
-                        dst: tmp.clone(),
-                    }
-                }
-            };
-            instrs.push(cast);
-            if is_left_double {
-                (left_val, Val::Var(tmp), OperandType::Double)
-            } else {
-                (Val::Var(tmp), right_val, OperandType::Double)
-            }
         }
         (a, b) => (
             left_val,
@@ -1497,7 +1446,7 @@ fn is_cmp_op(op: BinaryOp) -> bool {
     )
 }
 
-fn binary_to_tacky(op: BinaryOp, _operand_ty: OperandType, src: Val, dst: String) -> Instruction {
+fn binary_to_tacky(op: BinaryOp, src: Val, dst: String) -> Instruction {
     match op {
         BinaryOp::Add => Instruction::Add { src, dst },
         BinaryOp::Subtract => Instruction::Sub { src, dst },
@@ -1513,13 +1462,7 @@ fn binary_to_tacky(op: BinaryOp, _operand_ty: OperandType, src: Val, dst: String
     }
 }
 
-fn cmp_to_tacky(
-    op: BinaryOp,
-    _operand_ty: OperandType,
-    left: Val,
-    right: Val,
-    dst: String,
-) -> Instruction {
+fn cmp_to_tacky(op: BinaryOp, left: Val, right: Val, dst: String) -> Instruction {
     let cc = match op {
         BinaryOp::Equal => ConditionCode::E,
         BinaryOp::NotEqual => ConditionCode::NE,

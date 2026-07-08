@@ -122,7 +122,7 @@ impl Parser {
     }
 
     /// Chapter 11 helper: consume a sequence of type specifiers
-    /// (`int` / `long` / `double`) and storage-class specifiers
+    /// (`int` / `long`) and storage-class specifiers
     /// (`static` / `extern`) in any order, returning the resolved
     /// `Type` and `StorageClass`.  Rejects a duplicate storage
     /// class and rejects mixing `double` with any other type
@@ -131,6 +131,7 @@ impl Parser {
         let mut saw_int = false;
         let mut is_long = false;
         let mut is_unsigned = false;
+        let mut saw_signed = false;
         let mut is_double = false;
         let mut storage = StorageClass::Auto;
         let mut had_storage = false;
@@ -155,6 +156,7 @@ impl Parser {
                     // `signed` is the default and is ignored; consume
                     // the token so the rest of the specifier list can
                     // proceed.
+                    saw_signed = true;
                     self.current += 1;
                 }
                 TokenKind::Double => {
@@ -189,7 +191,7 @@ impl Parser {
                 self.peek().kind
             );
         }
-        if is_double && (is_long || is_unsigned || (saw_int && !is_double)) {
+        if is_double && (is_long || is_unsigned || saw_signed || saw_int) {
             bail!("parse error: 'double' cannot be combined with other type specifiers");
         }
         let ty = if is_double {
@@ -239,6 +241,7 @@ impl Parser {
         let mut saw_long = false;
         let mut saw_double = false;
         let mut is_unsigned = false;
+        let mut saw_signed = false;
         loop {
             match self.peek().kind {
                 TokenKind::Int => {
@@ -268,6 +271,7 @@ impl Parser {
                     self.current += 1;
                 }
                 TokenKind::Signed => {
+                    saw_signed = true;
                     self.current += 1;
                 }
                 _ => break,
@@ -279,7 +283,7 @@ impl Parser {
                 self.peek().kind
             );
         }
-        if saw_double && (is_long || is_unsigned || (saw_int && !saw_double)) {
+        if saw_double && (is_long || is_unsigned || saw_signed || saw_int) {
             bail!("parse error: 'double' cannot be combined with other type specifiers");
         }
         if saw_double {
@@ -349,10 +353,8 @@ impl Parser {
         //   [static|extern] int NAME ...
         //   int [static|extern] NAME ...   (type-before-storage-class)
         // Chapter 11 widens the type to `int` or `long` (any order).
-        // Chapter 13 adds `double`.
         if self.peek().kind == TokenKind::Int
             || self.peek().kind == TokenKind::Long
-            || self.peek().kind == TokenKind::Double
             || self.peek().kind == TokenKind::Unsigned
             || self.peek().kind == TokenKind::Signed
             || self.peek().kind == TokenKind::Static
@@ -506,10 +508,7 @@ impl Parser {
         self.expect_exact(&TokenKind::OpenParen, "'(' after for")?;
         let init = if self.match_exact(&TokenKind::Semicolon) {
             None
-        } else if matches!(
-            self.peek().kind,
-            TokenKind::Int | TokenKind::Long | TokenKind::Double
-        ) {
+        } else if matches!(self.peek().kind, TokenKind::Int | TokenKind::Long) {
             let ty = self.parse_type_specifier()?;
             let name = self.expect_identifier("for-loop variable name")?;
             let init = if self.match_exact(&TokenKind::Equal) {
@@ -619,11 +618,6 @@ impl Parser {
                 self.current += 1;
                 Ok(Expr::Constant(value))
             }
-            TokenKind::DoubleConstant(value) => {
-                let value = *value;
-                self.current += 1;
-                Ok(Expr::DoubleConstant(value))
-            }
             TokenKind::LongConstant(value) => {
                 let value = *value;
                 self.current += 1;
@@ -698,11 +692,7 @@ impl Parser {
                 // closing `)` and the casted expression follow.
                 if matches!(
                     self.peek().kind,
-                    TokenKind::Int
-                        | TokenKind::Long
-                        | TokenKind::Double
-                        | TokenKind::Unsigned
-                        | TokenKind::Signed
+                    TokenKind::Int | TokenKind::Long | TokenKind::Unsigned | TokenKind::Signed
                 ) {
                     let target_type = self.parse_type_specifier()?;
                     self.expect_exact(&TokenKind::CloseParen, "')' after cast type")?;
