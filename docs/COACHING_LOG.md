@@ -963,3 +963,25 @@ Implemented Chapter 15 natively in the Rust compiler pipeline: parser and typech
 - `.omo/evidence/task-42-executor-fix.txt`
 - `.omo/evidence/task-42-manual-qa.txt`
 - `.omo/evidence/task-42-code-review.txt`
+
+## Wave 17 / Chapter 16 chars and strings (task 44)
+
+Implemented Chapter 16 natively in the Rust compiler pipeline: `char` now flows through the AST and type system, char and string literals parse and lower directly, string literals are emitted as static `.rodata` byte constants, and the backend now performs the required byte load/store and sign/zero-extension paths for both register and stack arguments. Restoring the page-boundary assembly fixture exposed a real byte stack-argument bug; the fix extends narrow byte arguments before `pushq` so the chapter 16 harness can pass without any source-content bridge or test weakening.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `cargo build --release` | exit 0, zero warnings |
+| `cargo test --release` | 10 passed, 0 failed |
+| chapter 16 `--latest-only` | `Ran 72 tests … OK` |
+| chapter 15 `--latest-only` | `Ran 83 tests … OK` |
+| chapter 14 `--latest-only` | `Ran 53 tests … OK` |
+| manual char/string acceptance | `'A'` returns 65; `"hello"[0]` returns 104 |
+| forbidden bridge scan | no matches in `src/` |
+
+### Evidence
+- `.omo/evidence/task-44-ch16-implementation.txt`
+- `.omo/evidence/task-44-adversarial-verify-2.txt`
+- `.omo/evidence/task-44-ch16-qa/`
+- `.omo/evidence/task-45-ch16-gate.txt`

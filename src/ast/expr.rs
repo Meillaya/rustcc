@@ -23,6 +23,7 @@ pub(crate) enum Expr {
     UIntConstant(i64, bool),
     /// Chapter 13: floating-point constant `3.14`, `1e-5`, etc.
     DoubleConstant(f64),
+    StringLiteral(String),
     Var(String),
     /// Chapter 11: explicit cast `(T) expr`.  The lowerer turns
     /// this into `SignExtend` (int -> long) or `Truncate`
@@ -109,7 +110,7 @@ impl Expr {
         match self {
             Self::Var(_) => true,
             Self::Paren(inner) => inner.is_lvalue(),
-            Self::Dereference(_) | Self::Subscript { .. } => true,
+            Self::Dereference(_) | Self::Subscript { .. } | Self::StringLiteral(_) => true,
             _ => false,
         }
     }

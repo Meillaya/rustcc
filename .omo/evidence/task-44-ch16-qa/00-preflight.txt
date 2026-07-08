@@ -1,0 +1,32 @@
+# QA transcript task 44 Chapter 16 chars/strings
+Date: 2026-07-08T15:58:10-04:00
+PWD: /home/mei/projects/rustcc
+Surface: shell
+Invocation: git status --short && ls -l target/release/rustcc || true
+ M src/ast/expr.rs
+ M src/ast/ty.rs
+ M src/codegen/assembly.rs
+ M src/codegen/codegen.rs
+ M src/codegen/emit.rs
+ M src/codegen/replace_pseudos.rs
+ M src/compiler.rs
+ M src/ir/lower.rs
+ M src/ir/tacky.rs
+ M src/parse/parser.rs
+ M src/semantics/resolve.rs
+ M src/semantics/typecheck.rs
+?? .omo/evidence/task-18-adversarial-verify-2.txt
+?? .omo/evidence/task-18-adversarial-verify-3.txt
+?? .omo/evidence/task-18-adversarial-verify-4.txt
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/evidence/task-37-adversarial-verify-2.txt
+?? .omo/evidence/task-37-adversarial-verify.txt
+?? .omo/evidence/task-38-adversarial-verify.txt
+?? .omo/evidence/task-39-adversarial-verify.txt
+?? .omo/evidence/task-40-adversarial-verify-2.txt
+?? .omo/evidence/task-40-adversarial-verify.txt
+?? .omo/evidence/task-41-adversarial-verify.txt
+?? .omo/evidence/task-44-ch16-qa/
+?? .omo/start-work/
+-rwxr-xr-x 2 mei mei 1249600 Jul  8 15:55 target/release/rustcc

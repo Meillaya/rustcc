@@ -35,8 +35,8 @@ use crate::ast::{
     TopLevelItem, Type, UnaryOp,
 };
 use crate::ir::tacky::{
-    ConditionCode, Instruction, OperandType, TackyFunction, TackyProgram, TackyStaticInit,
-    TackyStaticVariable, TypeEnv, Val,
+    ConditionCode, Instruction, OperandType, TackyFunction, TackyProgram, TackyStaticConstant,
+    TackyStaticInit, TackyStaticVariable, TypeEnv, Val,
 };
 use crate::ir::temp::TempIdGenerator;
 use crate::util::labels::LabelGenerator;
@@ -47,6 +47,8 @@ pub type TypedProgram = Program;
 /// to their TACKY `OperandType` width.
 fn type_to_operand_type(ty: Type) -> OperandType {
     match ty {
+        Type::Char | Type::SignedChar => OperandType::Byte,
+        Type::UnsignedChar => OperandType::UByte,
         Type::Long => OperandType::Long,
         Type::UnsignedInt => OperandType::UInt,
         Type::UnsignedLong => OperandType::ULong,
@@ -65,9 +67,21 @@ fn scalar_static_init_for(expr: Expr, target_ty: OperandType) -> TackyStaticInit
         | (Expr::UIntConstant(n, _), OperandType::Double) => {
             TackyStaticInit::Double((n as u64) as f64)
         }
+        (Expr::DoubleConstant(d), OperandType::Byte | OperandType::UByte) => {
+            TackyStaticInit::Char((d as i64) as u8)
+        }
         (Expr::DoubleConstant(d), OperandType::ULong) => TackyStaticInit::Long((d as u64) as i64),
         (Expr::DoubleConstant(d), OperandType::Long) => TackyStaticInit::Long(d as i64),
         (Expr::DoubleConstant(d), _) => TackyStaticInit::Int(d as i64),
+        (Expr::Constant(n), OperandType::Byte | OperandType::UByte) => {
+            TackyStaticInit::Char(n as u8)
+        }
+        (Expr::LongConstant(n), OperandType::Byte | OperandType::UByte) => {
+            TackyStaticInit::Char(n as u8)
+        }
+        (Expr::UIntConstant(n, _), OperandType::Byte | OperandType::UByte) => {
+            TackyStaticInit::Char(n as u8)
+        }
         (Expr::LongConstant(n), OperandType::Long | OperandType::ULong) => TackyStaticInit::Long(n),
         (Expr::UIntConstant(n, _), OperandType::Long | OperandType::ULong) => {
             TackyStaticInit::Long(n)
@@ -95,6 +109,20 @@ fn zero_static_init_for_type(ty: &Type) -> TackyStaticInit {
 
 fn static_init_for_type(expr: Expr, target_ty: &Type) -> TackyStaticInit {
     match (expr, target_ty) {
+        (
+            Expr::StringLiteral(value),
+            Type::Array {
+                element,
+                size: Some(size),
+            },
+        ) if is_char_type(element) => {
+            let mut bytes = value.into_bytes();
+            if bytes.len() < *size {
+                bytes.push(0);
+            }
+            bytes.resize(*size, 0);
+            TackyStaticInit::StringBytes(bytes)
+        }
         (
             Expr::InitializerList(items),
             Type::Array {
@@ -253,7 +281,12 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
     Ok(TackyProgram {
         functions,
         static_variables,
+        static_constants: ctx.static_constants,
     })
+}
+
+fn is_char_type(ty: &Type) -> bool {
+    matches!(ty, Type::Char | Type::SignedChar | Type::UnsignedChar)
 }
 
 /// Merge a file-scope variable declaration into the chapter-10
@@ -398,6 +431,8 @@ struct LowerCtx {
     func_returns: HashMap<String, crate::ir::tacky::OperandType>,
     func_return_types: HashMap<String, Type>,
     local_statics: Vec<TackyStaticVariable>,
+    static_constants: Vec<TackyStaticConstant>,
+    string_counter: u32,
 }
 
 impl LowerCtx {
@@ -418,6 +453,8 @@ impl LowerCtx {
             func_returns: HashMap::new(),
             func_return_types: HashMap::new(),
             local_statics: Vec::new(),
+            static_constants: Vec::new(),
+            string_counter: 0,
         }
     }
 
@@ -454,6 +491,25 @@ impl LowerCtx {
             dst: name.clone(),
         });
         Val::Var(name)
+    }
+
+    fn add_string_constant(&mut self, value: &str) -> String {
+        let label = format!("string.{}", self.string_counter);
+        self.string_counter += 1;
+        let mut bytes = value.as_bytes().to_vec();
+        bytes.push(0);
+        self.static_constants.push(TackyStaticConstant {
+            name: label.clone(),
+            bytes,
+        });
+        self.ast_type_env.insert(
+            label.clone(),
+            Type::Array {
+                element: Box::new(Type::Char),
+                size: Some(value.len() + 1),
+            },
+        );
+        label
     }
 }
 
@@ -975,6 +1031,17 @@ fn lower_expr(expr: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)
             Ok((instrs, v))
         }
         Expr::DoubleConstant(d) => Ok((Vec::new(), Val::ConstantDouble(*d))),
+        Expr::StringLiteral(value) => {
+            let label = ctx.add_string_constant(value);
+            let dst = ctx.fresh_typed_tmp(OperandType::Long);
+            Ok((
+                vec![Instruction::GetAddress {
+                    src: label,
+                    dst: dst.clone(),
+                }],
+                Val::Var(dst),
+            ))
+        }
         Expr::LongConstant(n) => {
             // The lowerer can't keep `Val::Constant` typed, so it
             // materialises the long constant into a fresh synthetic
@@ -1111,6 +1178,9 @@ fn lower_cast(
 fn lower_addr_of(inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)> {
     if !inner.is_lvalue() {
         return Err(anyhow::anyhow!("lower: cannot take address of non-lvalue"));
+    }
+    if matches!(inner, Expr::StringLiteral(_)) {
+        return lower_expr(inner, ctx);
     }
     if let Expr::Dereference(ptr_expr) = inner {
         return lower_expr(ptr_expr, ctx);
@@ -1270,6 +1340,8 @@ fn zero_value_for_type(ty: &Type, out: &mut Vec<Instruction>, ctx: &mut LowerCtx
         OperandType::Double => Val::ConstantDouble(0.0),
         OperandType::Long | OperandType::ULong => ctx.materialize_long_constant(out, 0),
         OperandType::UInt => ctx.materialize_typed_constant(out, 0, OperandType::UInt),
+        OperandType::Byte => ctx.materialize_typed_constant(out, 0, OperandType::Byte),
+        OperandType::UByte => ctx.materialize_typed_constant(out, 0, OperandType::UByte),
         _ => Val::Constant(0),
     }
 }
@@ -1289,6 +1361,12 @@ fn initialize_array_elements(
         return Err(anyhow::anyhow!("lower: initializer target is not array"));
     };
     let Expr::InitializerList(items) = init else {
+        if let Expr::StringLiteral(value) = init {
+            if is_char_type(element) {
+                initialize_string_bytes(base, value, *size, out, ctx);
+                return Ok(());
+            }
+        }
         return Err(anyhow::anyhow!("type error: scalar initializer for array"));
     };
     if items.len() > *size {
@@ -1318,6 +1396,28 @@ fn initialize_array_elements(
     Ok(())
 }
 
+fn initialize_string_bytes(
+    base: Val,
+    value: &str,
+    size: usize,
+    out: &mut Vec<Instruction>,
+    ctx: &mut LowerCtx,
+) {
+    let mut bytes = value.as_bytes().to_vec();
+    if bytes.len() < size {
+        bytes.push(0);
+    }
+    bytes.resize(size, 0);
+    for (idx, byte) in bytes.into_iter().enumerate() {
+        let ptr = add_const_index(base.clone(), idx, &Type::Char, out, ctx);
+        let src = ctx.materialize_typed_constant(out, i64::from(byte), OperandType::Byte);
+        out.push(Instruction::Store {
+            src,
+            dst_pointer: ptr,
+        });
+    }
+}
+
 fn add_const_index(
     base: Val,
     index: usize,
@@ -1340,6 +1440,14 @@ fn lower_unary(op: UnaryOp, inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Ins
     let inner_ty = type_of_val(&inner_val, ctx);
     match op {
         UnaryOp::Negate => {
+            let (inner_val, inner_ty) =
+                if matches!(inner_ty, OperandType::Byte | OperandType::UByte) {
+                    let promoted =
+                        convert_to_type(inner_val, inner_ty, OperandType::Int, &mut instrs, ctx);
+                    (promoted, OperandType::Int)
+                } else {
+                    (inner_val, inner_ty)
+                };
             let tmp = ctx.fresh_typed_tmp(inner_ty);
             instrs.push(Instruction::Copy {
                 src: inner_val,
@@ -1354,6 +1462,14 @@ fn lower_unary(op: UnaryOp, inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Ins
                     "type error: bitwise complement is invalid for double"
                 ));
             }
+            let (inner_val, inner_ty) =
+                if matches!(inner_ty, OperandType::Byte | OperandType::UByte) {
+                    let promoted =
+                        convert_to_type(inner_val, inner_ty, OperandType::Int, &mut instrs, ctx);
+                    (promoted, OperandType::Int)
+                } else {
+                    (inner_val, inner_ty)
+                };
             let tmp = ctx.fresh_typed_tmp(inner_ty);
             instrs.push(Instruction::Copy {
                 src: inner_val,
@@ -1544,31 +1660,53 @@ fn convert_to_type(
             src: val,
             dst: tmp.clone(),
         },
+        (
+            OperandType::UByte,
+            OperandType::Int | OperandType::UInt | OperandType::Long | OperandType::ULong,
+        ) => Instruction::ZeroExtend {
+            src: val,
+            dst: tmp.clone(),
+        },
+        (
+            OperandType::Byte,
+            OperandType::Int | OperandType::UInt | OperandType::Long | OperandType::ULong,
+        ) => Instruction::SignExtend {
+            src: val,
+            dst: tmp.clone(),
+        },
         (OperandType::Int, OperandType::Long | OperandType::ULong) => Instruction::SignExtend {
             src: val,
             dst: tmp.clone(),
         },
-        (OperandType::Long | OperandType::ULong, OperandType::Int | OperandType::UInt) => {
+        (
+            OperandType::Long | OperandType::ULong | OperandType::Int | OperandType::UInt,
+            OperandType::Byte | OperandType::UByte,
+        )
+        | (OperandType::Long | OperandType::ULong, OperandType::Int | OperandType::UInt) => {
             Instruction::Truncate {
                 src: val,
                 dst: tmp.clone(),
             }
         }
-        (OperandType::Double, OperandType::Int | OperandType::Long) => Instruction::DoubleToInt {
-            src: val,
-            dst: tmp.clone(),
-        },
-        (OperandType::Double, OperandType::UInt | OperandType::ULong) => {
+        (OperandType::Double, OperandType::Int | OperandType::Long | OperandType::Byte) => {
+            Instruction::DoubleToInt {
+                src: val,
+                dst: tmp.clone(),
+            }
+        }
+        (OperandType::Double, OperandType::UInt | OperandType::ULong | OperandType::UByte) => {
             Instruction::DoubleToUInt {
                 src: val,
                 dst: tmp.clone(),
             }
         }
-        (OperandType::Int | OperandType::Long, OperandType::Double) => Instruction::IntToDouble {
-            src: val,
-            dst: tmp.clone(),
-        },
-        (OperandType::UInt | OperandType::ULong, OperandType::Double) => {
+        (OperandType::Int | OperandType::Long | OperandType::Byte, OperandType::Double) => {
+            Instruction::IntToDouble {
+                src: val,
+                dst: tmp.clone(),
+            }
+        }
+        (OperandType::UInt | OperandType::ULong | OperandType::UByte, OperandType::Double) => {
             Instruction::UIntToDouble {
                 src: val,
                 dst: tmp.clone(),
@@ -1807,7 +1945,15 @@ fn lower_pointer_binary(
             Ok((left_instrs, Val::Var(dst)))
         }
         (BinaryOp::Subtract, Type::Pointer(pointee), right_ty) if right_ty.clone().is_integer() => {
-            let neg = ctx.fresh_typed_tmp(type_of_val(&right_val, ctx));
+            let right_ty = type_of_val(&right_val, ctx);
+            let right_val = convert_to_type(
+                right_val,
+                right_ty,
+                OperandType::Long,
+                &mut left_instrs,
+                ctx,
+            );
+            let neg = ctx.fresh_typed_tmp(OperandType::Long);
             left_instrs.push(Instruction::Copy {
                 src: right_val,
                 dst: neg.clone(),
@@ -1895,6 +2041,10 @@ fn expr_type(expr: &Expr, ctx: &LowerCtx) -> Type {
             }
         }
         Expr::DoubleConstant(_) => Type::Double,
+        Expr::StringLiteral(value) => Type::Array {
+            element: Box::new(Type::Char),
+            size: Some(value.len() + 1),
+        },
         Expr::Var(name) => ctx.ast_type_env.get(name).cloned().unwrap_or(Type::Int),
         Expr::Paren(inner) => expr_type(inner, ctx),
         Expr::Cast { target_type, .. } => target_type.clone(),
@@ -2004,6 +2154,12 @@ fn promote_for_binary(
         let right = convert_to_type(right_val, right_ty, OperandType::Double, instrs, ctx);
         return (left, right, OperandType::Double);
     }
+    let original_left_ty = left_ty;
+    let original_right_ty = right_ty;
+    let left_ty = promote_byte_operand(left_ty);
+    let right_ty = promote_byte_operand(right_ty);
+    let left_val = convert_to_type(left_val, original_left_ty, left_ty, instrs, ctx);
+    let right_val = convert_to_type(right_val, original_right_ty, right_ty, instrs, ctx);
     match (left_ty, right_ty) {
         (OperandType::Int | OperandType::UInt, OperandType::Long | OperandType::ULong) => {
             let target = common_operand_type(left_ty, right_ty);
@@ -2038,6 +2194,8 @@ fn promote_for_binary(
 }
 
 fn common_operand_type(left: OperandType, right: OperandType) -> OperandType {
+    let left = promote_byte_operand(left);
+    let right = promote_byte_operand(right);
     if left == OperandType::Double || right == OperandType::Double {
         OperandType::Double
     } else if left == OperandType::ULong || right == OperandType::ULong {
@@ -2052,6 +2210,13 @@ fn common_operand_type(left: OperandType, right: OperandType) -> OperandType {
         OperandType::UInt
     } else {
         OperandType::Int
+    }
+}
+
+fn promote_byte_operand(ty: OperandType) -> OperandType {
+    match ty {
+        OperandType::Byte | OperandType::UByte => OperandType::Int,
+        other => other,
     }
 }
 

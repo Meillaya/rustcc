@@ -94,6 +94,27 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
                 dst,
             },
         ],
+        Instr::MovByte {
+            src:
+                src @ (Operand::Stack(_)
+                | Operand::Data(_)
+                | Operand::Memory(_, _)
+                | Operand::MemoryIndexed(_, _, _)),
+            dst:
+                dst @ (Operand::Stack(_)
+                | Operand::Data(_)
+                | Operand::Memory(_, _)
+                | Operand::MemoryIndexed(_, _, _)),
+        } => vec![
+            Instr::MovByte {
+                src,
+                dst: Operand::Reg(Reg::R10),
+            },
+            Instr::MovByte {
+                src: Operand::Reg(Reg::R10),
+                dst,
+            },
+        ],
         Instr::Movsd {
             src: src @ (Operand::Stack(_) | Operand::Data(_)),
             dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
@@ -120,6 +141,32 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
                 dst: Operand::Reg(Reg::R10),
             },
             Instr::Movq {
+                src: Operand::Reg(Reg::R10),
+                dst,
+            },
+        ],
+        Instr::MovZeroExtend {
+            src,
+            dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
+        } => vec![
+            Instr::MovZeroExtend {
+                src,
+                dst: Operand::Reg(Reg::R10),
+            },
+            Instr::Mov {
+                src: Operand::Reg(Reg::R10),
+                dst,
+            },
+        ],
+        Instr::MovSignExtendByte {
+            src,
+            dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
+        } => vec![
+            Instr::MovSignExtendByte {
+                src,
+                dst: Operand::Reg(Reg::R10),
+            },
+            Instr::Mov {
                 src: Operand::Reg(Reg::R10),
                 dst,
             },
@@ -311,11 +358,19 @@ fn replace_in_instruction(
             src: replace_operand(state, src, globals),
             dst: replace_operand(state, dst, globals),
         },
+        Instr::MovByte { src, dst } => Instr::MovByte {
+            src: replace_operand(state, src, globals),
+            dst: replace_operand(state, dst, globals),
+        },
         Instr::Movabsq { src, dst } => Instr::Movabsq {
             src,
             dst: replace_operand(state, dst, globals),
         },
         Instr::MovZeroExtend { src, dst } => Instr::MovZeroExtend {
+            src: replace_operand(state, src, globals),
+            dst: replace_operand(state, dst, globals),
+        },
+        Instr::MovSignExtendByte { src, dst } => Instr::MovSignExtendByte {
             src: replace_operand(state, src, globals),
             dst: replace_operand(state, dst, globals),
         },

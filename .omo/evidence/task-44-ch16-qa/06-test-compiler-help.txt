@@ -1,0 +1,67 @@
+# test_compiler help
+Surface: CLI
+Invocation: tests/test_compiler --help
+usage: test_compiler [-h] [--check-setup]
+                     [--chapter {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20}]
+                     [--latest-only] [--skip-invalid] [--failfast] [--verbose]
+                     [--stage {lex,parse,validate,tacky,codegen,run}]
+                     [--expected-error-codes n [n ...]]
+                     [--keep-asm-on-failure] [--bitwise] [--compound]
+                     [--increment] [--goto] [--switch] [--nan] [--union]
+                     [--extra-credit] [--fold-constants |
+                     --eliminate-unreachable-code | --propagate-copies |
+                     --eliminate-dead-stores] [--int-only] [--no-coalescing]
+                     [cc] [extra_cc_options ...]
+
+positional arguments:
+  cc                    Path to your compiler
+  extra_cc_options
+
+options:
+  -h, --help            show this help message and exit
+  --check-setup         Test your system configuration
+  --chapter {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20}
+                        Specify which chapter to test. (By default, this will
+                        run the tests from earlier chapters as well.)
+  --latest-only         Only run tests for the current chapter, not earlier
+                        chapters
+  --skip-invalid        Only run valid test programs (useful when testing
+                        backend changes)
+  --failfast, -f        Stop on first test failure
+  --verbose, -v
+  --stage {lex,parse,validate,tacky,codegen,run}
+  --expected-error-codes n [n ...]
+                        Specify one or more exit codes (in range 1-255) that
+                        your compiler may return when rejecting a program. If
+                        specified, invalid test cases will pass only if the
+                        compiler exits with one of these error codes. If not
+                        specified, invalid test cases pass if the compiler
+                        exits with any non-zero code. Used to distinguish
+                        between expected failures (i.e. rejecting an invalid
+                        source program) and unexpected failures
+                        (segfaults/internal errors).
+  --keep-asm-on-failure
+                        Recompile any valid test programs that fail with the
+                        -S option to preserve assembly output.
+  --bitwise             Include tests for bitwise operations
+  --compound            Include tests for compound assignment
+  --increment           Include tests for increment and decrement operators
+  --goto                Include tests for goto and labeled statements
+  --switch              Include tests for switch statements
+  --nan                 Include tests for floating-point NaN
+  --union               Include tests for union types
+  --extra-credit        Include tests for all extra credit features
+  --fold-constants      Run constant folding tests and enable constant folding
+                        on tests from earlier chapters
+  --eliminate-unreachable-code
+                        Run unreachable code elimination tests, And enable
+                        constant folding and unreachable code elimination on
+                        tests from earlier chapters.
+  --propagate-copies    Enable constant folding, unreachable code elimination,
+                        and copy propagation
+  --eliminate-dead-stores
+                        Enable all four optimizations
+  --int-only            Only run optimization tests that use Part I language
+                        features
+  --no-coalescing       Run register allocation tests that don't rely on
+                        coalescing

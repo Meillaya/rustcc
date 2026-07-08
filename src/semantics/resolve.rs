@@ -303,7 +303,8 @@ fn resolve_global_init(expr: &Expr) -> Result<Expr> {
         Expr::Constant(_)
         | Expr::LongConstant(_)
         | Expr::UIntConstant(_, _)
-        | Expr::DoubleConstant(_) => Ok(expr.clone()),
+        | Expr::DoubleConstant(_)
+        | Expr::StringLiteral(_) => Ok(expr.clone()),
         Expr::InitializerList(items) => Ok(Expr::InitializerList(
             items
                 .iter()
@@ -723,6 +724,7 @@ fn resolve_expr(expr: &Expr, scopes: &mut ScopeStack, globals: &GlobalTable) -> 
         Expr::LongConstant(n) => Ok(Expr::LongConstant(*n)),
         Expr::UIntConstant(n, is_long) => Ok(Expr::UIntConstant(*n, *is_long)),
         Expr::DoubleConstant(d) => Ok(Expr::DoubleConstant(*d)),
+        Expr::StringLiteral(value) => Ok(Expr::StringLiteral(value.clone())),
         Expr::Cast {
             target_type,
             expr: inner,

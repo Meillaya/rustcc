@@ -74,6 +74,10 @@ fn type_of_val(val: &Val, env: &TypeEnv) -> OperandType {
     }
 }
 
+fn is_byte_type(ty: OperandType) -> bool {
+    matches!(ty, OperandType::Byte | OperandType::UByte)
+}
+
 /// Convert a TACKY [`ConditionCode`] to the equivalent assembly
 /// [`assembly::ConditionCode`].  The two enums carry the same set of
 /// variants but live in different modules to keep the IR layer free
@@ -307,6 +311,16 @@ fn lower_call(
                     src: convert_val(val, ctx),
                     dst: Operand::Reg(abi_reg(abi::int_param_reg(reg_idx))),
                 });
+            } else if ty == OperandType::Byte {
+                out.push(Instr::MovSignExtendByte {
+                    src: convert_val(val, ctx),
+                    dst: Operand::Reg(abi_reg(abi::int_param_reg(reg_idx))),
+                });
+            } else if ty == OperandType::UByte {
+                out.push(Instr::MovZeroExtend {
+                    src: convert_val(val, ctx),
+                    dst: Operand::Reg(abi_reg(abi::int_param_reg(reg_idx))),
+                });
             } else if ty != OperandType::Double {
                 out.push(Instr::Mov {
                     src: convert_val(val, ctx),
@@ -328,7 +342,22 @@ fn lower_call(
     let mut stack_instrs: Vec<Instr> = Vec::new();
     for (idx, val) in args.iter().enumerate().rev() {
         if matches!(plan.param_classes[idx], ParamClass::Stack) {
-            stack_instrs.push(Instr::Push(convert_val(val, ctx)));
+            let ty = type_of_val(val, type_env);
+            if ty == OperandType::Byte {
+                stack_instrs.push(Instr::MovSignExtendByte {
+                    src: convert_val(val, ctx),
+                    dst: Operand::Reg(Reg::R10),
+                });
+                stack_instrs.push(Instr::Push(Operand::Reg(Reg::R10)));
+            } else if ty == OperandType::UByte {
+                stack_instrs.push(Instr::MovZeroExtend {
+                    src: convert_val(val, ctx),
+                    dst: Operand::Reg(Reg::R10),
+                });
+                stack_instrs.push(Instr::Push(Operand::Reg(Reg::R10)));
+            } else {
+                stack_instrs.push(Instr::Push(convert_val(val, ctx)));
+            }
         }
     }
     out.extend(stack_instrs);
@@ -355,6 +384,11 @@ fn lower_call(
         if dst_ty == OperandType::Double {
             out.push(Instr::Movsd {
                 src: Operand::Reg(Reg::XMM(0)),
+                dst: Operand::Pseudo(dst_name.clone()),
+            });
+        } else if is_byte_type(dst_ty) {
+            out.push(Instr::MovByte {
+                src: Operand::Reg(Reg::AX),
                 dst: Operand::Pseudo(dst_name.clone()),
             });
         } else if dst_ty.is_long_word() {
@@ -392,6 +426,11 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
                     src: convert_val(val, ctx),
                     dst: Operand::Reg(Reg::XMM(0)),
                 });
+            } else if is_byte_type(val_ty) {
+                out.push(Instr::MovByte {
+                    src: convert_val(val, ctx),
+                    dst: Operand::Reg(Reg::AX),
+                });
             } else if is_long {
                 // A 64-bit immediate that doesn't fit in i32 needs
                 // `movabsq` to %rax (since `movq imm32, %rax` is
@@ -425,6 +464,11 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
             let dst_ty = type_of_val(&Val::Var(dst.clone()), env);
             if dst_ty == OperandType::Double {
                 vec![Instr::Movsd {
+                    src: convert_val(src, ctx),
+                    dst: Operand::Pseudo(dst.clone()),
+                }]
+            } else if is_byte_type(dst_ty) {
+                vec![Instr::MovByte {
                     src: convert_val(src, ctx),
                     dst: Operand::Pseudo(dst.clone()),
                 }]
@@ -468,6 +512,29 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
             // need `movabsq` so the 64-bit immediate isn't silently
             // truncated by `movl`.
             let src_op = convert_val(src, ctx);
+            if is_byte_type(type_of_val(src, env)) {
+                let dst_ty = type_of_val(&Val::Var(dst.clone()), env);
+                if dst_ty.is_long_word() {
+                    return vec![
+                        Instr::MovSignExtendByte {
+                            src: src_op,
+                            dst: Operand::Reg(Reg::R10),
+                        },
+                        Instr::Movsx {
+                            src: Operand::Reg(Reg::R10),
+                            dst: Operand::Reg(Reg::R10),
+                        },
+                        Instr::Movq {
+                            src: Operand::Reg(Reg::R10),
+                            dst: Operand::Pseudo(dst.clone()),
+                        },
+                    ];
+                }
+                return vec![Instr::MovSignExtendByte {
+                    src: src_op,
+                    dst: Operand::Pseudo(dst.clone()),
+                }];
+            }
             match src_op {
                 Operand::Imm(n) => {
                     if n >= i64::from(i32::MIN) && n <= i64::from(i32::MAX) {
@@ -512,6 +579,25 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
             // 64-bit move into the destination pseudo.  Emitting the
             // explicit pair here keeps the existing assembly IR's
             // byte-oriented `MovZeroExtend` for `setcc` results.
+            if is_byte_type(type_of_val(src, env)) {
+                let dst_ty = type_of_val(&Val::Var(dst.clone()), env);
+                if dst_ty.is_long_word() {
+                    return vec![
+                        Instr::MovZeroExtend {
+                            src: convert_val(src, ctx),
+                            dst: Operand::Reg(Reg::R10),
+                        },
+                        Instr::Movq {
+                            src: Operand::Reg(Reg::R10),
+                            dst: Operand::Pseudo(dst.clone()),
+                        },
+                    ];
+                }
+                return vec![Instr::MovZeroExtend {
+                    src: convert_val(src, ctx),
+                    dst: Operand::Pseudo(dst.clone()),
+                }];
+            }
             vec![
                 Instr::Mov {
                     src: convert_val(src, ctx),
@@ -529,21 +615,39 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
         // writes the truncated value.  For pointers (still 64-bit)
         // this lowers to a plain `movq`; for plain `long` it
         // narrows to 32 bits.
-        Instruction::Truncate { src, dst } => vec![
-            Instr::Movq {
-                src: convert_val(src, ctx),
-                dst: Operand::Reg(Reg::R10),
-            },
-            Instr::Mov {
-                src: Operand::Reg(Reg::R10),
-                dst: Operand::Pseudo(dst.clone()),
-            },
-        ],
+        Instruction::Truncate { src, dst } => {
+            vec![if is_byte_type(type_of_val(&Val::Var(dst.clone()), env)) {
+                Instr::MovByte {
+                    src: convert_val(src, ctx),
+                    dst: Operand::Pseudo(dst.clone()),
+                }
+            } else {
+                Instr::Mov {
+                    src: convert_val(src, ctx),
+                    dst: Operand::Pseudo(dst.clone()),
+                }
+            }]
+        }
         Instruction::IntToDouble { src, dst } => {
             let src_ty = type_of_val(src, env);
             let src_op = convert_val(src, ctx);
             let cvt_src = if src_ty == OperandType::Long {
                 src_op
+            } else if src_ty == OperandType::Byte {
+                return vec![
+                    Instr::MovSignExtendByte {
+                        src: src_op,
+                        dst: Operand::Reg(Reg::R10),
+                    },
+                    Instr::Movsx {
+                        src: Operand::Reg(Reg::R10),
+                        dst: Operand::Reg(Reg::R10),
+                    },
+                    Instr::Cvtsi2sd {
+                        src: Operand::Reg(Reg::R10),
+                        dst: Operand::Pseudo(dst.clone()),
+                    },
+                ];
             } else if matches!(src_op, Operand::Imm(_)) {
                 return vec![
                     Instr::Mov {
@@ -575,7 +679,18 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
         Instruction::UIntToDouble { src, dst } => {
             let src_ty = type_of_val(src, env);
             let src_op = convert_val(src, ctx);
-            if src_ty == OperandType::UInt {
+            if src_ty == OperandType::UByte {
+                vec![
+                    Instr::MovZeroExtend {
+                        src: src_op,
+                        dst: Operand::Reg(Reg::R10),
+                    },
+                    Instr::Cvtsi2sd {
+                        src: Operand::Reg(Reg::R10),
+                        dst: Operand::Pseudo(dst.clone()),
+                    },
+                ]
+            } else if src_ty == OperandType::UInt {
                 vec![
                     Instr::Mov {
                         src: src_op,
@@ -663,6 +778,11 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
                     src: Operand::Reg(Reg::R10),
                     dst: Operand::Pseudo(dst.clone()),
                 });
+            } else if is_byte_type(dst_ty) {
+                out.push(Instr::MovByte {
+                    src: Operand::Reg(Reg::R10),
+                    dst: Operand::Pseudo(dst.clone()),
+                });
             } else {
                 out.push(Instr::Mov {
                     src: Operand::Reg(Reg::R10),
@@ -679,9 +799,16 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
                         src: convert_val(src, ctx),
                         dst: Operand::Reg(Reg::R10),
                     },
-                    Instr::Mov {
-                        src: Operand::Reg(Reg::R10),
-                        dst: Operand::Pseudo(dst.clone()),
+                    if is_byte_type(dst_ty) {
+                        Instr::MovByte {
+                            src: Operand::Reg(Reg::R10),
+                            dst: Operand::Pseudo(dst.clone()),
+                        }
+                    } else {
+                        Instr::Mov {
+                            src: Operand::Reg(Reg::R10),
+                            dst: Operand::Pseudo(dst.clone()),
+                        }
                     },
                 ];
             }
@@ -1231,22 +1358,32 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
             let cond_ty = type_of_val(condition, env);
             let is_double = cond_ty == OperandType::Double;
             let is_long = cond_ty.is_long_word();
-            let (prelude, cmp_left) = match &cond_op {
-                Operand::Imm(_) if !is_double => {
-                    let mov = if is_long {
-                        Instr::Movq {
-                            src: cond_op,
-                            dst: Operand::Reg(Reg::R10),
-                        }
-                    } else {
-                        Instr::Mov {
-                            src: cond_op,
-                            dst: Operand::Reg(Reg::R10),
-                        }
-                    };
-                    (vec![mov], Operand::Reg(Reg::R10))
+            let (prelude, cmp_left) = if is_byte_type(cond_ty) {
+                (
+                    vec![Instr::MovSignExtendByte {
+                        src: cond_op,
+                        dst: Operand::Reg(Reg::R10),
+                    }],
+                    Operand::Reg(Reg::R10),
+                )
+            } else {
+                match &cond_op {
+                    Operand::Imm(_) if !is_double => {
+                        let mov = if is_long {
+                            Instr::Movq {
+                                src: cond_op,
+                                dst: Operand::Reg(Reg::R10),
+                            }
+                        } else {
+                            Instr::Mov {
+                                src: cond_op,
+                                dst: Operand::Reg(Reg::R10),
+                            }
+                        };
+                        (vec![mov], Operand::Reg(Reg::R10))
+                    }
+                    _ => (Vec::new(), cond_op),
                 }
-                _ => (Vec::new(), cond_op),
             };
             let mut out = prelude;
             if is_double {
@@ -1298,22 +1435,32 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
             let cond_ty = type_of_val(condition, env);
             let is_double = cond_ty == OperandType::Double;
             let is_long = cond_ty.is_long_word();
-            let (prelude, cmp_left) = match &cond_op {
-                Operand::Imm(_) if !is_double => {
-                    let mov = if is_long {
-                        Instr::Movq {
-                            src: cond_op,
-                            dst: Operand::Reg(Reg::R10),
-                        }
-                    } else {
-                        Instr::Mov {
-                            src: cond_op,
-                            dst: Operand::Reg(Reg::R10),
-                        }
-                    };
-                    (vec![mov], Operand::Reg(Reg::R10))
+            let (prelude, cmp_left) = if is_byte_type(cond_ty) {
+                (
+                    vec![Instr::MovSignExtendByte {
+                        src: cond_op,
+                        dst: Operand::Reg(Reg::R10),
+                    }],
+                    Operand::Reg(Reg::R10),
+                )
+            } else {
+                match &cond_op {
+                    Operand::Imm(_) if !is_double => {
+                        let mov = if is_long {
+                            Instr::Movq {
+                                src: cond_op,
+                                dst: Operand::Reg(Reg::R10),
+                            }
+                        } else {
+                            Instr::Mov {
+                                src: cond_op,
+                                dst: Operand::Reg(Reg::R10),
+                            }
+                        };
+                        (vec![mov], Operand::Reg(Reg::R10))
+                    }
+                    _ => (Vec::new(), cond_op),
                 }
-                _ => (Vec::new(), cond_op),
             };
             let mut out = prelude;
             if is_double {
@@ -1363,6 +1510,11 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
                     src: Operand::Memory(Reg::R9, 0),
                     dst: dst_op,
                 }
+            } else if is_byte_type(dst_ty) {
+                Instr::MovByte {
+                    src: Operand::Memory(Reg::R9, 0),
+                    dst: dst_op,
+                }
             } else if dst_ty.is_long_word() {
                 Instr::Movq {
                     src: Operand::Memory(Reg::R9, 0),
@@ -1387,6 +1539,11 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
             let src_op = convert_val(src, ctx);
             let store = if src_ty == OperandType::Double {
                 Instr::Movsd {
+                    src: src_op,
+                    dst: Operand::Memory(Reg::R9, 0),
+                }
+            } else if is_byte_type(src_ty) {
+                Instr::MovByte {
                     src: src_op,
                     dst: Operand::Memory(Reg::R9, 0),
                 }
@@ -1432,6 +1589,11 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
                     let index_ty = type_of_val(index, env);
                     if index_ty.is_long_word() {
                         out.push(Instr::Movq {
+                            src: op,
+                            dst: Operand::Reg(Reg::R11),
+                        });
+                    } else if is_byte_type(index_ty) {
+                        out.push(Instr::MovSignExtendByte {
                             src: op,
                             dst: Operand::Reg(Reg::R11),
                         });
@@ -1500,12 +1662,15 @@ fn generate_function(func: &TackyFunction, globals: &TypeEnv, ctx: &mut CodegenC
             .unwrap_or(OperandType::Int);
         let is_long = param_ty.is_long_word();
         let is_double = param_ty == OperandType::Double;
+        let is_byte = is_byte_type(param_ty);
         match plan.param_classes[idx] {
             ParamClass::Int(reg_idx) => {
                 let src = Operand::Reg(abi_reg(abi::int_param_reg(reg_idx)));
                 let dst = Operand::Pseudo(param_name.clone());
                 if is_double {
                     prologue.push(Instr::Movsd { src, dst });
+                } else if is_byte {
+                    prologue.push(Instr::MovByte { src, dst });
                 } else if is_long {
                     prologue.push(Instr::Movq { src, dst });
                 } else {
@@ -1525,6 +1690,8 @@ fn generate_function(func: &TackyFunction, globals: &TypeEnv, ctx: &mut CodegenC
                 let dst = Operand::Pseudo(param_name.clone());
                 if is_double {
                     prologue.push(Instr::Movsd { src, dst });
+                } else if is_byte {
+                    prologue.push(Instr::MovByte { src, dst });
                 } else if is_long {
                     prologue.push(Instr::Movq { src, dst });
                 } else {
@@ -1576,6 +1743,9 @@ fn convert_static_init(
         (crate::ir::tacky::TackyStaticInit::Int(n), OperandType::Long | OperandType::ULong) => {
             vec![StaticInit::Long(n)]
         }
+        (crate::ir::tacky::TackyStaticInit::Int(n), OperandType::Byte | OperandType::UByte) => {
+            vec![StaticInit::Char(n as u8)]
+        }
         (crate::ir::tacky::TackyStaticInit::Int(n), _) => vec![StaticInit::Int(n)],
         (crate::ir::tacky::TackyStaticInit::Zero, OperandType::Long | OperandType::ULong) => {
             vec![StaticInit::Zero(8)]
@@ -1584,9 +1754,20 @@ fn convert_static_init(
         (crate::ir::tacky::TackyStaticInit::Zero, OperandType::ByteArray { size }) => {
             vec![StaticInit::Zero(size as u32)]
         }
+        (crate::ir::tacky::TackyStaticInit::Zero, OperandType::Byte | OperandType::UByte) => {
+            vec![StaticInit::Zero(1)]
+        }
         (crate::ir::tacky::TackyStaticInit::Zero, _) => vec![StaticInit::Zero(4)],
+        (crate::ir::tacky::TackyStaticInit::Long(n), OperandType::Byte | OperandType::UByte) => {
+            vec![StaticInit::Char(n as u8)]
+        }
         (crate::ir::tacky::TackyStaticInit::Long(n), _) => vec![StaticInit::Long(n)],
         (crate::ir::tacky::TackyStaticInit::Double(d), _) => vec![StaticInit::Double(d)],
+        (crate::ir::tacky::TackyStaticInit::Char(c), _) => vec![StaticInit::Char(c)],
+        (crate::ir::tacky::TackyStaticInit::StringBytes(bytes), _) => {
+            vec![StaticInit::StringBytes(bytes)]
+        }
+        (crate::ir::tacky::TackyStaticInit::Pointer(label), _) => vec![StaticInit::Pointer(label)],
     }
 }
 
@@ -1598,6 +1779,7 @@ pub fn generate(tacky: &TackyProgram, _frames: &[Frame]) -> Result<AsmProgram> {
         let alignment = match var.ty {
             OperandType::Long | OperandType::ULong | OperandType::Double => 8,
             OperandType::ByteArray { .. } => 16,
+            OperandType::Byte | OperandType::UByte => 1,
             _ => 4,
         };
         top_level.push(TopLevel::StaticVariable {
@@ -1605,6 +1787,12 @@ pub fn generate(tacky: &TackyProgram, _frames: &[Frame]) -> Result<AsmProgram> {
             global: var.global,
             alignment,
             init,
+        });
+    }
+    for constant in &tacky.static_constants {
+        top_level.push(TopLevel::Constant {
+            label: constant.name.clone(),
+            value: constant.bytes.clone(),
         });
     }
     // Build a name -> type map for the file-scope statics so

@@ -1,0 +1,30 @@
+Task 44 Chapter 16 chars/strings code review / slop coverage
+Date: 2026-07-08
+Scope: native Rust compiler changes only; no test/harness edits; no commits/staging.
+
+Review inputs:
+- git diff for src/ast/expr.rs, src/ast/ty.rs, src/parse/parser.rs, src/semantics/resolve.rs, src/semantics/typecheck.rs, src/ir/tacky.rs, src/ir/lower.rs, src/codegen/assembly.rs, src/codegen/codegen.rs, src/codegen/emit.rs, src/codegen/replace_pseudos.rs, src/compiler.rs.
+- Chapter 16 plan/docs/reference already read earlier in session.
+- Verification evidence from build/test/chapter gates/manual QA in this session.
+
+Programming skill / anti-slop checks:
+- No new dependencies.
+- No bridge/system-C frontend path added.
+- No test harness weakening.
+- No staged files or commits.
+- No temporary debug print/dbg instrumentation found in git diff.
+- Existing compiler phase modules exceed the 250 pure-LOC heuristic before this task; task intentionally kept 1:1 mirror-style edits in existing phase files instead of introducing broad new abstractions/modules.
+- Comments added are explanatory compiler-lowering notes consistent with neighboring chapter comments, not TODO placeholders.
+
+Potential overfit/slop review:
+- Byte ops are represented explicitly (`Byte`/`UByte`, `MovByte`, `MovSignExtendByte`) rather than source-content special cases.
+- String literals lower to static constants with unique labels and regular `GetAddress`, not hard-coded test output.
+- Static char initializers truncate at static-init/codegen boundary, not with one-off test name branches.
+- Char array string initializers use array element stores/static bytes and null padding/truncation semantics.
+- Argument/return/load/store byte paths use typed lowering/codegen rather than pattern matching source text.
+
+Risk notes:
+- The implementation touches large existing compiler phase files; long-term cleanup could split lowering/codegen helpers, but doing so here would broaden scope and risk Chapter 13-15 regressions.
+- Chapter 16 full harness remains externally blocked by missing fixture `tests/tests/chapter_16/valid/chars/data_on_page_boundary_linux.s`; native compilation of `push_arg_on_page_boundary.c` to object succeeds.
+
+Verdict: PASS with no code-quality blockers identified by local review. Remaining blocker is external/missing test fixture, not product source.

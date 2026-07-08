@@ -24,6 +24,8 @@ pub enum Type {
     UnsignedLong,
     Double,
     Char,
+    SignedChar,
+    UnsignedChar,
     Void,
     /// `T *` — pointer to a value of type `T`.
     Pointer(Box<Type>),
@@ -41,20 +43,29 @@ impl Type {
     pub fn is_integer(self) -> bool {
         matches!(
             self,
-            Type::Int | Type::Long | Type::UnsignedInt | Type::UnsignedLong | Type::Char
+            Type::Int
+                | Type::Long
+                | Type::UnsignedInt
+                | Type::UnsignedLong
+                | Type::Char
+                | Type::SignedChar
+                | Type::UnsignedChar
         )
     }
 
     /// Returns true for signed integer types.  Mirrors OCaml
     /// `Type_utils.is_signed` for the chapter-12 surface.
     pub fn is_signed(self) -> bool {
-        matches!(self, Type::Int | Type::Long | Type::Char)
+        matches!(self, Type::Int | Type::Long | Type::Char | Type::SignedChar)
     }
 
     /// Returns true for unsigned integer types.  Mirrors OCaml
     /// `Type_utils.is_unsigned` for the chapter-12 surface.
     pub fn is_unsigned(self) -> bool {
-        matches!(self, Type::UnsignedInt | Type::UnsignedLong)
+        matches!(
+            self,
+            Type::UnsignedInt | Type::UnsignedLong | Type::UnsignedChar
+        )
     }
 
     /// Returns true when the type is a pointer.
@@ -91,7 +102,7 @@ impl Type {
     /// codegen and by `replace_pseudos` to size stack slots.
     pub fn size(self) -> i64 {
         match self {
-            Type::Char => 1,
+            Type::Char | Type::SignedChar | Type::UnsignedChar => 1,
             Type::Int | Type::UnsignedInt => 4,
             Type::Long | Type::UnsignedLong => 8,
             Type::Double => 8,

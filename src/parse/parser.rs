@@ -182,6 +182,7 @@ impl Parser {
         let mut saw_signed = false;
         let mut saw_long = false;
         let mut is_double = false;
+        let mut saw_char = false;
         let mut storage = StorageClass::Auto;
         let mut had_storage = false;
         loop {
@@ -223,6 +224,13 @@ impl Parser {
                     is_double = true;
                     self.current += 1;
                 }
+                TokenKind::Char => {
+                    if saw_char {
+                        bail!("parse error: duplicate 'char' in type specifier");
+                    }
+                    saw_char = true;
+                    self.current += 1;
+                }
                 TokenKind::Static => {
                     if had_storage {
                         bail!("parse error: multiple storage-class specifiers in declaration");
@@ -242,9 +250,9 @@ impl Parser {
                 _ => break,
             }
         }
-        if !saw_int && !is_long && !is_unsigned && !saw_signed && !is_double {
+        if !saw_int && !is_long && !is_unsigned && !saw_signed && !is_double && !saw_char {
             bail!(
-                "parse error: expected a type specifier ('int' / 'long' / 'double' / 'unsigned' / 'signed'), found {:?}",
+                "parse error: expected a type specifier ('int' / 'long' / 'double' / 'unsigned' / 'signed' / 'char'), found {:?}",
                 self.peek().kind
             );
         }
@@ -254,8 +262,17 @@ impl Parser {
         if is_double && (is_long || is_unsigned || saw_signed || saw_int) {
             bail!("parse error: 'double' cannot be combined with other type specifiers");
         }
+        if saw_char && (is_long || saw_int || is_double) {
+            bail!("parse error: 'char' cannot be combined with int, long, or double");
+        }
         let ty = if is_double {
             Type::Double
+        } else if saw_char && is_unsigned {
+            Type::UnsignedChar
+        } else if saw_char && saw_signed {
+            Type::SignedChar
+        } else if saw_char {
+            Type::Char
         } else if is_long && is_unsigned {
             Type::UnsignedLong
         } else if is_unsigned {
@@ -300,6 +317,7 @@ impl Parser {
         let mut saw_int = false;
         let mut saw_long = false;
         let mut saw_double = false;
+        let mut saw_char = false;
         let mut is_unsigned = false;
         let mut saw_unsigned = false;
         let mut saw_signed = false;
@@ -327,6 +345,13 @@ impl Parser {
                     saw_double = true;
                     self.current += 1;
                 }
+                TokenKind::Char => {
+                    if saw_char {
+                        bail!("parse error: duplicate 'char' in type specifier");
+                    }
+                    saw_char = true;
+                    self.current += 1;
+                }
                 TokenKind::Unsigned => {
                     if saw_unsigned {
                         bail!("parse error: duplicate 'unsigned' in type specifier");
@@ -345,9 +370,9 @@ impl Parser {
                 _ => break,
             }
         }
-        if !saw_int && !saw_long && !is_unsigned && !saw_signed && !saw_double {
+        if !saw_int && !saw_long && !is_unsigned && !saw_signed && !saw_double && !saw_char {
             bail!(
-                "parse error: expected a type specifier ('int' / 'long' / 'double' / 'unsigned' / 'signed'), found {:?}",
+                "parse error: expected a type specifier ('int' / 'long' / 'double' / 'unsigned' / 'signed' / 'char'), found {:?}",
                 self.peek().kind
             );
         }
@@ -357,8 +382,17 @@ impl Parser {
         if saw_double && (is_long || is_unsigned || saw_signed || saw_int) {
             bail!("parse error: 'double' cannot be combined with other type specifiers");
         }
+        if saw_char && (is_long || saw_int || saw_double) {
+            bail!("parse error: 'char' cannot be combined with int, long, or double");
+        }
         if saw_double {
             Ok(Type::Double)
+        } else if saw_char && is_unsigned {
+            Ok(Type::UnsignedChar)
+        } else if saw_char && saw_signed {
+            Ok(Type::SignedChar)
+        } else if saw_char {
+            Ok(Type::Char)
         } else if is_long && is_unsigned {
             Ok(Type::UnsignedLong)
         } else if is_unsigned {
@@ -493,6 +527,7 @@ impl Parser {
         let raw = match &self.peek().kind {
             TokenKind::Constant(value) => i64::from(*value),
             TokenKind::LongConstant(value) | TokenKind::UIntConstant(value, _) => *value,
+            TokenKind::CharLiteral(value) => i64::from(*value),
             _ => bail!("parse error: expected constant array size"),
         };
         if raw <= 0 {
@@ -588,6 +623,7 @@ impl Parser {
             || self.peek().kind == TokenKind::Long
             || self.peek().kind == TokenKind::Unsigned
             || self.peek().kind == TokenKind::Signed
+            || self.peek().kind == TokenKind::Char
             || self.peek().kind == TokenKind::Double
             || self.peek().kind == TokenKind::Static
             || self.peek().kind == TokenKind::Extern
@@ -745,6 +781,7 @@ impl Parser {
                 | TokenKind::Long
                 | TokenKind::Unsigned
                 | TokenKind::Signed
+                | TokenKind::Char
                 | TokenKind::Double
         ) {
             let base_ty = self.parse_type_specifier()?;
@@ -878,6 +915,20 @@ impl Parser {
                 self.current += 1;
                 Expr::DoubleConstant(value)
             }
+            TokenKind::CharLiteral(value) => {
+                let value = i64::from(*value);
+                self.current += 1;
+                Expr::Constant(value)
+            }
+            TokenKind::StringLiteral(first) => {
+                let mut value = first.clone();
+                self.current += 1;
+                while let TokenKind::StringLiteral(next) = &self.peek().kind {
+                    value.push_str(next);
+                    self.current += 1;
+                }
+                Expr::StringLiteral(value)
+            }
             TokenKind::Identifier(name) => {
                 let name = name.clone();
                 self.current += 1;
@@ -949,6 +1000,7 @@ impl Parser {
                         | TokenKind::Long
                         | TokenKind::Unsigned
                         | TokenKind::Signed
+                        | TokenKind::Char
                         | TokenKind::Double
                 ) {
                     let base_type = self.parse_type_specifier()?;

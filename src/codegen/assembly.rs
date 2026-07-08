@@ -154,6 +154,10 @@ pub enum Instr {
         src: Operand,
         dst: Operand,
     },
+    MovByte {
+        src: Operand,
+        dst: Operand,
+    },
     /// Chapter 11: 64-bit immediate-to-register move for values
     /// that don't fit in a 32-bit sign-extended immediate
     /// (`movq imm32, mem` is only valid when the immediate fits in
@@ -174,6 +178,10 @@ pub enum Instr {
     },
     /// Zero-extending move (e.g. unsigned int -> long).
     MovZeroExtend {
+        src: Operand,
+        dst: Operand,
+    },
+    MovSignExtendByte {
         src: Operand,
         dst: Operand,
     },

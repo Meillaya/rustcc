@@ -36,12 +36,14 @@ pub fn typecheck(ast: &ResolvedProgram) -> Result<TypedProgram> {
     for item in &ast.program.top_level_items {
         match item {
             TopLevelItem::Function(func) => {
-                let param_tys = func.params.iter().map(|p| p.ty.clone()).collect();
+                let param_tys: Vec<Type> = func.params.iter().map(|p| p.ty.clone()).collect();
+                validate_function_signature(&func.name, &param_tys, &func.ret_ty, &ctx)?;
                 ctx.funcs
                     .insert(func.name.clone(), (param_tys, func.ret_ty.clone()));
             }
             TopLevelItem::Declaration(decl) => {
-                let param_tys = decl.params.iter().map(|p| p.ty.clone()).collect();
+                let param_tys: Vec<Type> = decl.params.iter().map(|p| p.ty.clone()).collect();
+                validate_function_signature(&decl.name, &param_tys, &decl.ret_ty, &ctx)?;
                 ctx.funcs
                     .insert(decl.name.clone(), (param_tys, decl.ret_ty.clone()));
             }
@@ -70,6 +72,20 @@ pub fn typecheck(ast: &ResolvedProgram) -> Result<TypedProgram> {
     Ok(TypedProgram {
         program: ast.program.clone(),
     })
+}
+
+fn validate_function_signature(
+    name: &str,
+    param_tys: &[Type],
+    ret_ty: &Type,
+    ctx: &TypeCtx,
+) -> Result<()> {
+    if let Some((existing_params, existing_ret)) = ctx.funcs.get(name) {
+        if existing_params.as_slice() != param_tys || existing_ret != ret_ty {
+            bail!("type error: conflicting declarations for function '{name}'");
+        }
+    }
+    Ok(())
 }
 
 fn validate_global_var(var: &GlobalVarDecl, ctx: &mut TypeCtx) -> Result<()> {
@@ -129,6 +145,13 @@ fn check_block_item(item: &BlockItem, ctx: &mut TypeCtx) -> Result<()> {
 
 fn check_var_decl(decl: &VarDecl, ctx: &mut TypeCtx) -> Result<()> {
     validate_object_type(&decl.ty)?;
+    if decl.storage == StorageClass::Extern {
+        if let Some(existing) = ctx.objects.get(&decl.name) {
+            if existing != &decl.ty {
+                bail!("type error: conflicting declarations for '{}'", decl.name);
+            }
+        }
+    }
     ctx.objects.insert(decl.name.clone(), decl.ty.clone());
     if let Some(init) = &decl.init {
         if matches!(decl.ty, Type::Array { .. }) {
@@ -246,6 +269,10 @@ fn type_of_expr(expr: &Expr, ctx: &TypeCtx) -> Result<Type> {
             Type::UnsignedInt
         }),
         Expr::DoubleConstant(_) => Ok(Type::Double),
+        Expr::StringLiteral(value) => Ok(Type::Array {
+            element: Box::new(Type::Char),
+            size: Some(value.len() + 1),
+        }),
         Expr::Var(name) => ctx
             .objects
             .get(name)
@@ -345,14 +372,14 @@ fn type_unary(op: UnaryOp, expr: &Expr, ctx: &TypeCtx) -> Result<Type> {
         UnaryOp::Not => Ok(Type::Int),
         UnaryOp::Negate => {
             if ty.clone().is_integer() || matches!(ty, Type::Double) {
-                Ok(ty)
+                Ok(promote_char_type(ty))
             } else {
                 bail!("type error: cannot negate pointer")
             }
         }
         UnaryOp::Complement => {
             if ty.clone().is_integer() {
-                Ok(ty)
+                Ok(promote_char_type(ty))
             } else {
                 bail!("type error: bitwise complement requires integer")
             }
@@ -494,6 +521,18 @@ fn validate_initializer(init: &Expr, target: &Type, ctx: &TypeCtx) -> Result<()>
                 element,
                 size: Some(size),
             },
+            Expr::StringLiteral(value),
+        ) if is_char_type(element) => {
+            if value.len() > *size {
+                bail!("type error: too many characters in string literal");
+            }
+            Ok(())
+        }
+        (
+            Type::Array {
+                element,
+                size: Some(size),
+            },
             Expr::InitializerList(items),
         ) => {
             if items.len() > *size {
@@ -522,7 +561,8 @@ fn initializer_is_constant(init: &Expr) -> bool {
         Expr::Constant(_)
         | Expr::LongConstant(_)
         | Expr::UIntConstant(_, _)
-        | Expr::DoubleConstant(_) => true,
+        | Expr::DoubleConstant(_)
+        | Expr::StringLiteral(_) => true,
         Expr::InitializerList(items) => items.iter().all(initializer_is_constant),
         _ => false,
     }
@@ -575,6 +615,8 @@ fn common_type(left: &Expr, left_ty: &Type, right: &Expr, right_ty: &Type) -> Re
 }
 
 fn common_arithmetic(left: &Type, right: &Type) -> Result<Type> {
+    let left = promote_char_type(left.clone());
+    let right = promote_char_type(right.clone());
     if matches!(left, Type::Pointer(_)) || matches!(right, Type::Pointer(_)) {
         bail!("type error: pointer is not an arithmetic operand");
     }
@@ -589,6 +631,17 @@ fn common_arithmetic(left: &Type, right: &Type) -> Result<Type> {
     } else {
         Ok(Type::Int)
     }
+}
+
+fn promote_char_type(ty: Type) -> Type {
+    match ty {
+        Type::Char | Type::SignedChar | Type::UnsignedChar => Type::Int,
+        other => other,
+    }
+}
+
+fn is_char_type(ty: &Type) -> bool {
+    matches!(ty, Type::Char | Type::SignedChar | Type::UnsignedChar)
 }
 
 fn ensure_scalar(ty: &Type) -> Result<()> {

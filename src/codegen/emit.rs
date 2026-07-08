@@ -168,6 +168,47 @@ fn format_quad_operand(op: &Operand) -> Result<String> {
     }
 }
 
+fn reg_name_byte(reg: &Reg) -> &'static str {
+    match reg {
+        Reg::AX => "%al",
+        Reg::CX => "%cl",
+        Reg::DX => "%dl",
+        Reg::DI => "%dil",
+        Reg::SI => "%sil",
+        Reg::R8 => "%r8b",
+        Reg::R9 => "%r9b",
+        Reg::R10 => "%r10b",
+        Reg::R11 => "%r11b",
+        Reg::SP => "%spl",
+        Reg::BP => "%bpl",
+        Reg::BX => "%bl",
+        Reg::R12 => "%r12b",
+        Reg::R13 => "%r13b",
+        Reg::R14 => "%r14b",
+        Reg::R15 => "%r15b",
+        Reg::XMM(_) => "%xmm?",
+    }
+}
+
+fn format_byte_operand(op: &Operand) -> Result<String> {
+    match op {
+        Operand::Imm(n) => Ok(format!("${n}")),
+        Operand::Reg(reg) => Ok(reg_name_byte(reg).to_string()),
+        Operand::Memory(base, offset) => Ok(format!("{}({})", offset, reg_name_quad(base))),
+        Operand::MemoryIndexed(base, index, scale) => Ok(format!(
+            "({},{},{})",
+            reg_name_quad(base),
+            reg_name_quad(index),
+            scale
+        )),
+        Operand::Stack(offset) => Ok(format!("{}(%rbp)", offset)),
+        Operand::Data(name) => Ok(format!("{name}(%rip)")),
+        Operand::Pseudo(name) => Err(anyhow!(
+            "pseudoregister leaked past replace_pseudos: {name}"
+        )),
+    }
+}
+
 fn format_shift_src(op: BinaryOpInstr, src: &Operand) -> Result<String> {
     // x86-64 shift instructions accept only `%cl` (the low byte of `%ecx`)
     // as the count operand.  The codegen pass encodes the count via a
@@ -274,6 +315,11 @@ fn format_instruction(instr: &Instr) -> Result<String> {
             format_quad_operand(src)?,
             format_quad_operand(dst)?
         )),
+        Instr::MovByte { src, dst } => Ok(format!(
+            "movb {}, {}",
+            format_byte_operand(src)?,
+            format_byte_operand(dst)?
+        )),
         Instr::Movsd { src, dst } => Ok(format!(
             "movsd {}, {}",
             format_quad_operand(src)?,
@@ -289,7 +335,12 @@ fn format_instruction(instr: &Instr) -> Result<String> {
         }
         Instr::MovZeroExtend { src, dst } => Ok(format!(
             "movzbl {}, {}",
-            format_operand(src)?,
+            format_byte_operand(src)?,
+            format_operand(dst)?
+        )),
+        Instr::MovSignExtendByte { src, dst } => Ok(format!(
+            "movsbl {}, {}",
+            format_byte_operand(src)?,
             format_operand(dst)?
         )),
         Instr::Movsx { src, dst } => Ok(format!(
@@ -468,6 +519,20 @@ fn format_static_variable(
                 crate::codegen::assembly::StaticInit::Zero(n) => {
                     lines.push(format!("    .zero {n}"));
                 }
+                crate::codegen::assembly::StaticInit::Char(c) => {
+                    lines.push(format!("    .byte {c}"));
+                }
+                crate::codegen::assembly::StaticInit::StringBytes(bytes) => {
+                    let bytes = bytes
+                        .iter()
+                        .map(|b| b.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    lines.push(format!("    .byte {bytes}"));
+                }
+                crate::codegen::assembly::StaticInit::Pointer(label) => {
+                    lines.push(format!("    .quad {label}"));
+                }
                 _ => {
                     lines.push(format!("    .long {}", data_value(item)?));
                 }
@@ -482,7 +547,7 @@ fn is_zero_init(init: &[crate::codegen::assembly::StaticInit]) -> bool {
     init.iter().all(|item| {
         matches!(
             item,
-            StaticInit::Int(0) | StaticInit::Long(0) | StaticInit::Zero(_)
+            StaticInit::Int(0) | StaticInit::Long(0) | StaticInit::Zero(_) | StaticInit::Char(0)
         )
     })
 }
@@ -495,6 +560,9 @@ fn zero_size(init: &[crate::codegen::assembly::StaticInit]) -> u32 {
             StaticInit::Double(_) => 8,
             StaticInit::Long(_) => 8,
             StaticInit::Int(_) => 4,
+            StaticInit::Char(_) => 1,
+            StaticInit::StringBytes(bytes) => bytes.len() as u32,
+            StaticInit::Pointer(_) => 8,
             _ => 4,
         })
         .sum()

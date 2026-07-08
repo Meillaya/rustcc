@@ -1,0 +1,167 @@
+Task 44 - W17-T1 Chapter 16 characters and string literals implementation evidence
+Date: 2026-07-08
+Workspace: /home/mei/projects/rustcc
+Instruction compliance: no commit, no staging, no plan checkbox changes, no tests/harness modifications.
+
+Baseline captured before edits:
+- cargo build --release -> PASS
+- cargo test --release -> PASS (10 tests)
+- ./tests/test_compiler ./target/release/rustcc --chapter 16 --latest-only -> FAIL, 43 failures before implementation. Representative failures were parse/type support gaps for `char`, char literals, and string literals.
+
+Required docs/reference read:
+- .omo/plans/c-compiler-rust.md task 44
+- docs/book/ch16-characters-and-strings.md
+- docs/stages/ch16-characters-and-strings.md
+- nqcc2/lib reference files for lexing, parsing, semantic analysis, TACKY lowering, backend codegen, and emit/static initializers.
+
+Changed product files:
+- src/ast/expr.rs
+- src/ast/ty.rs
+- src/parse/parser.rs
+- src/semantics/resolve.rs
+- src/semantics/typecheck.rs
+- src/ir/tacky.rs
+- src/ir/lower.rs
+- src/codegen/assembly.rs
+- src/codegen/codegen.rs
+- src/codegen/emit.rs
+- src/codegen/replace_pseudos.rs
+- src/compiler.rs
+
+Implementation summary:
+- Added AST/type support for `char`, `signed char`, `unsigned char`, and string literal expressions.
+- Parser now accepts char type specifiers, char literals, string literals, adjacent string literal concatenation, and char constants in supported constant positions.
+- Typechecker now handles char signedness/promotion, function signature conflicts involving char types, string literal array type, and string initializers for char arrays.
+- TACKY now carries byte/unsigned-byte operand types and static string constants.
+- Lowering now emits char byte conversions, string literal static constants with null terminators, char-array string initializers, static char initializers, pointer-to-string addresses, and byte-aware assignment/promotion paths.
+- Codegen/emit/replace-pseudos now support movb, movsbl, movzbl, byte load/store/copy/return/argument passing, byte static data, and string rodata labels.
+- Compiler replace-pseudos global-name seeding includes static string constants so `leaq string.N(%rip), ...` works.
+
+Final verification commands/results:
+1. cargo build --release
+   Result: PASS
+   Evidence excerpt: `Finished release profile [optimized] target(s)`.
+
+2. cargo test --release
+   Result: PASS
+   Evidence excerpt: `test result: ok. 10 passed; 0 failed` plus doc-tests ok.
+
+3. ./tests/test_compiler ./target/release/rustcc --chapter 15 --latest-only
+   Result: PASS
+   Evidence excerpt: `Ran 83 tests ... OK`.
+
+4. ./tests/test_compiler ./target/release/rustcc --chapter 14 --latest-only
+   Result: PASS
+   Evidence excerpt: `Ran 53 tests ... OK`.
+
+5. ./tests/test_compiler ./target/release/rustcc --chapter 16 --latest-only
+   Result: BLOCKED by missing test fixture, after product-source failures were fixed.
+   Evidence excerpt:
+   - `Ran 72 tests ... FAILED (errors=1)`
+   - error from harness/GCC link step: `can't open /home/mei/projects/rustcc/tests/tests/chapter_16/valid/chars/data_on_page_boundary_linux.s for reading: No such file or directory`
+   - `find . -name 'data_on_page_boundary_linux.s' -o -name 'data_on_page_boundary.s' -o -name '*boundary_linux.s'` found no fixture.
+   - Native compiler compile-only for the dependent C file succeeds: `./target/release/rustcc -c tests/tests/chapter_16/valid/chars/push_arg_on_page_boundary.c` -> exit 0 and object produced.
+
+6. Forbidden bridge scan:
+   Command: `rg "gcc_array_subset_assembly|source\\.contains\\(\\\"\\[|-std=c17|system_c_to_assembly|compile_with_system_cc_frontend|sanitize_system_assembly" src; printf 'bridge_scan_status=%s\n' $?`
+   Result: PASS / no matches (`bridge_scan_status=1`, ripgrep no-match exit).
+
+7. Formatting:
+   Command: cargo fmt -- --check
+   Result: PASS
+
+8. LSP diagnostics:
+   Command: mcp__lsp.diagnostics on each modified Rust file
+   Result: PASS (`No diagnostics found` for each modified file). Directory-level diagnostic request timed out, so per-file diagnostics and cargo build/test were used.
+
+Manual QA:
+1. Acceptance char literal:
+   Source: `int main(void) { char c = 'A'; return c; }`
+   Command: compile with `./target/release/rustcc`, run produced binary.
+   Result: exit status 65.
+
+2. Acceptance string literal indexing:
+   Source: `int main(void) { char *s = "hello"; return s[0]; }`
+   Command: compile with `./target/release/rustcc`, run produced binary.
+   Result: exit status 104.
+
+3. Native stage probe:
+   Command: `./target/release/rustcc --tacky string_accept.c`
+   Result: output contains `GetAddress { src: "string.0" }`, `Load` of `Byte`, `SignExtend` to `Int`, and `static_constants` with bytes `[104, 101, 108, 108, 111, 0]`.
+
+Additional probes/fixes during implementation:
+- `valid/chars/access_through_char_pointer` -> exit 0 after byte load/store fixes.
+- `valid/chars/return_char` -> exit 0 after byte return/call result fixes.
+- `valid/chars/char_expressions` -> exit 0 after byte integer promotion and pointer-minus-byte fixes.
+- `valid/chars/common_type` -> exit 0 after byte-to-double sign-extension fixes.
+- `valid/chars/convert_by_assignment` -> exit 0 after byte/double and char argument conversion fixes.
+- `valid/chars/explicit_casts` -> exit 0 after cast conversion fixes; assembler warns about expected truncation `0x12c shortened to 0x2c`.
+- `valid/chars/static_initializers` -> exit 0 after static char initializer truncation fixes.
+- `valid/strings_as_initializers/terminating_null_bytes` -> exit 0 after string initializer/static bytes support.
+
+Review-work / audit evidence:
+- QA subagent: PASS for manual compiler scenarios; harness blocked only by missing `data_on_page_boundary_linux.s`; artifacts under `.omo/evidence/task-44-ch16-qa/`.
+- Security subagent: PASS, no bridge/host frontend, no filesystem/network additions, no secrets, no test harness weakening.
+- Context miner: INCONCLUSIVE/fixture blocker; confirmed repo lacks the page-boundary assembly fixture required by test metadata.
+- Gate reviewer: initially FAIL only because explicit code-review/slop artifact was missing; artifact added at `.omo/evidence/task-44-ch16-code-review.txt`.
+- Code-review subagent remained silent after two bounded waits; local code review/slop artifact records no source blockers.
+
+Risks / known blockers:
+- Chapter 16 latest-only cannot be fully green in this checkout because the test suite references missing fixture `tests/tests/chapter_16/valid/chars/data_on_page_boundary_linux.s`. I did not modify tests/harness or add the fixture because the task explicitly forbade test/harness changes and requested native compiler implementation.
+- Existing compiler phase files are large; this task kept mirror-style, narrow edits in existing modules to avoid broad refactor risk.
+- No unsupported C features were intentionally added.
+
+Follow-up: byte stack argument page-boundary fix
+Date: 2026-07-08
+Problem after fixture restore:
+- Restored fixture: `tests/tests/chapter_16/valid/chars/data_on_page_boundary_linux.s` places `zed` as the last byte of a page.
+- Official gate reached real product failure: `valid/chars/push_arg_on_page_boundary` expected 1, got -11 (segfault).
+- Root cause: stack-passed byte arguments used generic `pushq <memory operand>`, causing an 8-byte read from a one-byte `char` object at page end.
+
+Fix:
+- Updated `src/codegen/codegen.rs` `lower_call` stack-argument lowering.
+- For `OperandType::Byte`, emit `movsbl src, %r10d` followed by `pushq %r10`.
+- For `OperandType::UByte`, emit `movzbl src, %r10d` followed by `pushq %r10`.
+- Non-byte stack arguments keep the existing `pushq` path.
+- This keeps ABI stack slots 8 bytes wide while ensuring byte source operands are read with byte-width instructions only.
+
+Follow-up probe:
+- Command: `./target/release/rustcc -S tests/tests/chapter_16/valid/chars/push_arg_on_page_boundary.c && rg -n "pushq|movsbl|movzbl|call" tests/tests/chapter_16/valid/chars/push_arg_on_page_boundary.s`
+- Result excerpt:
+  - `movsbl zed(%rip), %r10d`
+  - `pushq %r10`
+  - `call foo`
+- Manual link/run with restored fixture:
+  - `./target/release/rustcc -c tests/tests/chapter_16/valid/chars/push_arg_on_page_boundary.c`
+  - `gcc -D SUPPRESS_WARNINGS tests/tests/chapter_16/valid/chars/push_arg_on_page_boundary.o tests/tests/chapter_16/valid/chars/data_on_page_boundary_linux.s -o tests/tests/chapter_16/valid/chars/push_arg_on_page_boundary`
+  - `tests/tests/chapter_16/valid/chars/push_arg_on_page_boundary` -> exit status 1 (expected)
+
+Follow-up verification:
+1. cargo build --release
+   Result: PASS (`Finished release profile [optimized] target(s)`).
+
+2. cargo test --release
+   Result: PASS (`test result: ok. 10 passed; 0 failed`).
+
+3. ./tests/test_compiler ./target/release/rustcc --chapter 16 --latest-only
+   Result: PASS (`Ran 72 tests ... OK`).
+
+4. ./tests/test_compiler ./target/release/rustcc --chapter 15 --latest-only
+   Result: PASS (`Ran 83 tests ... OK`).
+
+5. ./tests/test_compiler ./target/release/rustcc --chapter 14 --latest-only
+   Result: PASS (`Ran 53 tests ... OK`).
+
+6. cargo fmt -- --check
+   Result: PASS.
+
+7. LSP diagnostics
+   Command: `mcp__lsp.diagnostics` on `/home/mei/projects/rustcc/src/codegen/codegen.rs`
+   Result: PASS (`No diagnostics found`).
+
+8. Forbidden bridge scan:
+   Command: `rg "gcc_array_subset_assembly|source\\.contains\\(\\\"\\[|-std=c17|system_c_to_assembly|compile_with_system_cc_frontend|sanitize_system_assembly" src; printf 'bridge_scan_status=%s\n' $?`
+   Result: PASS / no matches (`bridge_scan_status=1`).
+
+Follow-up risk:
+- The fix is intentionally narrow to byte stack arguments, matching the restored Chapter 16 ABI failure. Broader stack argument canonicalization for all narrow integer memory operands can be considered later, but was not required to keep Chapter 14-16 gates green.

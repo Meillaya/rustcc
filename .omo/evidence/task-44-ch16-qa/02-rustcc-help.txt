@@ -1,0 +1,4 @@
+# rustcc help
+Surface: CLI
+Invocation: ./target/release/rustcc --help
+usage: rustcc [--lex|--parse|--validate|--tacky|--codegen|-S|-c] [options] <input.c>

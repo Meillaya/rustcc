@@ -116,6 +116,12 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompilerArtifact
         .iter()
         .map(|v| v.name.clone())
         .collect();
+    global_names.extend(
+        optimized_tacky
+            .static_constants
+            .iter()
+            .map(|constant| constant.name.clone()),
+    );
     for item in &typed_program.program.top_level_items {
         if let crate::ast::TopLevelItem::Variable(var) = item {
             global_names.insert(var.name.clone());

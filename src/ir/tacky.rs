@@ -40,6 +40,8 @@ pub enum OperandType {
     Int,
     /// 32-bit unsigned integer.
     UInt,
+    Byte,
+    UByte,
     /// 64-bit signed integer (book `Quadword`); used for `long` and pointers.
     Long,
     /// 64-bit unsigned integer.
@@ -55,6 +57,7 @@ impl OperandType {
     /// Size in bytes — used by `replace_pseudos` to size stack slots.
     pub fn size(self) -> i64 {
         match self {
+            OperandType::Byte | OperandType::UByte => 1,
             OperandType::Int | OperandType::UInt => 4,
             OperandType::Long | OperandType::ULong | OperandType::Double => 8,
             OperandType::ByteArray { size } => size,
@@ -70,7 +73,10 @@ impl OperandType {
 
     /// True when the operand is an unsigned integer.
     pub fn is_unsigned(self) -> bool {
-        matches!(self, OperandType::UInt | OperandType::ULong)
+        matches!(
+            self,
+            OperandType::UInt | OperandType::ULong | OperandType::UByte
+        )
     }
 }
 
@@ -296,6 +302,7 @@ pub struct TackyFunction {
 pub struct TackyProgram {
     pub functions: Vec<TackyFunction>,
     pub static_variables: Vec<TackyStaticVariable>,
+    pub static_constants: Vec<TackyStaticConstant>,
 }
 
 /// Static initializer carried by a file-scope variable declaration.
@@ -317,6 +324,12 @@ pub struct TackyStaticVariable {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct TackyStaticConstant {
+    pub name: String,
+    pub bytes: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum TackyStaticInit {
     Int(i64),
     /// Chapter 11: 64-bit static initializer.  Mirrors the
@@ -325,6 +338,9 @@ pub enum TackyStaticInit {
     /// Chapter 13: 64-bit IEEE-754 double constant for a file-scope
     /// `static double x = 3.14;` initializer.
     Double(f64),
+    Char(u8),
+    StringBytes(Vec<u8>),
+    Pointer(String),
     Aggregate(Vec<TackyStaticInit>),
     /// Placeholder so future chapters can extend the IR without changing
     /// the variant set the lowerer / codegen pre-commit to.
