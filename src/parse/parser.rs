@@ -66,9 +66,12 @@ impl Parser {
     /// `nqcc2/lib/parse.ml` `parse_function_or_variable_declaration`
     /// (~lines 798-823) for chapter-10 surface.
     fn parse_top_level_item(&mut self) -> Result<TopLevelItem> {
-        let storage = self.parse_optional_storage_class_top_level()?;
-        let ty = self.parse_type_specifier()?;
-        let storage = self.combine_storage_class(storage)?;
+        // Chapter 11: storage-class specifiers may appear in any
+        // order relative to the type specifiers (`static int long`,
+        // `int static long`, `long int static`).  Loop until
+        // we've consumed both classes of tokens, accumulating the
+        // storage class.
+        let (ty, storage) = self.parse_specifiers_interleaved()?;
         let name = self.expect_identifier("function or variable name")?;
         if self.check(&TokenKind::OpenParen) {
             self.current += 1;
@@ -113,6 +116,56 @@ impl Parser {
                 storage,
             }))
         }
+    }
+
+    /// Chapter 11 helper: consume a sequence of type specifiers
+    /// (`int` / `long`) and storage-class specifiers (`static` /
+    /// `extern`) in any order, returning the resolved `Type` and
+    /// `StorageClass`.  Rejects a duplicate storage class.
+    fn parse_specifiers_interleaved(&mut self) -> Result<(Type, StorageClass)> {
+        let mut saw_int = false;
+        let mut is_long = false;
+        let mut storage = StorageClass::Auto;
+        let mut had_storage = false;
+        loop {
+            match self.peek().kind {
+                TokenKind::Int => {
+                    if saw_int {
+                        bail!("parse error: duplicate 'int' in type specifier");
+                    }
+                    saw_int = true;
+                    self.current += 1;
+                }
+                TokenKind::Long => {
+                    is_long = true;
+                    self.current += 1;
+                }
+                TokenKind::Static => {
+                    if had_storage {
+                        bail!("parse error: multiple storage-class specifiers in declaration");
+                    }
+                    storage = StorageClass::Static;
+                    had_storage = true;
+                    self.current += 1;
+                }
+                TokenKind::Extern => {
+                    if had_storage {
+                        bail!("parse error: multiple storage-class specifiers in declaration");
+                    }
+                    storage = StorageClass::Extern;
+                    had_storage = true;
+                    self.current += 1;
+                }
+                _ => break,
+            }
+        }
+        if !saw_int && !is_long {
+            bail!(
+                "parse error: expected a type specifier ('int' or 'long'), found {:?}",
+                self.peek().kind
+            );
+        }
+        Ok((if is_long { Type::Long } else { Type::Int }, storage))
     }
 
     /// Parse an optional storage-class specifier at the start of a
@@ -223,22 +276,17 @@ impl Parser {
         Ok(params)
     }
 
-fn parse_block_item(&mut self) -> Result<BlockItem> {
+    fn parse_block_item(&mut self) -> Result<BlockItem> {
         // Chapter 9 + 10: a block-level declaration can be
         //   [static|extern] int NAME ...
         //   int [static|extern] NAME ...   (type-before-storage-class)
         // Chapter 11 widens the type to `int` or `long` (any order).
-        let storage_prefix = self.parse_optional_storage_class()?;
-        if self.peek().kind == TokenKind::Int || self.peek().kind == TokenKind::Long {
-            let ty = self.parse_type_specifier()?;
-            let storage_suffix = self.parse_optional_storage_class()?;
-            let storage = if storage_prefix == StorageClass::Auto {
-                storage_suffix
-            } else if storage_suffix == StorageClass::Auto {
-                storage_prefix
-            } else {
-                bail!("parse error: multiple storage-class specifiers in declaration");
-            };
+        if self.peek().kind == TokenKind::Int
+            || self.peek().kind == TokenKind::Long
+            || self.peek().kind == TokenKind::Static
+            || self.peek().kind == TokenKind::Extern
+        {
+            let (ty, storage) = self.parse_specifiers_interleaved()?;
             if let TokenKind::Identifier(_) = self.peek().kind {
                 let name = self.expect_identifier("function or variable name")?;
                 if self.check(&TokenKind::OpenParen) {
@@ -271,15 +319,6 @@ fn parse_block_item(&mut self) -> Result<BlockItem> {
             }
             bail!(
                 "parse error: expected identifier after type specifier, found {:?}",
-                self.peek().kind
-            );
-        }
-        // No type specifier here: if a storage class was present but
-        // `int`/`long` is missing, that's a malformed declaration.
-        // Otherwise this is a plain statement.
-        if storage_prefix != StorageClass::Auto {
-            bail!(
-                "parse error: expected a type specifier after storage-class specifier, found {:?}",
                 self.peek().kind
             );
         }
@@ -581,6 +620,28 @@ fn parse_block_item(&mut self) -> Result<BlockItem> {
             }
             TokenKind::OpenParen => {
                 self.current += 1;
+                // Chapter 11: `(T) expr` cast.  If the token after
+                // `(` is a type specifier, parse it as a cast; the
+                // closing `)` and the casted expression follow.
+                if self.peek().kind == TokenKind::Int || self.peek().kind == TokenKind::Long {
+                    let target_type = self.parse_type_specifier()?;
+                    self.expect_exact(&TokenKind::CloseParen, "')' after cast type")?;
+                    let inner = self.parse_unary_expr()?;
+                    let mut expr = Expr::Cast {
+                        target_type,
+                        expr: Box::new(inner),
+                    };
+                    loop {
+                        if self.match_exact(&TokenKind::PlusPlus) {
+                            expr = Expr::PostInc(Box::new(expr));
+                        } else if self.match_exact(&TokenKind::MinusMinus) {
+                            expr = Expr::PostDec(Box::new(expr));
+                        } else {
+                            break;
+                        }
+                    }
+                    return Ok(expr);
+                }
                 let inner = self.parse_expr()?;
                 self.expect_exact(&TokenKind::CloseParen, "')'")?;
                 let mut expr = Expr::Paren(Box::new(inner));

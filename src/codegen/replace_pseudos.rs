@@ -13,25 +13,33 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
 
-use crate::codegen::assembly::{AsmProgram, Instr, Operand, Reg, TopLevel};
+use crate::codegen::assembly::{AsmProgram, BinaryOpInstr, Instr, Operand, Reg, TopLevel};
+use crate::ir::tacky::{OperandType, TypeEnv};
 
 struct ReplaceState {
     stack_size: i32,
     pseudos: HashMap<String, i32>,
+    type_env: TypeEnv,
 }
 
 impl ReplaceState {
-    fn new() -> Self {
+    fn new(type_env: &TypeEnv) -> Self {
         Self {
             stack_size: 0,
             pseudos: HashMap::new(),
+            type_env: type_env.clone(),
         }
     }
 
     fn resolve(&mut self, name: &str) -> Operand {
+        let size = self
+            .type_env
+            .get(name)
+            .map(|t| t.size())
+            .unwrap_or(OperandType::Int.size()) as i32;
         let offset = *self.pseudos.entry(name.to_string()).or_insert_with(|| {
-            let current = -(self.stack_size + 4);
-            self.stack_size += 4;
+            let current = -(self.stack_size + size);
+            self.stack_size += size;
             current
         });
         Operand::Stack(offset)
@@ -69,27 +77,92 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
                 dst,
             },
         ],
-        Instr::BinaryOp {
-            op,
+        // Chapter 11: same split for the 64-bit `movq`.
+        Instr::Movq {
             src: src @ (Operand::Stack(_) | Operand::Data(_)),
             dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
         } => vec![
-            Instr::Mov {
+            Instr::Movq {
                 src,
                 dst: Operand::Reg(Reg::R10),
             },
-            Instr::BinaryOp {
-                op,
+            Instr::Movq {
                 src: Operand::Reg(Reg::R10),
                 dst,
             },
         ],
+        // Chapter 11: `movslq` requires a register destination
+        // (x86-64 forbids memory destinations for sign-extending
+        // moves).  Route through `%r10` whenever the destination is
+        // a stack slot or a RIP-relative data reference.
+        Instr::Movsx { src, dst: dst @ (Operand::Stack(_) | Operand::Data(_)) } => vec![
+            Instr::Movsx {
+                src,
+                dst: Operand::Reg(Reg::R10),
+            },
+            Instr::Movq {
+                src: Operand::Reg(Reg::R10),
+                dst,
+            },
+        ],
+        Instr::BinaryOp {
+            op,
+            src: src @ (Operand::Stack(_) | Operand::Data(_)),
+            dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
+        } => {
+            // Chapter 11: 64-bit binary ops (AddQ, SubQ, MultQ,
+            // BitAnd as longword, etc.) need a 64-bit move to the
+            // scratch register, not the default 32-bit `movl`.  We
+            // route the wide class through `Movq` and the narrow
+            // class through `Mov`.
+            let is_wide = matches!(
+                op,
+                BinaryOpInstr::AddQ
+                    | BinaryOpInstr::SubQ
+                    | BinaryOpInstr::MultQ
+                    | BinaryOpInstr::DivQ
+                    | BinaryOpInstr::RemQ
+            );
+            let (pre_mov, post_op) = if is_wide {
+                (
+                    Instr::Movq {
+                        src,
+                        dst: Operand::Reg(Reg::R10),
+                    },
+                    Instr::BinaryOp {
+                        op,
+                        src: Operand::Reg(Reg::R10),
+                        dst,
+                    },
+                )
+            } else {
+                (
+                    Instr::Mov {
+                        src,
+                        dst: Operand::Reg(Reg::R10),
+                    },
+                    Instr::BinaryOp {
+                        op,
+                        src: Operand::Reg(Reg::R10),
+                        dst,
+                    },
+                )
+            };
+            vec![pre_mov, post_op]
+        }
         Instr::Idiv(src @ (Operand::Stack(_) | Operand::Data(_))) => vec![
             Instr::Mov {
                 src,
                 dst: Operand::Reg(Reg::R10),
             },
             Instr::Idiv(Operand::Reg(Reg::R10)),
+        ],
+        Instr::Idivq(src @ (Operand::Stack(_) | Operand::Data(_))) => vec![
+            Instr::Movq {
+                src,
+                dst: Operand::Reg(Reg::R10),
+            },
+            Instr::Idivq(Operand::Reg(Reg::R10)),
         ],
         // Chapter 4 + 10: `cmpl mem, mem` is invalid; route the
         // right operand through a scratch register.
@@ -102,6 +175,20 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
                 dst: Operand::Reg(Reg::R10),
             },
             Instr::Cmp {
+                left,
+                right: Operand::Reg(Reg::R10),
+            },
+        ],
+        // Chapter 11: same split for the 64-bit `cmpq`.
+        Instr::Cmpq {
+            left,
+            right: right @ (Operand::Stack(_) | Operand::Data(_)),
+        } => vec![
+            Instr::Movq {
+                src: right,
+                dst: Operand::Reg(Reg::R10),
+            },
+            Instr::Cmpq {
                 left,
                 right: Operand::Reg(Reg::R10),
             },
@@ -120,6 +207,14 @@ fn replace_in_instruction(
             src: replace_operand(state, src, globals),
             dst: replace_operand(state, dst, globals),
         },
+        Instr::Movq { src, dst } => Instr::Movq {
+            src: replace_operand(state, src, globals),
+            dst: replace_operand(state, dst, globals),
+        },
+        Instr::Movabsq { src, dst } => Instr::Movabsq {
+            src,
+            dst: replace_operand(state, dst, globals),
+        },
         Instr::MovZeroExtend { src, dst } => Instr::MovZeroExtend {
             src: replace_operand(state, src, globals),
             dst: replace_operand(state, dst, globals),
@@ -134,7 +229,12 @@ fn replace_in_instruction(
             dst: replace_operand(state, dst, globals),
         },
         Instr::Idiv(src) => Instr::Idiv(replace_operand(state, src, globals)),
+        Instr::Idivq(src) => Instr::Idivq(replace_operand(state, src, globals)),
         Instr::Cmp { left, right } => Instr::Cmp {
+            left: replace_operand(state, left, globals),
+            right: replace_operand(state, right, globals),
+        },
+        Instr::Cmpq { left, right } => Instr::Cmpq {
             left: replace_operand(state, left, globals),
             right: replace_operand(state, right, globals),
         },
@@ -146,7 +246,9 @@ fn replace_in_instruction(
         Instr::AllocateStack(_) => instr,
         Instr::DeallocateStack(_) => instr,
         Instr::Jmp(_) | Instr::JmpCC { .. } | Instr::Label(_) => instr,
-        Instr::Call(_) | Instr::Pop(_) | Instr::Ret | Instr::Cdq => instr,
+        Instr::Call(_) | Instr::Pop(_) | Instr::Ret | Instr::Cdq | Instr::Cqo | Instr::Cltq => {
+            instr
+        }
         Instr::Movsx { src, dst } => Instr::Movsx {
             src: replace_operand(state, src, globals),
             dst: replace_operand(state, dst, globals),
@@ -178,8 +280,9 @@ pub fn replace_pseudos(
                 name,
                 global,
                 instructions,
+                type_env,
             } => {
-                let mut state = ReplaceState::new();
+                let mut state = ReplaceState::new(&type_env);
                 let mut fixed: Vec<Instr> = Vec::new();
                 for instr in instructions {
                     fixed.extend(replace_in_instruction(&mut state, instr, globals));
@@ -201,6 +304,7 @@ pub fn replace_pseudos(
                     name,
                     global,
                     instructions: ordered,
+                    type_env,
                 }
             }
             other => other,

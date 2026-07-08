@@ -128,7 +128,27 @@ pub enum Instr {
         src: Operand,
         dst: Operand,
     },
-    /// Sign-extending move (e.g. int -> long).
+    /// Chapter 11: 64-bit variant of `Mov`.  Emitted as `movq`; the
+    /// emitter uses the 64-bit register names (`%rax` / `%rdi` /
+    /// ...) when formatting the operands.
+    Movq {
+        src: Operand,
+        dst: Operand,
+    },
+    /// Chapter 11: 64-bit immediate-to-register move for values
+    /// that don't fit in a 32-bit sign-extended immediate
+    /// (`movq imm32, mem` is only valid when the immediate fits in
+    /// 32 bits).  Always lowered to a register destination and the
+    /// `movabsq` mnemonic; the emitter prints `movq` for short
+    /// immediates so this variant is the long-immediate escape
+    /// hatch.  Mirrors the OCaml `Mov (Quadword, Imm, Reg)` arm in
+    /// `nqcc2/lib/backend/codegen.ml`.
+    Movabsq {
+        src: i64,
+        dst: Operand,
+    },
+    /// Sign-extending move (e.g. int -> long).  Emitted as `movslq`
+    /// (sign-extend 32 -> 64 with sign extension).
     Movsx {
         src: Operand,
         dst: Operand,
@@ -146,13 +166,28 @@ pub enum Instr {
         left: Operand,
         right: Operand,
     },
+    /// Chapter 11: 64-bit variant of `Cmp`.  Emitted as `cmpq`.
+    Cmpq {
+        left: Operand,
+        right: Operand,
+    },
     BinaryOp {
         op: BinaryOpInstr,
         src: Operand,
         dst: Operand,
     },
     Idiv(Operand),
+    /// Chapter 11: 64-bit variant of `Idiv`.  Pairs with `Cqo`.
+    Idivq(Operand),
     Cdq,
+    /// Chapter 11: sign-extend %rax into %rdx:%rax for 64-bit
+    /// signed division.  Pairs with `Idivq`; the emitter prints
+    /// `cqo`.
+    Cqo,
+    /// Chapter 11: sign-extend %eax into %rax (`cltq` / `cdqe`).
+    /// Used when an int result in %eax participates in a 64-bit
+    /// operation (e.g. the long-side operand of `idivq`).
+    Cltq,
     Unary {
         op: UnaryOpInstr,
         operand: Operand,
@@ -214,6 +249,11 @@ pub enum TopLevel {
         name: String,
         global: bool,
         instructions: Vec<Instr>,
+        /// Chapter 11: per-function map from pseudo name to
+        /// operand width (`Int` -> 4-byte slot, `Long` -> 8-byte
+        /// slot).  Populated by the codegen pass and consumed by
+        /// `replace_pseudos` to size the stack frame correctly.
+        type_env: crate::ir::tacky::TypeEnv,
     },
     StaticVariable {
         name: String,

@@ -283,11 +283,18 @@ pub struct TackyStaticVariable {
     pub name: String,
     pub init: TackyStaticInit,
     pub global: bool,
+    /// Chapter 11: operand width for the static variable.  `Int`
+    /// statics are emitted as `.long` (4 bytes) and `Long` statics
+    /// as `.quad` (8 bytes).
+    pub ty: OperandType,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TackyStaticInit {
     Int(i64),
+    /// Chapter 11: 64-bit static initializer.  Mirrors the
+    /// assembly `StaticInit::Long` variant.
+    Long(i64),
     /// Placeholder so future chapters can extend the IR without changing
     /// the variant set the lowerer / codegen pre-commit to.
     Zero,

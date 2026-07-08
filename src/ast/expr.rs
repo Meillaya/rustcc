@@ -5,6 +5,7 @@
 //! explicitly.
 
 use super::operator::{AssignOp, BinaryOp, UnaryOp};
+use super::ty::Type;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Expr {
@@ -16,6 +17,13 @@ pub(crate) enum Expr {
     /// without truncation.
     LongConstant(i64),
     Var(String),
+    /// Chapter 11: explicit cast `(T) expr`.  The lowerer turns
+    /// this into `SignExtend` (int -> long) or `Truncate`
+    /// (long -> int).  Mirrors `Tacky.Cast` in the OCaml reference.
+    Cast {
+        target_type: Type,
+        expr: Box<Expr>,
+    },
     Paren(Box<Expr>),
     /// A unary operation. Carries the operator kind via [`UnaryOp`] so the
     /// parser, lowerer, and codegen can dispatch on a single field.  Covers

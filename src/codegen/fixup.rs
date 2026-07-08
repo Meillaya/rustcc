@@ -22,7 +22,7 @@
 
 use anyhow::Result;
 
-use crate::codegen::assembly::{AsmProgram, Instr, Operand, Reg, TopLevel};
+use crate::codegen::assembly::{AsmProgram, BinaryOpInstr, Instr, Operand, Reg, TopLevel};
 
 /// Split one two-operand x86-64 form into a register-routed pair.
 /// Returns a `Vec` because most rules emit exactly one move + one
@@ -43,22 +43,63 @@ fn split_mem_to_mem(instr: Instr) -> Vec<Instr> {
                 dst,
             },
         ],
-        // `binaryOp op mem, mem` is invalid — route through %r10.
-        Instr::BinaryOp {
-            op,
+        // Chapter 11: same split for `movq mem, mem`.
+        Instr::Movq {
             src: src @ (Operand::Memory(..) | Operand::Stack(_)),
             dst: dst @ (Operand::Memory(..) | Operand::Stack(_)),
         } => vec![
-            Instr::Mov {
+            Instr::Movq {
                 src,
                 dst: Operand::Reg(Reg::R10),
             },
-            Instr::BinaryOp {
-                op,
+            Instr::Movq {
                 src: Operand::Reg(Reg::R10),
                 dst,
             },
         ],
+        // `binaryOp op mem, mem` is invalid — route through %r10.
+        // Chapter 11: the 64-bit ops (AddQ/SubQ/MultQ/DivQ/RemQ)
+        // require a 64-bit scratch move, not the default 32-bit.
+        Instr::BinaryOp {
+            op,
+            src: src @ (Operand::Memory(..) | Operand::Stack(_)),
+            dst: dst @ (Operand::Memory(..) | Operand::Stack(_)),
+        } => {
+            let is_wide = matches!(
+                op,
+                BinaryOpInstr::AddQ
+                    | BinaryOpInstr::SubQ
+                    | BinaryOpInstr::MultQ
+                    | BinaryOpInstr::DivQ
+                    | BinaryOpInstr::RemQ
+            );
+            let (pre_mov, post_op) = if is_wide {
+                (
+                    Instr::Movq {
+                        src,
+                        dst: Operand::Reg(Reg::R10),
+                    },
+                    Instr::BinaryOp {
+                        op,
+                        src: Operand::Reg(Reg::R10),
+                        dst,
+                    },
+                )
+            } else {
+                (
+                    Instr::Mov {
+                        src,
+                        dst: Operand::Reg(Reg::R10),
+                    },
+                    Instr::BinaryOp {
+                        op,
+                        src: Operand::Reg(Reg::R10),
+                        dst,
+                    },
+                )
+            };
+            vec![pre_mov, post_op]
+        }
         // `cmpl mem, mem` is invalid — route through %r10.
         Instr::Cmp {
             left,
@@ -73,6 +114,20 @@ fn split_mem_to_mem(instr: Instr) -> Vec<Instr> {
                 right: Operand::Reg(Reg::R10),
             },
         ],
+        // Chapter 11: same split for `cmpq mem, mem`.
+        Instr::Cmpq {
+            left,
+            right: right @ (Operand::Memory(..) | Operand::Stack(_)),
+        } => vec![
+            Instr::Movq {
+                src: right,
+                dst: Operand::Reg(Reg::R10),
+            },
+            Instr::Cmpq {
+                left,
+                right: Operand::Reg(Reg::R10),
+            },
+        ],
         // `idivl mem` is invalid — route through %r10.
         Instr::Idiv(src @ (Operand::Memory(..) | Operand::Stack(_))) => vec![
             Instr::Mov {
@@ -80,6 +135,14 @@ fn split_mem_to_mem(instr: Instr) -> Vec<Instr> {
                 dst: Operand::Reg(Reg::R10),
             },
             Instr::Idiv(Operand::Reg(Reg::R10)),
+        ],
+        // Chapter 11: same split for `idivq mem`.
+        Instr::Idivq(src @ (Operand::Memory(..) | Operand::Stack(_))) => vec![
+            Instr::Movq {
+                src,
+                dst: Operand::Reg(Reg::R10),
+            },
+            Instr::Idivq(Operand::Reg(Reg::R10)),
         ],
         // Anything else passes through unchanged.
         other => vec![other],
@@ -104,6 +167,7 @@ fn fixup_function(func: TopLevel) -> TopLevel {
         name,
         global,
         instructions,
+        type_env,
     } = func
     else {
         return func;
@@ -113,6 +177,7 @@ fn fixup_function(func: TopLevel) -> TopLevel {
         name,
         global,
         instructions: fixed,
+        type_env,
     }
 }
 

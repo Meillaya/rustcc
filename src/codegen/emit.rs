@@ -181,6 +181,19 @@ fn format_shift_src(op: BinaryOpInstr, src: &Operand) -> Result<String> {
     }
 }
 
+/// Like [`format_shift_src`] but uses the quadword register-name
+/// table; used by 64-bit binary ops to pick `%rcx` instead of
+/// `%ecx` for the shift count (and `%cl` instead of `%cl` for the
+/// count — both 32- and 64-bit shifts use the same `%cl`).
+fn format_shift_quad(op: BinaryOpInstr, src: &Operand) -> Result<String> {
+    match (op, src) {
+        (BinaryOpInstr::BitShiftLeft | BinaryOpInstr::BitShiftRight, Operand::Reg(Reg::CX)) => {
+            Ok("%cl".to_string())
+        }
+        _ => format_quad_operand(src),
+    }
+}
+
 fn format_unary_op(op: UnaryOpInstr) -> &'static str {
     match op {
         UnaryOpInstr::Neg => "negl",
@@ -230,6 +243,20 @@ fn format_binary_op(op: BinaryOpInstr) -> &'static str {
     }
 }
 
+/// Returns true when the binary op is a 64-bit variant
+/// (`addq` / `subq` / `imulq` / `idivq`).  Used by the emitter to
+/// pick the quadword register-name table for the operands.
+fn is_wide_binary_op(op: BinaryOpInstr) -> bool {
+    matches!(
+        op,
+        BinaryOpInstr::AddQ
+            | BinaryOpInstr::SubQ
+            | BinaryOpInstr::MultQ
+            | BinaryOpInstr::DivQ
+            | BinaryOpInstr::RemQ
+    )
+}
+
 fn format_instruction(instr: &Instr) -> Result<String> {
     match instr {
         Instr::Mov { src, dst } => Ok(format!(
@@ -237,24 +264,53 @@ fn format_instruction(instr: &Instr) -> Result<String> {
             format_operand(src)?,
             format_operand(dst)?
         )),
+        Instr::Movq { src, dst } => Ok(format!(
+            "movq {}, {}",
+            format_quad_operand(src)?,
+            format_quad_operand(dst)?
+        )),
+        Instr::Movabsq { src, dst } => Ok(format!(
+            "movabsq ${}, {}",
+            src,
+            format_quad_operand(dst)?
+        )),
         Instr::MovZeroExtend { src, dst } => Ok(format!(
             "movzbl {}, {}",
             format_operand(src)?,
             format_operand(dst)?
+        )),
+Instr::Movsx { src, dst } => Ok(format!(
+            "movslq {}, {}",
+            format_operand(src)?,
+            format_quad_operand(dst)?
         )),
         Instr::Unary { op, operand } => Ok(format!(
             "{} {}",
             format_unary_op(*op),
             format_operand(operand)?
         )),
-        Instr::BinaryOp { op, src, dst } => Ok(format!(
-            "{} {}, {}",
-            format_binary_op(*op),
-            format_shift_src(*op, src)?,
-            format_operand(dst)?
-        )),
+        Instr::BinaryOp { op, src, dst } => {
+            // 64-bit binary ops (AddQ/SubQ/MultQ/DivQ/RemQ) use
+            // the quadword register-name table for the operands;
+            // 32-bit ops use the longword table.
+            let (src_str, dst_str) = if is_wide_binary_op(*op) {
+                (
+                    format_shift_quad(*op, src)?,
+                    format_quad_operand(dst)?,
+                )
+            } else {
+                (
+                    format_shift_src(*op, src)?,
+                    format_operand(dst)?,
+                )
+            };
+            Ok(format!("{} {}, {}", format_binary_op(*op), src_str, dst_str))
+        }
         Instr::Idiv(src) => Ok(format!("idivl {}", format_operand(src)?)),
+        Instr::Idivq(src) => Ok(format!("idivq {}", format_quad_operand(src)?)),
         Instr::Cdq => Ok("cdq".to_string()),
+        Instr::Cqo => Ok("cqo".to_string()),
+        Instr::Cltq => Ok("cltq".to_string()),
         Instr::AllocateStack(n) => Ok(format!("subq ${n}, %rsp")),
         Instr::DeallocateStack(n) => Ok(format!("addq ${n}, %rsp")),
         Instr::Push(src) => Ok(format!("pushq {}", format_quad_operand(src)?)),
@@ -265,6 +321,11 @@ fn format_instruction(instr: &Instr) -> Result<String> {
             "cmpl {}, {}",
             format_operand(right)?,
             format_operand(left)?
+        )),
+        Instr::Cmpq { left, right } => Ok(format!(
+            "cmpq {}, {}",
+            format_quad_operand(right)?,
+            format_quad_operand(left)?
         )),
         Instr::Jmp(label) => Ok(format!("jmp {label}")),
         Instr::JmpCC { cc, label } => Ok(format!("j{} {label}", format_cond_code(*cc))),
@@ -318,6 +379,7 @@ pub fn emit(program: &AsmProgram) -> Result<String> {
                 name,
                 global,
                 instructions,
+                type_env: _,
             } => format_function(name, *global, instructions)?,
             TopLevel::StaticVariable {
                 name,
@@ -361,20 +423,33 @@ fn format_static_variable(
         lines.push(".data".to_string());
         lines.push(format!(".align {alignment}"));
         lines.push(format!("{name}:"));
-        lines.push(format!("    .long {}", data_value(init)?));
+        // Chapter 11: 64-bit statics use `.quad` so the linker
+        // reserves 8 bytes; 32-bit statics keep `.long` (4 bytes).
+        match init {
+            crate::codegen::assembly::StaticInit::Long(n) => {
+                lines.push(format!("    .quad {n}"));
+            }
+            _ => {
+                lines.push(format!("    .long {}", data_value(init)?));
+            }
+        }
     }
     Ok(lines.join("\n"))
 }
 
 fn is_zero_init(init: &crate::codegen::assembly::StaticInit) -> bool {
     use crate::codegen::assembly::StaticInit;
-    matches!(init, StaticInit::Int(0) | StaticInit::Zero(_))
+    matches!(
+        init,
+        StaticInit::Int(0) | StaticInit::Long(0) | StaticInit::Zero(_)
+    )
 }
 
 fn zero_size(init: &crate::codegen::assembly::StaticInit) -> u32 {
     use crate::codegen::assembly::StaticInit;
     match init {
         StaticInit::Zero(n) => *n,
+        StaticInit::Long(_) => 8,
         StaticInit::Int(_) => 4,
         _ => 4,
     }
@@ -384,6 +459,7 @@ fn data_value(init: &crate::codegen::assembly::StaticInit) -> Result<i64> {
     use crate::codegen::assembly::StaticInit;
     match init {
         StaticInit::Int(n) => Ok(*n),
+        StaticInit::Long(n) => Ok(*n),
         other => Err(anyhow!(
             "emit chapter-10 does not yet emit non-int static initializer: {other:?}"
         )),

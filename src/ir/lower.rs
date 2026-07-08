@@ -56,7 +56,34 @@ fn type_to_operand_type(ty: Type) -> OperandType {
 pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
     let mut ctx = LowerCtx::new();
     let mut functions: Vec<TackyFunction> = Vec::new();
-    let mut globals: HashMap<String, (StorageClass, Option<Expr>)> = HashMap::new();
+    let mut globals: HashMap<
+        String,
+        (StorageClass, Option<Expr>, crate::ir::tacky::OperandType),
+    > = HashMap::new();
+    // Two-pass walk: gather file-scope variables first so each
+    // function can seed its type env with their declared widths.
+    for item in &ast.top_level_items {
+        if let TopLevelItem::Variable(var) = item {
+            merge_global_decl(var, &mut globals);
+        }
+    }
+    // Chapter 11: also seed the function signature table so
+    // `lower_call` can convert arguments to the parameter's
+    // declared width (SignExtend for int -> long, Truncate for
+    // long -> int).  Forward declarations and full definitions
+    // both count.
+    for item in &ast.top_level_items {
+        let (name, params): (String, Vec<crate::ast::VarDecl>) = match item {
+            TopLevelItem::Function(f) => (f.name.clone(), f.params.clone()),
+            TopLevelItem::Declaration(d) => (d.name.clone(), d.params.clone()),
+            _ => continue,
+        };
+        let param_tys: Vec<_> = params
+            .iter()
+            .map(|p| type_to_operand_type(p.ty))
+            .collect();
+        ctx.func_sigs.insert(name, param_tys);
+    }
     for item in &ast.top_level_items {
         match item {
             TopLevelItem::Function(func) => {
@@ -76,6 +103,12 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
                             type_to_operand_type(param.ty),
                         );
                     }
+                    // Also seed the env with file-scope variable
+                    // types so `Copy` / `Add` / etc. of a `long`
+                    // global pick the 64-bit instruction width.
+                    for (gname, (_sc, _init, gty)) in &globals {
+                        ctx.type_env.entry(gname.clone()).or_insert(*gty);
+                    }
                     let body = lower_block_items(body_items, &mut ctx)?;
                     let body = ensure_trailing_return(body);
                     ctx.current_function = None;
@@ -93,27 +126,38 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
                 // Forward declarations produce no TACKY; resolve already
                 // recorded the name in the global function table.
             }
-            TopLevelItem::Variable(var) => {
-                merge_global_decl(var, &mut globals);
+            TopLevelItem::Variable(_) => {
+                // Already collected in the first pass.
             }
         }
     }
     let mut static_variables: Vec<TackyStaticVariable> = globals
         .into_iter()
-        .map(|(name, (storage, init))| {
-            let global = matches!(storage, StorageClass::Extern | StorageClass::Auto);
+        .filter_map(|(name, (storage, init, ty))| {
+            // Chapter 9 / 10: an `extern` declaration at file scope
+            // is a *reference* to a definition provided elsewhere; it
+            // must NOT emit its own `.data` / `.bss` entry or the
+            // linker will see a duplicate symbol against the real
+            // definition.  Skip it here — the resolve pass already
+            // recorded the name in the global table so subsequent
+            // references still resolve.
+            if storage == StorageClass::Extern {
+                return None;
+            }
+            let global = matches!(storage, StorageClass::Auto);
             let init = match init {
                 Some(Expr::Constant(n)) => TackyStaticInit::Int(n),
-                Some(Expr::LongConstant(n)) => TackyStaticInit::Int(n),
+                Some(Expr::LongConstant(n)) => TackyStaticInit::Long(n),
                 None => TackyStaticInit::Int(0),
                 // Non-constant initializers rejected by resolve pass.
                 Some(_) => TackyStaticInit::Int(0),
             };
-            TackyStaticVariable {
+            Some(TackyStaticVariable {
                 name,
                 init,
                 global,
-            }
+                ty,
+            })
         })
         .collect();
     // Emit static variables in source order so tests read globals in
@@ -131,10 +175,13 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
 /// storage class and only adopts an initializer if the existing
 /// entry has none.  Mirrors the OCaml `Hashtbl.replace`-style
 /// dedup in `nqcc2/lib/symbols.ml`.
-fn merge_global_decl(var: &GlobalVarDecl, globals: &mut HashMap<String, (StorageClass, Option<Expr>)>) {
+fn merge_global_decl(
+    var: &GlobalVarDecl,
+    globals: &mut HashMap<String, (StorageClass, Option<Expr>, crate::ir::tacky::OperandType)>,
+) {
     let entry = globals
         .entry(var.name.clone())
-        .or_insert((var.storage, var.init.clone()));
+        .or_insert((var.storage, var.init.clone(), type_to_operand_type(var.ty)));
     if entry.1.is_none() && var.init.is_some() {
         entry.0 = var.storage;
         entry.1 = var.init.clone();
@@ -240,6 +287,14 @@ struct LowerCtx {
     /// long-typed constant values into the IR (each long constant
     /// gets a fresh `const.<n>` name and a matching env entry).
     const_counter: u32,
+    /// Chapter 11: program-wide function signature table mapping
+    /// `f -> [param_type, ...]`.  Populated from the
+    /// `TopLevelItem::Function` / `Declaration` items before any
+    /// function body is lowered; consulted by `lower_call` to
+    /// widen / narrow arguments to the parameter's declared
+    /// type.  Mirrors the OCaml `Symbols` table of parameter
+    /// types used by `typecheck.ml::typecheck_fun_call`.
+    func_sigs: HashMap<String, Vec<crate::ir::tacky::OperandType>>,
 }
 
 impl LowerCtx {
@@ -254,6 +309,7 @@ impl LowerCtx {
             current_function: None,
             type_env: HashMap::new(),
             const_counter: 0,
+            func_sigs: HashMap::new(),
         }
     }
 
@@ -762,6 +818,43 @@ fn lower_expr(expr: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)
         } => lower_conditional(condition, then_expr, else_expr, ctx),
         Expr::Binary { op, left, right } => lower_binary(*op, left, right, ctx),
         Expr::Call { name, args } => lower_call(name, args, ctx),
+        Expr::Cast { target_type, expr: inner } => {
+            // Chapter 11 explicit cast: `SignExtend` (int -> long)
+            // or `Truncate` (long -> int).  Other combinations
+            // (int -> int, long -> long) lower to a plain Copy.
+            let (mut instrs, src) = lower_expr(inner, ctx)?;
+            let src_ty = type_of_val(&src, ctx);
+            let dst_ty = type_to_operand_type(*target_type);
+            if src_ty == dst_ty {
+                return Ok((instrs, src));
+            }
+            let dst_name = if dst_ty == OperandType::Long {
+                ctx.fresh_typed_tmp(OperandType::Long)
+            } else {
+                ctx.fresh_typed_tmp(OperandType::Int)
+            };
+            match (src_ty, dst_ty) {
+                (OperandType::Int, OperandType::Long) => {
+                    instrs.push(Instruction::SignExtend {
+                        src: src.clone(),
+                        dst: dst_name.clone(),
+                    });
+                }
+                (OperandType::Long, OperandType::Int) => {
+                    instrs.push(Instruction::Truncate {
+                        src: src.clone(),
+                        dst: dst_name.clone(),
+                    });
+                }
+                _ => {
+                    instrs.push(Instruction::Copy {
+                        src: src.clone(),
+                        dst: dst_name.clone(),
+                    });
+                }
+            }
+            Ok((instrs, Val::Var(dst_name)))
+        }
     }
 }
 
@@ -785,13 +878,45 @@ fn lower_call(
 ) -> Result<(Vec<Instruction>, Val)> {
     let mut out: Vec<Instruction> = Vec::new();
     let mut arg_vals: Vec<Val> = Vec::with_capacity(args.len());
-    for arg in args {
+    // Chapter 11: when the called function's signature is known,
+    // convert each argument to the corresponding parameter's
+    // declared width.  An int passed to a long parameter is
+    // sign-extended; a long passed to an int parameter is
+    // truncated.  Mirrors the `convert_by_assignment` calls in
+    // OCaml `typecheck_fun_call`.
+    let param_tys: Option<Vec<crate::ir::tacky::OperandType>> =
+        ctx.func_sigs.get(name).cloned();
+    for (idx, arg) in args.iter().enumerate() {
         let (instrs, val) = lower_expr(arg, ctx)?;
         out.extend(instrs);
+        let val = if let Some(ref pts) = param_tys {
+            if let Some(&param_ty) = pts.get(idx) {
+                let arg_ty = type_of_val(&val, ctx);
+                if arg_ty == OperandType::Int && param_ty == OperandType::Long {
+                    let tmp = ctx.fresh_typed_tmp(OperandType::Long);
+                    out.push(Instruction::SignExtend {
+                        src: val,
+                        dst: tmp.clone(),
+                    });
+                    Val::Var(tmp)
+                } else if arg_ty == OperandType::Long && param_ty == OperandType::Int {
+                    let tmp = ctx.fresh_typed_tmp(OperandType::Int);
+                    out.push(Instruction::Truncate {
+                        src: val,
+                        dst: tmp.clone(),
+                    });
+                    Val::Var(tmp)
+                } else {
+                    val
+                }
+            } else {
+                val
+            }
+        } else {
+            val
+        };
         arg_vals.push(val);
     }
-    // Chapter 9: every call returns an int and the result is
-    // always consumed by the surrounding expression context.
     let dst_name = ctx.fresh_tmp();
     out.push(Instruction::Call {
         name: name.to_string(),
@@ -799,6 +924,39 @@ fn lower_call(
         dst: Some(dst_name.clone()),
     });
     Ok((out, Val::Var(dst_name)))
+}
+
+/// Lower a cast expression `(T) expr`.  Mirrors
+/// `nqcc2/lib/tacky_gen.ml` `emit_cast_expression`: when the inner
+/// type and target type differ in width, emit `SignExtend` (int ->
+/// long) or `Truncate` (long -> int); same-width casts degrade to a
+/// plain `Copy`.
+fn lower_cast(target_type: Type, inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)> {
+    let (mut instrs, inner_val) = lower_expr(inner, ctx)?;
+    let inner_ty = type_of_val(&inner_val, ctx);
+    let target_ty = type_to_operand_type(target_type);
+    let dst = ctx.fresh_typed_tmp(target_ty);
+    match (inner_ty, target_ty) {
+        (OperandType::Int, OperandType::Long) => {
+            instrs.push(Instruction::SignExtend {
+                src: inner_val,
+                dst: dst.clone(),
+            });
+        }
+        (OperandType::Long, OperandType::Int) => {
+            instrs.push(Instruction::Truncate {
+                src: inner_val,
+                dst: dst.clone(),
+            });
+        }
+        _ => {
+            instrs.push(Instruction::Copy {
+                src: inner_val,
+                dst: dst.clone(),
+            });
+        }
+    }
+    Ok((instrs, Val::Var(dst)))
 }
 
 fn lower_unary(
