@@ -1605,7 +1605,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   - [ ] `int main(void) { int a[3]; a[0] = 10; a[1] = 20; a[2] = 30; return a[0] + a[1] + a[2]; }` -> exit 60.
   - [ ] `./tests/test_compiler ./target/release/rustcc --chapter 15 --latest-only` green.
 
-- [ ] 43. W16-T2: Chapter 15 - gate verification + commit.
+- [x] 43. W16-T2: Chapter 15 - gate verification + commit.
 
   **What to do**: Run chapter 15 gate, update COACHING_LOG, commit.
 
