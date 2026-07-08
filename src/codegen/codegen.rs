@@ -300,8 +300,9 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
             // `movslq $imm, %reg` is rejected by some assemblers
             // ("operand type mismatch"); route immediates through a
             // 32-bit register first so the assembler sees a legal
-            // source operand.  Non-immediate sources pass through
-            // unchanged.
+            // source operand.  `movslq` also requires a register
+            // destination, so we stage through `%r10` and then move
+            // the result into the destination pseudo.
             let src_op = convert_val(src);
             match src_op {
                 Operand::Imm(n) => vec![
@@ -312,6 +313,10 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
                     Instr::Movsx {
                         src: Operand::Reg(Reg::R10),
                         dst: Operand::Reg(Reg::R10),
+                    },
+                    Instr::Movq {
+                        src: Operand::Reg(Reg::R10),
+                        dst: Operand::Pseudo(dst.clone()),
                     },
                 ],
                 _ => vec![Instr::Movsx {
