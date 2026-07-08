@@ -119,13 +119,16 @@ impl Parser {
     }
 
     /// Chapter 11 helper: consume a sequence of type specifiers
-    /// (`int` / `long`) and storage-class specifiers (`static` /
-    /// `extern`) in any order, returning the resolved `Type` and
-    /// `StorageClass`.  Rejects a duplicate storage class.
+    /// (`int` / `long` / `double`) and storage-class specifiers
+    /// (`static` / `extern`) in any order, returning the resolved
+    /// `Type` and `StorageClass`.  Rejects a duplicate storage
+    /// class and rejects mixing `double` with any other type
+    /// specifier (`unsigned double` is not a valid C type).
     fn parse_specifiers_interleaved(&mut self) -> Result<(Type, StorageClass)> {
         let mut saw_int = false;
         let mut is_long = false;
         let mut is_unsigned = false;
+        let mut is_double = false;
         let mut storage = StorageClass::Auto;
         let mut had_storage = false;
         loop {
@@ -151,6 +154,13 @@ impl Parser {
                     // proceed.
                     self.current += 1;
                 }
+                TokenKind::Double => {
+                    if is_double {
+                        bail!("parse error: duplicate 'double' in type specifier");
+                    }
+                    is_double = true;
+                    self.current += 1;
+                }
                 TokenKind::Static => {
                     if had_storage {
                         bail!("parse error: multiple storage-class specifiers in declaration");
@@ -170,13 +180,18 @@ impl Parser {
                 _ => break,
             }
         }
-        if !saw_int && !is_long && !is_unsigned {
+        if !saw_int && !is_long && !is_unsigned && !is_double {
             bail!(
-                "parse error: expected a type specifier ('int' / 'long' / 'unsigned' / 'signed'), found {:?}",
+                "parse error: expected a type specifier ('int' / 'long' / 'double' / 'unsigned' / 'signed'), found {:?}",
                 self.peek().kind
             );
         }
-        let ty = if is_long && is_unsigned {
+        if is_double && (is_long || is_unsigned || (saw_int && !is_double)) {
+            bail!("parse error: 'double' cannot be combined with other type specifiers");
+        }
+        let ty = if is_double {
+            Type::Double
+        } else if is_long && is_unsigned {
             Type::UnsignedLong
         } else if is_unsigned {
             Type::UnsignedInt
@@ -212,12 +227,14 @@ impl Parser {
     /// `long` (e.g. `long`, `int`, `long int`, `int long`).  At most
     /// one `int` and at most one `long` may appear; the resulting
     /// type is `long` if any `long` token was seen and `int`
-    /// otherwise.  Mirrors the OCaml `parse_type_specifier_list` +
-    /// `parse_type` combination for the chapter-11 surface.
+    /// otherwise.  Chapter 13 widens this to also accept a bare
+    /// `double` (which cannot be combined with `int` / `long` /
+    /// `unsigned` / `signed`).
     fn parse_type_specifier(&mut self) -> Result<Type> {
         let mut is_long = false;
         let mut saw_int = false;
         let mut saw_long = false;
+        let mut saw_double = false;
         let mut is_unsigned = false;
         loop {
             match self.peek().kind {
@@ -236,6 +253,13 @@ impl Parser {
                     is_long = true;
                     self.current += 1;
                 }
+                TokenKind::Double => {
+                    if saw_double {
+                        bail!("parse error: duplicate 'double' in type specifier");
+                    }
+                    saw_double = true;
+                    self.current += 1;
+                }
                 TokenKind::Unsigned => {
                     is_unsigned = true;
                     self.current += 1;
@@ -246,13 +270,18 @@ impl Parser {
                 _ => break,
             }
         }
-        if !saw_int && !saw_long && !is_unsigned {
+        if !saw_int && !saw_long && !is_unsigned && !saw_double {
             bail!(
-                "parse error: expected a type specifier ('int' / 'long' / 'unsigned' / 'signed'), found {:?}",
+                "parse error: expected a type specifier ('int' / 'long' / 'double' / 'unsigned' / 'signed'), found {:?}",
                 self.peek().kind
             );
         }
-        if is_long && is_unsigned {
+        if saw_double && (is_long || is_unsigned || (saw_int && !saw_double)) {
+            bail!("parse error: 'double' cannot be combined with other type specifiers");
+        }
+        if saw_double {
+            Ok(Type::Double)
+        } else if is_long && is_unsigned {
             Ok(Type::UnsignedLong)
         } else if is_unsigned {
             Ok(Type::UnsignedInt)

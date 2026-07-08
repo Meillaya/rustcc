@@ -187,8 +187,17 @@ fn lex_number(chars: &mut Chars<'_>, tokens: &mut Vec<Token>) -> Result<()> {
     // `.` followed by a non-digit (or EOF) is a struct-member `Dot` and the
     // integer path resumes.  This matches the `Dot` / float disambiguation
     // the OCaml reference expresses as `[^\d]` after the literal `.`.
+    //
+    // A bare `e` / `E` exponent (no fractional part) is also a valid
+    // floating-point constant in C: `1e308` and `1E-5` parse to `f64`
+    // without ever seeing a `.`.  Mark the literal as a float so the
+    // exponent-handling block below consumes the `e...` run instead of
+    // trying to lex it as an integer suffix.
     let mut is_float = false;
-    if let Some((_, '.')) = chars.peek().copied() {
+    if let Some((_, 'e' | 'E')) = chars.peek().copied() {
+        // `1e308` / `1E-5` is a valid float even without a fractional part.
+        is_float = true;
+    } else if let Some((_, '.')) = chars.peek().copied() {
         let mut probe = chars.clone();
         probe.next();
         if matches!(probe.peek().copied(), Some((_, c)) if c.is_ascii_digit()) {
