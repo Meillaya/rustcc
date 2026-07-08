@@ -723,6 +723,7 @@ fn resolve_expr(
     match expr {
         Expr::Constant(n) => Ok(Expr::Constant(*n)),
         Expr::LongConstant(n) => Ok(Expr::LongConstant(*n)),
+        Expr::UIntConstant(n, _) => Ok(Expr::UIntConstant(*n, false)),
         Expr::Cast { target_type, expr: inner } => Ok(Expr::Cast {
             target_type: target_type.clone(),
             expr: Box::new(resolve_expr(inner, scopes, globals)?),

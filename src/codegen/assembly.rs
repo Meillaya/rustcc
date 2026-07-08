@@ -192,6 +192,12 @@ pub enum Instr {
         op: UnaryOpInstr,
         operand: Operand,
     },
+    /// Chapter 11: 64-bit counterpart of `Unary`.  Emitter prints
+    /// `negq` / `notq` / `shrq` instead of the 32-bit forms.
+    UnaryQ {
+        op: UnaryOpInstr,
+        operand: Operand,
+    },
     Call(String),
     Ret,
     Push(Operand),

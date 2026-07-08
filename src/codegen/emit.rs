@@ -289,6 +289,11 @@ Instr::Movsx { src, dst } => Ok(format!(
             format_unary_op(*op),
             format_operand(operand)?
         )),
+        Instr::UnaryQ { op, operand } => Ok(format!(
+            "{}q {}",
+            format_unary_op(*op).trim_end_matches('l'),
+            format_quad_operand(operand)?
+        )),
         Instr::BinaryOp { op, src, dst } => {
             // 64-bit binary ops (AddQ/SubQ/MultQ/DivQ/RemQ) use
             // the quadword register-name table for the operands;

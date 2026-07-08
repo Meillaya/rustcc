@@ -223,6 +223,10 @@ fn replace_in_instruction(
             op,
             operand: replace_operand(state, operand, globals),
         },
+        Instr::UnaryQ { op, operand } => Instr::UnaryQ {
+            op,
+            operand: replace_operand(state, operand, globals),
+        },
         Instr::BinaryOp { op, src, dst } => Instr::BinaryOp {
             op,
             src: replace_operand(state, src, globals),

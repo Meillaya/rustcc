@@ -16,6 +16,11 @@ pub(crate) enum Expr {
     /// original `i64` so the constant can be reused as-is in the IR
     /// without truncation.
     LongConstant(i64),
+    /// Chapter 12: unsigned constant `123u`, `123ul`, etc.  The
+    /// companion `bool` is `true` for `unsigned long` (the `U` /
+    /// `uL` / `lU` / `LU` suffix cases), `false` for plain
+    /// `unsigned int` (`U` / `u`).
+    UIntConstant(i64, bool),
     Var(String),
     /// Chapter 11: explicit cast `(T) expr`.  The lowerer turns
     /// this into `SignExtend` (int -> long) or `Truncate`

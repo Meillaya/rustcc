@@ -137,7 +137,7 @@ fn abi_reg(reg: abi::Reg) -> Reg {
 /// 7. Emit `addq $total, %rsp` to undo the pushes + padding.
 /// 8. If `dst` is `Some`, emit `movl %eax, dst` so the call site
 ///    sees the return value in a pseudo slot.
-fn lower_call(name: &str, args: &[Val], dst: &Option<String>) -> Vec<Instr> {
+fn lower_call(name: &str, args: &[Val], dst: &Option<String>, type_env: &TypeEnv) -> Vec<Instr> {
     let plan = abi::classify_params(args.len());
     let mut out: Vec<Instr> = Vec::new();
 
@@ -171,12 +171,21 @@ fn lower_call(name: &str, args: &[Val], dst: &Option<String>) -> Vec<Instr> {
 
     // Register-passed arguments: emit `mov arg, reg`.  Mirrors
     // `pass_int_reg_arg` in OCaml `convert_function_call:371-381`.
+    // Chapter 11: pick `movl` vs `movq` from the argument's
+    // type so a long argument isn't silently truncated to 32 bits.
     for (idx, val) in args.iter().enumerate() {
         if plan.param_classes[idx] == ParamClass::Int {
-            out.push(Instr::Mov {
-                src: convert_val(val),
-                dst: Operand::Reg(abi_reg(abi::int_param_reg(idx))),
-            });
+            if type_of_val(val, type_env) == OperandType::Long {
+                out.push(Instr::Movq {
+                    src: convert_val(val),
+                    dst: Operand::Reg(abi_reg(abi::int_param_reg(idx))),
+                });
+            } else {
+                out.push(Instr::Mov {
+                    src: convert_val(val),
+                    dst: Operand::Reg(abi_reg(abi::int_param_reg(idx))),
+                });
+            }
         }
     }
 
@@ -327,14 +336,34 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
                 dst: Operand::Pseudo(dst.clone()),
             },
         ],
-        Instruction::Negate { dst } => vec![Instr::Unary {
-            op: UnaryOpInstr::Neg,
-            operand: Operand::Pseudo(dst.clone()),
-        }],
-        Instruction::Complement { dst } => vec![Instr::Unary {
-            op: UnaryOpInstr::Not,
-            operand: Operand::Pseudo(dst.clone()),
-        }],
+        Instruction::Negate { dst } => {
+            let is_long = type_of_val(&Val::Var(dst.clone()), env) == OperandType::Long;
+            vec![if is_long {
+                Instr::UnaryQ {
+                    op: UnaryOpInstr::Neg,
+                    operand: Operand::Pseudo(dst.clone()),
+                }
+            } else {
+                Instr::Unary {
+                    op: UnaryOpInstr::Neg,
+                    operand: Operand::Pseudo(dst.clone()),
+                }
+            }]
+        }
+        Instruction::Complement { dst } => {
+            let is_long = type_of_val(&Val::Var(dst.clone()), env) == OperandType::Long;
+            vec![if is_long {
+                Instr::UnaryQ {
+                    op: UnaryOpInstr::Not,
+                    operand: Operand::Pseudo(dst.clone()),
+                }
+            } else {
+                Instr::Unary {
+                    op: UnaryOpInstr::Not,
+                    operand: Operand::Pseudo(dst.clone()),
+                }
+            }]
+        }
         Instruction::Add { src, dst } => {
             let is_long = type_of_val(&Val::Var(dst.clone()), env) == OperandType::Long;
             let op = if is_long {
@@ -705,7 +734,7 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv) -> Vec<Instr> {
         // Chapter 4 short-circuit `&&` / `||` lowering materialises
         // forward labels for the join point.
         Instruction::Label(name) => vec![Instr::Label(name.clone())],
-        Instruction::Call { name, args, dst } => lower_call(name, args, dst),
+        Instruction::Call { name, args, dst } => lower_call(name, args, dst, env),
         _ => Vec::new(),
     }
 }

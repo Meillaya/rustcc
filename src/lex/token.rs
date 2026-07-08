@@ -121,6 +121,14 @@ pub(crate) struct Token {
     pub(crate) lexeme: String,
 }
 
+/// Chapter 12: integer constant suffix that decides between
+/// `unsigned int` and `unsigned long` for an unsigned literal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UIntKind {
+    UInt,
+    ULong,
+}
+
 /// Flat token vocabulary consumed by the parser.
 ///
 /// Each variant is the lowered form of the matching `Keyword` / `Punct` /
@@ -162,6 +170,10 @@ pub(crate) enum TokenKind {
     /// `long` in C.  Carried as an i64 so values larger than 32 bits
     /// (e.g. `4294967290L`) fit without truncation.
     LongConstant(i64),
+    /// Chapter 12: integer constant with a `U` / `u` suffix (and
+    /// optionally `L` / `l`), typed as `unsigned int` / `unsigned
+    /// long`.
+    UIntConstant(i64, UIntKind),
     CharLiteral(i32),
     StringLiteral(String),
 
@@ -332,6 +344,7 @@ impl TokenKind {
             Self::Identifier(_) => "Identifier",
             Self::Constant(_) => "Constant",
             Self::LongConstant(_) => "LongConstant",
+            Self::UIntConstant(_, _) => "UIntConstant",
             Self::CharLiteral(_) => "CharLiteral",
             Self::StringLiteral(_) => "StringLiteral",
             Self::Minus => "Minus",

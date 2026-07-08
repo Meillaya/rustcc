@@ -794,6 +794,11 @@ fn continue_label(id: &str) -> String {
 fn lower_expr(expr: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)> {
     match expr {
         Expr::Constant(n) => Ok((Vec::new(), Val::Constant(*n))),
+        // Chapter 12 unsigned constants are out of scope; treat
+        // them as signed int for now so the parser doesn't reject
+        // U / u suffixes entirely.  Once chapter 12 lands this arm
+        // will materialise a long-typed synthetic name instead.
+        Expr::UIntConstant(n, _is_long) => Ok((Vec::new(), Val::Constant(*n))),
         Expr::LongConstant(n) => {
             // The lowerer can't keep `Val::Constant` typed, so it
             // materialises the long constant into a fresh synthetic
@@ -1049,10 +1054,10 @@ fn lower_assign(
     Ok((instrs, Val::Var(tmp)))
 }
 
-/// Narrow an over-wide value into `target_ty` via a `Truncate`
-/// instruction.  A same-width or wider-to-narrower transition emits
-/// the truncate; an int value being widened to long is left as-is
-/// (the binary op handles the promotion).
+/// Convert a value to `target_ty`: truncate long → int via `Truncate`,
+/// sign-extend int → long via `SignExtend`.  Same-width conversions
+/// pass through unchanged.  Mirrors
+/// `nqcc2/lib/semantic_analysis/typecheck.ml` `convert_by_assignment`.
 fn narrow_to_target(
     val: Val,
     val_ty: OperandType,
@@ -1063,6 +1068,13 @@ fn narrow_to_target(
     if val_ty == OperandType::Long && target_ty == OperandType::Int {
         let tmp = ctx.fresh_typed_tmp(OperandType::Int);
         instrs.push(Instruction::Truncate {
+            src: val,
+            dst: tmp.clone(),
+        });
+        Val::Var(tmp)
+    } else if val_ty == OperandType::Int && target_ty == OperandType::Long {
+        let tmp = ctx.fresh_typed_tmp(OperandType::Long);
+        instrs.push(Instruction::SignExtend {
             src: val,
             dst: tmp.clone(),
         });

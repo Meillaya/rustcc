@@ -25,7 +25,7 @@
 use anyhow::{Result, bail};
 
 use crate::lex::keyword::keyword_from_str;
-use crate::lex::token::{Punct, Token, TokenKind};
+use crate::lex::token::{Punct, Token, TokenKind, UIntKind};
 
 /// Cursor over the source text.  `Peekable` lets the dispatch in `lex` look
 /// one character ahead without committing, while `CharIndices` preserves the
@@ -150,7 +150,16 @@ fn lex_number(chars: &mut Chars<'_>, tokens: &mut Vec<Token>) -> Result<()> {
             bail!("lex error: invalid identifier starts with digits: {lexeme}");
         }
         let is_long = suffix.contains('l') || suffix.contains('L');
-        if is_long {
+        let is_unsigned = suffix.contains('u') || suffix.contains('U');
+        if is_unsigned {
+            tokens.push(Token {
+                kind: TokenKind::UIntConstant(
+                    value as i64,
+                    if is_long { UIntKind::ULong } else { UIntKind::UInt },
+                ),
+                lexeme,
+            });
+        } else if is_long {
             tokens.push(Token {
                 kind: TokenKind::LongConstant(value as i64),
                 lexeme,
@@ -250,7 +259,16 @@ fn lex_number(chars: &mut Chars<'_>, tokens: &mut Vec<Token>) -> Result<()> {
         .parse::<u128>()
         .map_err(|err| anyhow::anyhow!("lex error: invalid integer {lexeme}: {err}"))?;
     let is_long = suffix.contains('l') || suffix.contains('L');
-    if is_long {
+    let is_unsigned = suffix.contains('u') || suffix.contains('U');
+    if is_unsigned {
+        tokens.push(Token {
+            kind: TokenKind::UIntConstant(
+                value as i64,
+                if is_long { UIntKind::ULong } else { UIntKind::UInt },
+            ),
+            lexeme,
+        });
+    } else if is_long {
         tokens.push(Token {
             kind: TokenKind::LongConstant(value as i64),
             lexeme,
@@ -280,11 +298,26 @@ fn collect_int_suffix(chars: &mut Chars<'_>, lexeme: &mut String) -> String {
 }
 
 fn is_valid_int_suffix(suffix: &str) -> bool {
-    // Chapter 11 only: signed int + signed long suffixes.  The unsigned
-    // variants (U / u / UL / UL / uL / Ul / etc.) are rejected here so
-    // we don't silently treat e.g. `123u` as an `int` literal; the
-    // chapter-12 work will widen the table again.
-    matches!(suffix, "" | "l" | "L")
+    // Chapter 12: accept the signed forms (`""` / `"l"` / `"L"`) plus
+    // every unsigned combination the OCaml reference lists
+    // (`"u"` / `"U"` / `"ul"` / `"uL"` / `"Ul"` / `"UL"` / `"lu"` /
+    // `"lU"` / `"Lu"` / `"LU"`).
+    matches!(
+        suffix,
+        ""
+            | "l"
+            | "L"
+            | "u"
+            | "U"
+            | "ul"
+            | "uL"
+            | "Ul"
+            | "UL"
+            | "lu"
+            | "lU"
+            | "Lu"
+            | "LU"
+    )
 }
 
 // --- Character & string literals ------------------------------------------

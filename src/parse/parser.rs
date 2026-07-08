@@ -125,6 +125,7 @@ impl Parser {
     fn parse_specifiers_interleaved(&mut self) -> Result<(Type, StorageClass)> {
         let mut saw_int = false;
         let mut is_long = false;
+        let mut is_unsigned = false;
         let mut storage = StorageClass::Auto;
         let mut had_storage = false;
         loop {
@@ -138,6 +139,16 @@ impl Parser {
                 }
                 TokenKind::Long => {
                     is_long = true;
+                    self.current += 1;
+                }
+                TokenKind::Unsigned => {
+                    is_unsigned = true;
+                    self.current += 1;
+                }
+                TokenKind::Signed => {
+                    // `signed` is the default and is ignored; consume
+                    // the token so the rest of the specifier list can
+                    // proceed.
                     self.current += 1;
                 }
                 TokenKind::Static => {
@@ -159,13 +170,22 @@ impl Parser {
                 _ => break,
             }
         }
-        if !saw_int && !is_long {
+        if !saw_int && !is_long && !is_unsigned {
             bail!(
-                "parse error: expected a type specifier ('int' or 'long'), found {:?}",
+                "parse error: expected a type specifier ('int' / 'long' / 'unsigned' / 'signed'), found {:?}",
                 self.peek().kind
             );
         }
-        Ok((if is_long { Type::Long } else { Type::Int }, storage))
+        let ty = if is_long && is_unsigned {
+            Type::UnsignedLong
+        } else if is_unsigned {
+            Type::UnsignedInt
+        } else if is_long {
+            Type::Long
+        } else {
+            Type::Int
+        };
+        Ok((ty, storage))
     }
 
     /// Parse an optional storage-class specifier at the start of a
@@ -198,6 +218,7 @@ impl Parser {
         let mut is_long = false;
         let mut saw_int = false;
         let mut saw_long = false;
+        let mut is_unsigned = false;
         loop {
             match self.peek().kind {
                 TokenKind::Int => {
@@ -215,16 +236,31 @@ impl Parser {
                     is_long = true;
                     self.current += 1;
                 }
+                TokenKind::Unsigned => {
+                    is_unsigned = true;
+                    self.current += 1;
+                }
+                TokenKind::Signed => {
+                    self.current += 1;
+                }
                 _ => break,
             }
         }
-        if !saw_int && !saw_long {
+        if !saw_int && !saw_long && !is_unsigned {
             bail!(
-                "parse error: expected a type specifier ('int' or 'long'), found {:?}",
+                "parse error: expected a type specifier ('int' / 'long' / 'unsigned' / 'signed'), found {:?}",
                 self.peek().kind
             );
         }
-        Ok(if is_long { Type::Long } else { Type::Int })
+        if is_long && is_unsigned {
+            Ok(Type::UnsignedLong)
+        } else if is_unsigned {
+            Ok(Type::UnsignedInt)
+        } else if is_long {
+            Ok(Type::Long)
+        } else {
+            Ok(Type::Int)
+        }
     }
 
     /// If a storage-class specifier follows `int`, combine it with
@@ -283,6 +319,8 @@ impl Parser {
         // Chapter 11 widens the type to `int` or `long` (any order).
         if self.peek().kind == TokenKind::Int
             || self.peek().kind == TokenKind::Long
+            || self.peek().kind == TokenKind::Unsigned
+            || self.peek().kind == TokenKind::Signed
             || self.peek().kind == TokenKind::Static
             || self.peek().kind == TokenKind::Extern
         {
