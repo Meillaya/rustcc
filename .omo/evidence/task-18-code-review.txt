@@ -26,3 +26,8 @@ Scope: verifier-blocker repair only for W6-T1 chapter 5 local variables/assignme
 ## Residual risks
 - Pre-existing repository state still contains other chapter-13 type variants and lexer/IR enum surfaces outside this task's parser/lower drift; this fix does not remove those broader checked-history surfaces.
 - `cargo fmt --check` across the whole repo reports pre-existing formatting drift in many unrelated files; only `src/parse/parser.rs` and `src/ir/lower.rs` were formatted to avoid unrelated churn.
+
+## Fix2 residual verifier blockers (2026-07-08T16:00 task-18-fix2)
+- RESOLVED: The cumulative task-18 `src/ir/lower.rs` drift still documented chapter-13 `double` lowering in `type_to_operand_type` and mapped `Type::Double => OperandType::Double`. The helper comment is now limited to integer variants and the explicit Double arm was removed, keeping W6-T1 chapter-5 lowering free of new double support.
+- RESOLVED: The adversarial scope-fidelity probe `double x; int main(void) { return 0; }` previously compiled with exit 0. `parse_top_level_item` now rejects file-scope `double` variable declarations with a parse error before lowering/codegen.
+- RESOLVED: This evidence file now explicitly covers the retained Double mapping/comment and top-level double declaration blockers reported by the second independent verifier.

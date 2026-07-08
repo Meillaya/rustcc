@@ -43,16 +43,12 @@ use crate::util::labels::LabelGenerator;
 
 pub type TypedProgram = Program;
 
-/// Map the AST's `Type` to the TACKY `OperandType`.  Through
-/// chapter 13: `int` / `unsigned int` / `char` map to `Int`,
-/// `long` / `unsigned long` map to `Long`, `double` maps to
-/// `Double`.  Pointer / array types are lowered by the chapter-14
-/// and -15 paths and are not seen by the simple local-scope
-/// declarations that call this helper.
+/// Map the AST's integer `Type` variants to the TACKY `OperandType`.
+/// Chapter-13 `double` declarations are intentionally not admitted by
+/// the chapter-5 parser paths this helper supports.
 fn type_to_operand_type(ty: Type) -> OperandType {
     match ty {
         Type::Long | Type::UnsignedLong => OperandType::Long,
-        Type::Double => OperandType::Double,
         _ => OperandType::Int,
     }
 }

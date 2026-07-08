@@ -103,6 +103,11 @@ impl Parser {
                 }))
             }
         } else {
+            if matches!(ty, Type::Double) {
+                bail!(
+                    "parse error: file-scope 'double' variables are not supported before chapter 13"
+                );
+            }
             let init = if self.match_exact(&TokenKind::Equal) {
                 Some(self.parse_expr()?)
             } else {

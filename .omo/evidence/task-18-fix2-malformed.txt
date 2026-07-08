@@ -1,0 +1,56 @@
+# task-18 fix2 malformed/out-of-scope evidence
+2026-07-08T12:33:06-04:00
+Baseline before edit: top-level `double x; int main(void) { return 0; }` compiled with exit 0 (captured before the parser fix in this task).
+
+## probe: double_int
+$ cat .omo/tmp/task18-fix2/double_int.c
+double int x; int main(void) { return 0; }
+$ ./target/release/rustcc .omo/tmp/task18-fix2/double_int.c
+exit=1
+stdout:
+stderr:
+parse error: 'double' cannot be combined with other type specifiers
+expected_failure: double_int rejected
+
+## probe: int_double
+$ cat .omo/tmp/task18-fix2/int_double.c
+int double x; int main(void) { return 0; }
+$ ./target/release/rustcc .omo/tmp/task18-fix2/int_double.c
+exit=1
+stdout:
+stderr:
+parse error: 'double' cannot be combined with other type specifiers
+expected_failure: int_double rejected
+
+## probe: local_double
+$ cat .omo/tmp/task18-fix2/local_double.c
+int main(void) { double x; return 0; }
+$ ./target/release/rustcc .omo/tmp/task18-fix2/local_double.c
+exit=1
+stdout:
+stderr:
+parse error: expected expression, found Double ("double")
+expected_failure: local_double rejected
+
+## probe: top_level_double
+$ cat .omo/tmp/task18-fix2/top_level_double.c
+double x; int main(void) { return 0; }
+$ ./target/release/rustcc .omo/tmp/task18-fix2/top_level_double.c
+exit=1
+stdout:
+stderr:
+parse error: file-scope 'double' variables are not supported before chapter 13
+expected_failure: top_level_double rejected
+
+## adversarial classes
+- malformed_input: `double int x;` and `int double x;` reject with parse errors.
+- scope_fidelity: local and file-scope `double` declarations reject; no chapter-13 double support was implemented.
+- stale_state: rebuilt `target/release/rustcc` after final edits before probes.
+- dirty_worktree: preserved pre-existing `.omo/boulder.json`, `.omo/run-continuation/*`, and verifier evidence/start-work dirt; only requested files are staged later.
+- misleading_success_output: each probe records exit status plus stdout/stderr and treats exit 0 as failure.
+- long_external_commands: long cargo/harness commands are separately captured in `.omo/evidence/task-18-fix2-gate.txt`.
+
+## cleanup receipt
+$ rm -rf .omo/tmp/task18-fix2
+$ test ! -e .omo/tmp/task18-fix2 && echo removed
+removed
