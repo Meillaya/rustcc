@@ -24,7 +24,7 @@ use super::{
     expr::Expr,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Statement {
     Return(Expr),
     Block(Vec<BlockItem>),

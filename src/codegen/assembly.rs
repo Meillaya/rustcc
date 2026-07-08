@@ -68,6 +68,12 @@ pub enum BinaryOpInstr {
     Add,
     Sub,
     Mult,
+    /// Chapter 4: `divl` for unsigned integer division.  The book
+    /// calls this `DivDouble` (the integer division-by-double-width
+    /// is `divl`); the *SSE* double-precision division is a separate
+    /// `DivDouble` variant below — the disambiguation is in the
+    /// module-level comment, and the new SSE variant is `DivDouble`
+    /// in the SSE sense.
     DivDouble,
     DivSigned,
     RemSigned,
@@ -85,10 +91,21 @@ pub enum BinaryOpInstr {
     MultQ,
     DivQ,
     RemQ,
+    /// Chapter 13: SSE double-precision arithmetic.  Emitted as
+    /// `addsd` / `subsd` / `mulsd` / `divsd` / `xorpd` (the latter is
+    /// used for `==` / `!=` zero-comparison).  Operands must be
+    /// `Reg::XMM` or memory.
     AddDouble,
     SubDouble,
     MultDouble,
-    DivDoubleDouble,
+    /// Chapter 13: SSE double-precision division.  Emitted as
+    /// `divsd`; operands are XMM registers or memory.
+    SseDivDouble,
+    /// Chapter 13: bitwise XOR on two XMM double-precision values
+    /// (emitted as `xorpd`); used to compare a double against the
+    /// zero value when implementing `==` / `!=` and the unary
+    /// logical-not.
+    XorDouble,
 }
 
 /// The unary operator carried by `Instr::Unary`. Mirrors
@@ -158,6 +175,21 @@ pub enum Instr {
         src: Operand,
         dst: Operand,
     },
+    /// Chapter 13: SSE double-precision move.  Emitted as `movsd`
+    /// when both operands are XMM registers or memory.  The
+    /// src/dst forms follow the AT&T convention used elsewhere in
+    /// this module (`src, dst`).
+    Movsd {
+        src: Operand,
+        dst: Operand,
+    },
+    /// Chapter 13: load a double-precision immediate from a
+    /// constant pool slot into an XMM register.  Emitted as
+    /// `movsd name(%rip), %xmmN`.
+    MovsdLoad {
+        src: String,
+        dst: Operand,
+    },
     Lea {
         src: Operand,
         dst: Operand,
@@ -171,6 +203,14 @@ pub enum Instr {
         left: Operand,
         right: Operand,
     },
+    /// Chapter 13: SSE double-precision compare.  Emitted as
+    /// `ucomisd`.  Flags are set as if computing `left - right`; ZF
+    /// is set when either operand is NaN (unordered), so the
+    /// emitter follow-up must special-case the unordered result.
+    CmpDouble {
+        left: Operand,
+        right: Operand,
+    },
     BinaryOp {
         op: BinaryOpInstr,
         src: Operand,
@@ -179,6 +219,8 @@ pub enum Instr {
     Idiv(Operand),
     /// Chapter 11: 64-bit variant of `Idiv`.  Pairs with `Cqo`.
     Idivq(Operand),
+    /// Chapter 13: unsigned 64-bit division (pairs with `Mov $0, %rdx`).
+    Divq(Operand),
     Cdq,
     /// Chapter 11: sign-extend %rax into %rdx:%rax for 64-bit
     /// signed division.  Pairs with `Idivq`; the emitter prints
@@ -188,6 +230,16 @@ pub enum Instr {
     /// Used when an int result in %eax participates in a 64-bit
     /// operation (e.g. the long-side operand of `idivq`).
     Cltq,
+    /// Chapter 13: convert signed long to double (`cvtsi2sd`).
+    Cvtsi2sd {
+        src: Operand,
+        dst: Operand,
+    },
+    /// Chapter 13: convert double to signed long (`cvttsd2si`).
+    Cvttsd2si {
+        src: Operand,
+        dst: Operand,
+    },
     Unary {
         op: UnaryOpInstr,
         operand: Operand,

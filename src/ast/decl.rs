@@ -9,7 +9,7 @@ use super::{expr::Expr, stmt::Statement, ty::Type};
 /// `params : string list` for chapter 9; we carry the parameter name and
 /// its declaration shape so the resolve pass can scope parameter names
 /// inside the function body.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct VarDecl {
     pub(crate) name: String,
     pub(crate) ty: Type,
@@ -22,7 +22,7 @@ pub(crate) struct VarDecl {
 }
 
 /// A function definition.  Mirrors `function_declaration { body = Some ... }`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Function {
     pub(crate) name: String,
     pub(crate) ret_ty: Type,
@@ -41,7 +41,7 @@ pub(crate) struct Function {
 /// like `int foo(int x);`.  We keep `params` populated because chapter 9
 /// treats the parameter names as informative (they may differ between
 /// declarations and the definition).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct GlobalDecl {
     pub(crate) name: String,
     pub(crate) ret_ty: Type,
@@ -81,7 +81,7 @@ pub(crate) enum StorageClass {
 /// Chapter 10 keeps `ty` to a single variant (`Type::Int`) but the field
 /// is present so later chapters can drop in `long` / `unsigned` without
 /// disturbing call sites.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct GlobalVarDecl {
     pub(crate) name: String,
     pub(crate) ty: Type,
@@ -89,7 +89,7 @@ pub(crate) struct GlobalVarDecl {
     pub(crate) storage: StorageClass,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum BlockItem {
     Declaration(VarDecl),
     Statement(Statement),
@@ -100,7 +100,7 @@ pub(crate) enum BlockItem {
     FunctionDecl(GlobalDecl),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ForInit {
     Declaration(VarDecl),
     Expr(Expr),

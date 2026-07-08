@@ -13,37 +13,60 @@ use anyhow::Result;
 
 use crate::semantics::typecheck::TypedProgram;
 
-/// A TACKY value: either an inline integer constant or a named variable.
+/// A TACKY value: either an inline integer/double constant or a named variable.
 ///
-/// Mirrors `nqcc2/lib/tacky.ml` `tacky_val`.  Chapter 13 introduces a
-/// `ConstantDouble(f64)` arm; left as a comment because the book's dial-in
-/// starts in chapter 3 with `Constant(i64)`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// Mirrors `nqcc2/lib/tacky.ml` `tacky_val`.  `ConstantDouble(f64)` arrives
+/// in chapter 13; because `f64` lacks `Eq`/`Hash`, this enum drops those
+/// derivations even though its integer-only arms would otherwise support them.
+#[derive(Clone, Debug, PartialEq)]
 pub enum Val {
     Constant(i64),
     Var(String),
-    // ch.13: ConstantDouble(f64),
+    ConstantDouble(f64),
 }
 
-/// Operand width for TACKY values.  Mirrors `nqcc2/lib/tacky.ml`
-/// `asm_type` (Longword / Quadword) for the chapter-11 surface.  The
-/// codegen pass uses this to choose between 32-bit and 64-bit x86-64
-/// instructions (`addl` vs `addq`, `idivl` vs `idivq`, etc.).
+/// Operand width / flavor for TACKY values.  Mirrors `nqcc2/lib/tacky.ml`
+/// `asm_type` (Longword / Quadword / Double) for the chapter-13 surface.
+/// The codegen pass uses this to choose between 32-bit and 64-bit x86-64
+/// instructions (`addl` vs `addq`, `idivl` vs `idivq`, etc.) and to pick
+/// the right SSE instruction for double values.
+///
+/// Chapter 12 widens the surface with `UInt` and `ULong`; the signedness
+/// distinction is needed at compare-codegen time (unsigned `<` uses
+/// `seta` rather than `setg`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum OperandType {
-    /// 32-bit integer (book `Longword`).
+    /// 32-bit signed integer (book `Longword`).
     Int,
-    /// 64-bit integer (book `Quadword`); used for `long` and pointers.
+    /// 32-bit unsigned integer.
+    UInt,
+    /// 64-bit signed integer (book `Quadword`); used for `long` and pointers.
     Long,
+    /// 64-bit unsigned integer.
+    ULong,
+    /// 64-bit IEEE-754 double (book `Double`).
+    Double,
 }
 
 impl OperandType {
     /// Size in bytes — used by `replace_pseudos` to size stack slots.
     pub fn size(self) -> i64 {
         match self {
-            OperandType::Int => 4,
-            OperandType::Long => 8,
+            OperandType::Int | OperandType::UInt => 4,
+            OperandType::Long | OperandType::ULong | OperandType::Double => 8,
         }
+    }
+
+    /// True when the operand is a 64-bit integer-shaped value (`Long` or
+    /// `ULong`).  Used to pick the quadword register-name table in the
+    /// emitter and to choose between `cmpl` / `cmpq`.
+    pub fn is_long_word(self) -> bool {
+        matches!(self, OperandType::Long | OperandType::ULong)
+    }
+
+    /// True when the operand is an unsigned integer.
+    pub fn is_unsigned(self) -> bool {
+        matches!(self, OperandType::UInt | OperandType::ULong)
     }
 }
 
@@ -63,7 +86,7 @@ pub type TypeEnv = std::collections::HashMap<String, OperandType>;
 /// in which every operand is paired with its `asm_type` at construction
 /// time (see `nqcc2/lib/tacky_gen.ml:163-167` and
 /// `nqcc2/lib/backend/codegen.ml:119-130`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TypedVal {
     pub val: Val,
     pub ty: OperandType,
@@ -101,7 +124,7 @@ pub type Var = String;
 /// Mirrors `nqcc2/lib/tacky.ml` `instruction`.  Variants are intentionally
 /// spelled to match the OCaml AST one-for-one (e.g. `BitShiftLeft` not
 /// `Shl`); the book grows this list incrementally across chapters 3-13.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Instruction {
     Return(Val),
     SignExtend {
@@ -249,7 +272,7 @@ pub enum Instruction {
 /// adds `type_env` so the codegen pass can look up the operand width
 /// of every TACKY variable (parameter / local / synthetic tmp /
 /// materialised long constant) without re-walking the AST.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TackyFunction {
     pub name: String,
     pub global: bool,
@@ -265,7 +288,7 @@ pub struct TackyFunction {
 /// chapters 9+ alongside the chapter-9 function declarations.  Chapter 10
 /// widens the surface with `static_variables: Vec<TackyStaticVariable>`
 /// (file-scope variable declarations like `int g = 5;`).
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct TackyProgram {
     pub functions: Vec<TackyFunction>,
     pub static_variables: Vec<TackyStaticVariable>,
@@ -278,7 +301,7 @@ pub struct TackyProgram {
 /// integer constants land here today; chapter 11+ adds `Long`, `Double`,
 /// zero-fill, and string bytes via the assembly `StaticInit` enum which
 /// already has the wider surface declared.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TackyStaticVariable {
     pub name: String,
     pub init: TackyStaticInit,
@@ -289,12 +312,15 @@ pub struct TackyStaticVariable {
     pub ty: OperandType,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TackyStaticInit {
     Int(i64),
     /// Chapter 11: 64-bit static initializer.  Mirrors the
     /// assembly `StaticInit::Long` variant.
     Long(i64),
+    /// Chapter 13: 64-bit IEEE-754 double constant for a file-scope
+    /// `static double x = 3.14;` initializer.
+    Double(f64),
     /// Placeholder so future chapters can extend the IR without changing
     /// the variant set the lowerer / codegen pre-commit to.
     Zero,

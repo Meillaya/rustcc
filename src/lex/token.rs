@@ -115,7 +115,7 @@ pub enum Punct {
 /// The struct shape is preserved from the chapter-1 scanner so the existing
 /// recursive-descent parser (which matches on `kind` and reads `lexeme` for
 /// identifiers and error messages) keeps compiling without churn.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Token {
     pub(crate) kind: TokenKind,
     pub(crate) lexeme: String,
@@ -135,7 +135,7 @@ pub(crate) enum UIntKind {
 /// constant shape that the scanner emits.  `Eof` is included as a sentinel
 /// variant rather than relying on `Option<Token>`; this keeps the parser's
 /// `peek()`/`expect_exact()` pattern uniform across every token kind.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum TokenKind {
     // Reserved words -- one variant per `Keyword` case so the parser can
     // pattern-match without inspecting a sub-payload.
@@ -174,6 +174,9 @@ pub(crate) enum TokenKind {
     /// optionally `L` / `l`), typed as `unsigned int` / `unsigned
     /// long`.
     UIntConstant(i64, UIntKind),
+    /// Chapter 13: floating-point constant (`3.14`, `1e-5`, `.5`).
+    /// Carried as `f64` so the IR can preserve the full precision.
+    DoubleConstant(f64),
     CharLiteral(i32),
     StringLiteral(String),
 
@@ -345,6 +348,7 @@ impl TokenKind {
             Self::Constant(_) => "Constant",
             Self::LongConstant(_) => "LongConstant",
             Self::UIntConstant(_, _) => "UIntConstant",
+            Self::DoubleConstant(_) => "DoubleConstant",
             Self::CharLiteral(_) => "CharLiteral",
             Self::StringLiteral(_) => "StringLiteral",
             Self::Minus => "Minus",

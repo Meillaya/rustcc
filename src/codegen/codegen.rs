@@ -62,10 +62,12 @@ use crate::ir::tacky::{
 /// synthetic `const.N` name and records the type in the env);
 /// named variables consult the function's `type_env`.  Unknown
 /// names default to `Int` so the chapter-1..10 codegen keeps
-/// compiling unchanged.
+/// compiling unchanged.  Chapter 13: a `ConstantDouble` operand
+/// has type `Double`.
 fn type_of_val(val: &Val, env: &TypeEnv) -> OperandType {
     match val {
         Val::Constant(_) => OperandType::Int,
+        Val::ConstantDouble(_) => OperandType::Double,
         Val::Var(name) => env.get(name).copied().unwrap_or(OperandType::Int),
     }
 }
@@ -93,6 +95,14 @@ fn map_cc(cc: TackyCC) -> AsmCC {
 fn convert_val(val: &Val) -> Operand {
     match val {
         Val::Constant(n) => Operand::Imm(*n),
+        Val::ConstantDouble(_) => {
+            // Constant doubles are materialised into a constant-pool
+            // entry by the codegen pass; the lowerer keeps the
+            // `Val::ConstantDouble` form so type info survives, and
+            // the codegen sees it just before the per-instruction
+            // emit phase materialises the pool label.
+            Operand::Pseudo(String::new()) // placeholder; never used
+        }
         Val::Var(name) => Operand::Pseudo(name.clone()),
     }
 }
@@ -213,8 +223,13 @@ fn lower_call(name: &str, args: &[Val], dst: &Option<String>, type_env: &TypeEnv
     }
 
     // Capture the return value if the call site expects one.
+    // Chapter 11: always use `movq` to copy the full 64-bit
+    // return register into the destination pseudo, so the upper
+    // 32 bits aren't left as garbage when the caller only meant
+    // to read the low 32 (e.g. `movl %eax, dst` only writes 4
+    // bytes and leaves the high half of the slot undefined).
     if let Some(dst_name) = dst {
-        out.push(Instr::Mov {
+        out.push(Instr::Movq {
             src: Operand::Reg(Reg::AX),
             dst: Operand::Pseudo(dst_name.clone()),
         });
@@ -850,10 +865,15 @@ pub fn generate(tacky: &TackyProgram, _frames: &[Frame]) -> Result<AsmProgram> {
             (crate::ir::tacky::TackyStaticInit::Int(n), OperandType::Long) => StaticInit::Long(n),
             (crate::ir::tacky::TackyStaticInit::Int(n), _) => StaticInit::Int(n),
             (crate::ir::tacky::TackyStaticInit::Zero, OperandType::Long) => StaticInit::Zero(8),
+            (crate::ir::tacky::TackyStaticInit::Zero, OperandType::Double) => StaticInit::Zero(8),
             (crate::ir::tacky::TackyStaticInit::Zero, _) => StaticInit::Zero(4),
             (crate::ir::tacky::TackyStaticInit::Long(n), _) => StaticInit::Long(n),
+            (crate::ir::tacky::TackyStaticInit::Double(d), _) => StaticInit::Double(d),
         };
-        let alignment = if var.ty == OperandType::Long { 8 } else { 4 };
+        let alignment = match var.ty {
+            OperandType::Long | OperandType::ULong | OperandType::Double => 8,
+            _ => 4,
+        };
         top_level.push(TopLevel::StaticVariable {
             name: var.name.clone(),
             global: var.global,

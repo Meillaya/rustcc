@@ -236,7 +236,7 @@ fn lex_number(chars: &mut Chars<'_>, tokens: &mut Vec<Token>) -> Result<()> {
             bail!("lex error: invalid floating constant suffix in {lexeme}");
         }
         tokens.push(Token {
-            kind: TokenKind::Constant(0),
+            kind: TokenKind::DoubleConstant(parse_float_constant(&lexeme)?),
             lexeme,
         });
         return Ok(());
@@ -318,6 +318,17 @@ fn is_valid_int_suffix(suffix: &str) -> bool {
             | "Lu"
             | "LU"
     )
+}
+
+/// Parse a `lexeme` accumulated by the floating-point lex paths
+/// (`3.14`, `1e-5`, `.5`) into the IEEE-754 `f64` value the
+/// `DoubleConstant` token carries.  `f64::from_str` handles all
+/// three forms; the surrounding lexer is responsible for
+/// rejecting the malformed shapes.
+fn parse_float_constant(lexeme: &str) -> Result<f64> {
+    lexeme
+        .parse::<f64>()
+        .map_err(|err| anyhow::anyhow!("lex error: invalid float {lexeme}: {err}"))
 }
 
 // --- Character & string literals ------------------------------------------
@@ -466,7 +477,7 @@ fn lex_dot_or_leading_float(chars: &mut Chars<'_>, tokens: &mut Vec<Token>) -> R
         bail!("lex error: invalid floating constant suffix in {lexeme}");
     }
     tokens.push(Token {
-        kind: TokenKind::Constant(0),
+        kind: TokenKind::DoubleConstant(parse_float_constant(&lexeme)?),
         lexeme,
     });
     Ok(())

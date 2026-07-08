@@ -16,7 +16,7 @@ use super::decl::{Function, GlobalDecl, GlobalVarDecl};
 /// (no body).  Chapter 10 widens the surface with `Variable`, a
 /// file-scope variable declaration carrying the type, optional
 /// initializer, and storage-class specifier.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum TopLevelItem {
     Function(Function),
     Declaration(GlobalDecl),
@@ -24,7 +24,7 @@ pub(crate) enum TopLevelItem {
 }
 
 /// The complete AST for a translation unit.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Program {
     pub(crate) top_level_items: Vec<TopLevelItem>,
 }

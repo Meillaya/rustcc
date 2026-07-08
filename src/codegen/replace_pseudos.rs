@@ -261,6 +261,27 @@ fn replace_in_instruction(
             src: replace_operand(state, src, globals),
             dst: replace_operand(state, dst, globals),
         },
+        Instr::Movsd { src, dst } => Instr::Movsd {
+            src: replace_operand(state, src, globals),
+            dst: replace_operand(state, dst, globals),
+        },
+        Instr::MovsdLoad { src, dst } => Instr::MovsdLoad {
+            src,
+            dst: replace_operand(state, dst, globals),
+        },
+        Instr::CmpDouble { left, right } => Instr::CmpDouble {
+            left: replace_operand(state, left, globals),
+            right: replace_operand(state, right, globals),
+        },
+        Instr::Cvtsi2sd { src, dst } => Instr::Cvtsi2sd {
+            src: replace_operand(state, src, globals),
+            dst: replace_operand(state, dst, globals),
+        },
+        Instr::Cvttsd2si { src, dst } => Instr::Cvttsd2si {
+            src: replace_operand(state, src, globals),
+            dst: replace_operand(state, dst, globals),
+        },
+        Instr::Divq(src) => Instr::Divq(replace_operand(state, src, globals)),
         Instr::Comment(_) => instr,
     };
     split_memory_to_memory(instr)

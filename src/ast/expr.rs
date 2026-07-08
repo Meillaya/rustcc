@@ -7,7 +7,7 @@
 use super::operator::{AssignOp, BinaryOp, UnaryOp};
 use super::ty::Type;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Expr {
     Constant(i64),
     /// Chapter 11: integer constant with an `L` / `l` suffix in the
@@ -21,6 +21,8 @@ pub(crate) enum Expr {
     /// `uL` / `lU` / `LU` suffix cases), `false` for plain
     /// `unsigned int` (`U` / `u`).
     UIntConstant(i64, bool),
+    /// Chapter 13: floating-point constant `3.14`, `1e-5`, etc.
+    DoubleConstant(f64),
     Var(String),
     /// Chapter 11: explicit cast `(T) expr`.  The lowerer turns
     /// this into `SignExtend` (int -> long) or `Truncate`
@@ -68,17 +70,46 @@ pub(crate) enum Expr {
         name: String,
         args: Vec<Expr>,
     },
+    /// Chapter 14: address-of `&lvalue`.  The lowerer emits a
+    /// `GetAddress` for the inner lvalue and tags the result as a
+    /// pointer.  Mirrors `Ast.AddrOf` in the OCaml reference.
+    AddressOf(Box<Expr>),
+    /// Chapter 14: dereference `*pointer`.  In an rvalue context the
+    /// lowerer emits a `Load`; in an lvalue context (e.g. `*p = 5;`)
+    /// it becomes a `Store` target.  Mirrors `Ast.Dereference`.
+    Dereference(Box<Expr>),
+    /// Chapter 15: subscript `base[index]`.  Semantically
+    /// `*(base + index)`; the lowerer emits an `AddPtr` followed by
+    /// a `Load`/`Store`.  Mirrors `Ast.Subscript`.
+    Subscript {
+        base: Box<Expr>,
+        index: Box<Expr>,
+    },
 }
 
 impl Expr {
     /// Return the variable name when this expression can be assigned to.
     /// Parentheses preserve lvalue-ness for cases like `++(a)`, but assignment
     /// results do not become lvalues, matching the invalid increment tests.
+    /// Chapter 14+ lvalues (`*p`, `arr[i]`) need a `Load`/`Store` instead of
+    /// a `Copy`, so the lowerer special-cases them outside this helper.
     pub(crate) fn lvalue_name(&self) -> Option<&str> {
         match self {
             Self::Var(name) => Some(name),
             Self::Paren(inner) => inner.lvalue_name(),
             _ => None,
+        }
+    }
+
+    /// True when the expression designates a memory location that can be
+    /// assigned to or have its address taken.  Mirrors the OCaml
+    /// `is_lvalue` helper.
+    pub(crate) fn is_lvalue(&self) -> bool {
+        match self {
+            Self::Var(_) => true,
+            Self::Paren(inner) => inner.is_lvalue(),
+            Self::Dereference(_) | Self::Subscript { .. } => true,
+            _ => false,
         }
     }
 }

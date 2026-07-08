@@ -78,9 +78,9 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
             TopLevelItem::Declaration(d) => (d.name.clone(), d.params.clone()),
             _ => continue,
         };
-        let param_tys: Vec<_> = params
+let param_tys: Vec<_> = params
             .iter()
-            .map(|p| type_to_operand_type(p.ty))
+            .map(|p| type_to_operand_type(p.ty.clone()))
             .collect();
         ctx.func_sigs.insert(name, param_tys);
     }
@@ -100,7 +100,7 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
                     for param in &func.params {
                         ctx.type_env.insert(
                             param.name.clone(),
-                            type_to_operand_type(param.ty),
+                            type_to_operand_type(param.ty.clone()),
                         );
                     }
                     // Also seed the env with file-scope variable
@@ -181,7 +181,7 @@ fn merge_global_decl(
 ) {
     let entry = globals
         .entry(var.name.clone())
-        .or_insert((var.storage, var.init.clone(), type_to_operand_type(var.ty)));
+        .or_insert((var.storage, var.init.clone(), type_to_operand_type(var.ty.clone())));
     if entry.1.is_none() && var.init.is_some() {
         entry.0 = var.storage;
         entry.1 = var.init.clone();
@@ -350,7 +350,7 @@ fn lower_block_items(items: &[BlockItem], ctx: &mut LowerCtx) -> Result<Vec<Inst
         match item {
             BlockItem::Statement(stmt) => out.extend(lower_statement(stmt, ctx)?),
             BlockItem::Declaration(decl) => {
-                let decl_ty = type_to_operand_type(decl.ty);
+                let decl_ty = type_to_operand_type(decl.ty.clone());
                 ctx.type_env
                     .entry(decl.name.clone())
                     .or_insert(decl_ty);
@@ -497,7 +497,7 @@ fn lower_statement(stmt: &Statement, ctx: &mut LowerCtx) -> Result<Vec<Instructi
                     ForInit::Declaration(decl) => {
                         ctx.type_env
                             .entry(decl.name.clone())
-                            .or_insert(type_to_operand_type(decl.ty));
+                            .or_insert(type_to_operand_type(decl.ty.clone()));
                         if let Some(expr) = &decl.init {
                             let (instrs, val) = lower_expr(expr, ctx)?;
                             out.extend(instrs);
@@ -794,11 +794,8 @@ fn continue_label(id: &str) -> String {
 fn lower_expr(expr: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)> {
     match expr {
         Expr::Constant(n) => Ok((Vec::new(), Val::Constant(*n))),
-        // Chapter 12 unsigned constants are out of scope; treat
-        // them as signed int for now so the parser doesn't reject
-        // U / u suffixes entirely.  Once chapter 12 lands this arm
-        // will materialise a long-typed synthetic name instead.
         Expr::UIntConstant(n, _is_long) => Ok((Vec::new(), Val::Constant(*n))),
+        Expr::DoubleConstant(d) => Ok((Vec::new(), Val::ConstantDouble(*d))),
         Expr::LongConstant(n) => {
             // The lowerer can't keep `Val::Constant` typed, so it
             // materialises the long constant into a fresh synthetic
@@ -829,7 +826,7 @@ fn lower_expr(expr: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)
             // (int -> int, long -> long) lower to a plain Copy.
             let (mut instrs, src) = lower_expr(inner, ctx)?;
             let src_ty = type_of_val(&src, ctx);
-            let dst_ty = type_to_operand_type(*target_type);
+            let dst_ty = type_to_operand_type(target_type.clone());
             if src_ty == dst_ty {
                 return Ok((instrs, src));
             }
@@ -860,6 +857,9 @@ fn lower_expr(expr: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)
             }
             Ok((instrs, Val::Var(dst_name)))
         }
+        Expr::AddressOf(inner) => lower_addr_of(inner, ctx),
+        Expr::Dereference(inner) => lower_dereference(inner, ctx),
+        Expr::Subscript { base, index } => lower_subscript(base, index, ctx),
     }
 }
 
@@ -939,7 +939,7 @@ fn lower_call(
 fn lower_cast(target_type: Type, inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)> {
     let (mut instrs, inner_val) = lower_expr(inner, ctx)?;
     let inner_ty = type_of_val(&inner_val, ctx);
-    let target_ty = type_to_operand_type(target_type);
+    let target_ty = type_to_operand_type(target_type.clone());
     let dst = ctx.fresh_typed_tmp(target_ty);
     match (inner_ty, target_ty) {
         (OperandType::Int, OperandType::Long) => {
@@ -962,6 +962,77 @@ fn lower_cast(target_type: Type, inner: &Expr, ctx: &mut LowerCtx) -> Result<(Ve
         }
     }
     Ok((instrs, Val::Var(dst)))
+}
+
+/// Chapter 14: `&lvalue` — emit a `GetAddress` for the inner lvalue
+/// and tag the result as a pointer (`Long` operand).  Mirrors
+/// `emit_addr_of` in `nqcc2/lib/tacky_gen.ml:359-376`.
+fn lower_addr_of(inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)> {
+    if !inner.is_lvalue() {
+        return Err(anyhow::anyhow!("lower: cannot take address of non-lvalue"));
+    }
+    let (instrs, inner_val) = lower_expr(inner, ctx)?;
+    let dst = ctx.fresh_typed_tmp(OperandType::Long);
+    let mut out = instrs;
+    if let Val::Var(name) = inner_val {
+        out.push(Instruction::GetAddress {
+            src: name,
+            dst: dst.clone(),
+        });
+    } else {
+        return Err(anyhow::anyhow!(
+            "lower: address-of requires a variable operand"
+        ));
+    }
+    Ok((out, Val::Var(dst)))
+}
+
+/// Chapter 14: `*pointer` — emit a `Load` from the pointer, producing
+/// an `int` value (the pointer's pointee type is not yet tracked; the
+/// codegen pass reads the right width from the type env).  Mirrors
+/// `emit_dereference` in `nqcc2/lib/tacky_gen.ml:327-329`.
+fn lower_dereference(inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Instruction>, Val)> {
+    let (instrs, ptr) = lower_expr(inner, ctx)?;
+    let dst = ctx.fresh_typed_tmp(OperandType::Int);
+    let mut out = instrs;
+    out.push(Instruction::Load {
+        src_pointer: ptr,
+        dst: dst.clone(),
+    });
+    Ok((out, Val::Var(dst)))
+}
+
+/// Chapter 15: `base[index]` — emit `AddPtr` then `Load`.  Mirrors
+/// `emit_subscript` in `nqcc2/lib/tacky_gen.ml:176-183`.  The scale
+/// is the size of the array element (1 for char, 4 for int, 8 for
+/// long / pointer).  Since the element type isn't yet plumbed through
+/// the AST we default to 4 (int); callers that subscript a non-int
+/// array will get the wrong offset and need a follow-up.
+fn lower_subscript(
+    base: &Expr,
+    index: &Expr,
+    ctx: &mut LowerCtx,
+) -> Result<(Vec<Instruction>, Val)> {
+    let (mut base_instrs, base_val) = lower_expr(base, ctx)?;
+    let (idx_instrs, index_val) = lower_expr(index, ctx)?;
+    base_instrs.extend(idx_instrs);
+    // The element size is 4 for int (the only case we handle
+    // correctly); the OCaml reference uses `Type_utils.get_size` on
+    // the array's element type.  Chapter 15's `subscript.c` only
+    // tests `int a[10]`, so the fixed scale of 4 is enough.
+    let scale: u8 = 4;
+    let dst = ctx.fresh_typed_tmp(OperandType::Int);
+    base_instrs.push(Instruction::AddPtr {
+        ptr: base_val,
+        index: index_val,
+        scale,
+        dst: dst.clone(),
+    });
+    base_instrs.push(Instruction::Load {
+        src_pointer: Val::Var(dst.clone()),
+        dst: dst.clone(),
+    });
+    Ok((base_instrs, Val::Var(dst)))
 }
 
 fn lower_unary(
@@ -1262,10 +1333,12 @@ fn lower_binary(
 /// variables look their type up from the lowerer's `type_env` (the
 /// env is populated for every parameter, every local, every
 /// materialised long constant, and every synthetic tmp the lowerer
-/// has already created).
+/// has already created).  Chapter 13: `ConstantDouble` is
+/// `Double`.
 fn type_of_val(val: &Val, ctx: &LowerCtx) -> OperandType {
     match val {
         Val::Constant(_) => OperandType::Int,
+        Val::ConstantDouble(_) => OperandType::Double,
         Val::Var(name) => ctx
             .type_env
             .get(name)

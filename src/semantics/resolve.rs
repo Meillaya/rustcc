@@ -724,6 +724,7 @@ fn resolve_expr(
         Expr::Constant(n) => Ok(Expr::Constant(*n)),
         Expr::LongConstant(n) => Ok(Expr::LongConstant(*n)),
         Expr::UIntConstant(n, _) => Ok(Expr::UIntConstant(*n, false)),
+        Expr::DoubleConstant(d) => Ok(Expr::DoubleConstant(*d)),
         Expr::Cast { target_type, expr: inner } => Ok(Expr::Cast {
             target_type: target_type.clone(),
             expr: Box::new(resolve_expr(inner, scopes, globals)?),
@@ -796,6 +797,16 @@ fn resolve_expr(
             op: *op,
             left: Box::new(resolve_expr(left, scopes, globals)?),
             right: Box::new(resolve_expr(right, scopes, globals)?),
+        }),
+        Expr::AddressOf(inner) => Ok(Expr::AddressOf(Box::new(resolve_expr(
+            inner, scopes, globals,
+        )?))),
+        Expr::Dereference(inner) => Ok(Expr::Dereference(Box::new(resolve_expr(
+            inner, scopes, globals,
+        )?))),
+        Expr::Subscript { base, index } => Ok(Expr::Subscript {
+            base: Box::new(resolve_expr(base, scopes, globals)?),
+            index: Box::new(resolve_expr(index, scopes, globals)?),
         }),
     }
 }

@@ -239,7 +239,8 @@ fn format_binary_op(op: BinaryOpInstr) -> &'static str {
         BinaryOpInstr::AddDouble => "addsd",
         BinaryOpInstr::SubDouble => "subsd",
         BinaryOpInstr::MultDouble => "mulsd",
-        BinaryOpInstr::DivDoubleDouble => "divsd",
+        BinaryOpInstr::SseDivDouble => "divsd",
+        BinaryOpInstr::XorDouble => "xorpd",
     }
 }
 
