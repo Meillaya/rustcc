@@ -1,0 +1,304 @@
+TASK 38 W14-T2 manual QA evidence
+
+== Baseline manual x != x before edit ==
+TASK 38 BASELINE -- manual x != x (supported CLI)
+2026-07-08T13:33:26-04:00
+$ ./target/release/rustcc "$TMPDIR/nan_neq.c"
+compile_exit=0
+$ "$exe"
+run_exit=0
+$ ./target/release/rustcc --codegen "$TMPDIR/nan_neq.c"
+.text
+.globl main
+main:
+    pushq %rbp
+    movq %rsp, %rbp
+    subq $32, %rsp
+    movsd dbl.0(%rip), %xmm15
+    movsd %xmm15, -8(%rbp)
+    movsd -8(%rbp), %xmm14
+    divsd dbl.0(%rip), %xmm14
+    movsd %xmm14, -8(%rbp)
+    movsd -8(%rbp), %xmm15
+    movsd %xmm15, -16(%rbp)
+    movl -16(%rbp), %r10d
+    movl %r10d, -20(%rbp)
+    movsd -16(%rbp), %xmm14
+    movsd -16(%rbp), %xmm15
+    ucomisd %xmm15, %xmm14
+    setne -20(%rbp)
+    movzbl -20(%rbp), %r10d
+    movl %r10d, -20(%rbp)
+    movl -20(%rbp), %eax
+    movq %rbp, %rsp
+    popq %rbp
+    ret
+
+.section .rodata
+.align 8
+dbl.0:
+    .byte 0, 0, 0, 0, 0, 0, 0, 0
+
+cleanup=removed /tmp/rustcc-task38-baseline.urE4ie
+
+== Manual x != x after edit ==
+TASK 38 MANUAL QA -- x != x after implementation
+2026-07-08T13:35:32-04:00
+$ ./target/release/rustcc "$TMPDIR/nan_neq.c"
+compile_exit=0
+$ "$TMPDIR/nan_neq"
+run_exit=1
+$ ./target/release/rustcc --codegen "$TMPDIR/nan_neq.c"
+.text
+.globl main
+main:
+    pushq %rbp
+    movq %rsp, %rbp
+    subq $32, %rsp
+    movsd dbl.0(%rip), %xmm15
+    movsd %xmm15, -8(%rbp)
+    movsd -8(%rbp), %xmm14
+    divsd dbl.0(%rip), %xmm14
+    movsd %xmm14, -8(%rbp)
+    movsd -8(%rbp), %xmm15
+    movsd %xmm15, -16(%rbp)
+    movl -16(%rbp), %r10d
+    movl %r10d, -20(%rbp)
+    movsd -16(%rbp), %xmm14
+    movsd -16(%rbp), %xmm15
+    ucomisd %xmm15, %xmm14
+    jp double_cmp.unordered_true.0
+    setne -20(%rbp)
+    jmp double_cmp.end.1
+    double_cmp.unordered_true.0:
+    movl $1, -20(%rbp)
+    double_cmp.end.1:
+    movzbl -20(%rbp), %r10d
+    movl %r10d, -20(%rbp)
+    movl -20(%rbp), %eax
+    movq %rbp, %rsp
+    popq %rbp
+    ret
+
+.section .rodata
+.align 8
+dbl.0:
+    .byte 0, 0, 0, 0, 0, 0, 0, 0
+
+cleanup=removed /tmp/rustcc-task38-after.kuhj0Z
+
+== Manual/adversarial probes ==
+TASK 38 MANUAL QA + ADVERSARIAL PROBES
+2026-07-08T13:36:24-04:00
+probe=stale_state
+$ git status --short
+ M .omo/boulder.json
+ M .omo/plans/c-compiler-rust.md
+ M .omo/run-continuation/ses_0c241b468ffeuCkDS36rF8DZEG.json
+ M src/ast/operator.rs
+ M src/ast/stmt.rs
+ M src/ast/ty.rs
+ M src/codegen/assembly_symbols.rs
+ M src/codegen/codegen.rs
+ M src/codegen/frame.rs
+ M src/codegen/mod.rs
+ M src/codegen/regalloc/mod.rs
+ M src/ir/mod.rs
+ M src/lex/keyword.rs
+ M src/lex/mod.rs
+ M src/lex/token.rs
+ M src/parse/precedence.rs
+ M src/pipeline.rs
+ M src/semantics/label_loops.rs
+ M src/util/labels.rs
+?? .omo/evidence/task-18-adversarial-verify-2.txt
+?? .omo/evidence/task-18-adversarial-verify-3.txt
+?? .omo/evidence/task-18-adversarial-verify-4.txt
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/evidence/task-37-adversarial-verify-2.txt
+?? .omo/evidence/task-37-adversarial-verify.txt
+?? .omo/start-work/
+note: pre-existing .omo orchestration/evidence dirt preserved; task-owned files are src/codegen/codegen.rs, docs/COACHING_LOG.md, .omo/evidence/task-38-*.
+
+probe=manual_nan_neq_acceptance
+compile_exit=0
+run_exit=1 (expected 1)
+
+probe=nan_truthiness_and_comparisons
+compile_exit=0
+run_exit=7 (expected 7)
+
+probe=malformed_input
+compile_exit=1 (expected nonzero)
+stderr:
+lex error: invalid floating constant suffix in 0.
+
+probe=misleading_success_output
+manual probes assert exit codes immediately after execution; no stdout-only success was trusted.
+
+probe=long_external_commands
+long harness/cargo commands were run with explicit WORKING phases and exit status capture in gate evidence.
+
+probe=flaky_tests
+----------------------------------------------------------------------
+Ran 51 tests in 1.189s
+
+OK
+rerun_exit=0
+
+probe=scope_fidelity
+diff --git a/src/codegen/codegen.rs b/src/codegen/codegen.rs
+index a20110e..1af1056 100644
+--- a/src/codegen/codegen.rs
++++ b/src/codegen/codegen.rs
+@@ -107,6 +107,81 @@ fn map_integer_cc(cc: TackyCC, is_unsigned: bool) -> AsmCC {
+     }
+ }
+ 
++fn double_cc(cc: TackyCC) -> AsmCC {
++    match cc {
++        TackyCC::L => AsmCC::B,
++        TackyCC::LE => AsmCC::BE,
++        TackyCC::G => AsmCC::A,
++        TackyCC::GE => AsmCC::AE,
++        other => map_cc(other),
++    }
++}
++
++fn set_double_comparison(cc: TackyCC, dst: &str, ctx: &mut CodegenCtx) -> Vec<Instr> {
++    let asm_cc = double_cc(cc);
++    match cc {
++        // `ucomisd` marks unordered comparisons with PF=1, CF=1, ZF=1.
++        // That makes the raw equality, below, and below-or-equal condition
++        // codes accept NaN operands.  Branch around the raw `setcc` so C's
++        // NaN comparisons remain false for ==, <, and <=.
++        TackyCC::E | TackyCC::L | TackyCC::LE => {
++            let unordered = ctx.fresh_label("double_cmp.unordered_false");
++            let end = ctx.fresh_label("double_cmp.end");
++            vec![
++                Instr::JmpCC {
++                    cc: AsmCC::P,
++                    label: unordered.clone(),
++                },
++                Instr::SetCC {
++                    cc: asm_cc,
++                    dst: Operand::Pseudo(dst.to_string()),
++                },
++                Instr::Jmp(end.clone()),
++                Instr::Label(unordered),
++                Instr::Mov {
++                    src: Operand::Imm(0),
++                    dst: Operand::Pseudo(dst.to_string()),
++                },
++                Instr::Label(end),
++            ]
++        }
++        // C's `!=` is true for unordered comparisons.
++        TackyCC::NE => {
++            let unordered = ctx.fresh_label("double_cmp.unordered_true");
++            let end = ctx.fresh_label("double_cmp.end");
++            vec![
++                Instr::JmpCC {
++                    cc: AsmCC::P,
++                    label: unordered.clone(),
++                },
++                Instr::SetCC {
++                    cc: asm_cc,
++                    dst: Operand::Pseudo(dst.to_string()),
++                },
++                Instr::Jmp(end.clone()),
++                Instr::Label(unordered),
++                Instr::Mov {
++                    src: Operand::Imm(1),
++                    dst: Operand::Pseudo(dst.to_string()),
++                },
++                Instr::Label(end),
++            ]
++        }
++        // `seta` and `setae` are already false when PF=1 because unordered
++        // also sets CF=1, so > and >= need no extra parity guard.
++        TackyCC::G | TackyCC::GE => vec![Instr::SetCC {
++            cc: asm_cc,
++            dst: Operand::Pseudo(dst.to_string()),
++        }],
++        // The lowerer should only request signed comparison codes for double
++        // expressions; keep the mapping total for robustness.
++        _ => vec![Instr::SetCC {
++            cc: asm_cc,
++            dst: Operand::Pseudo(dst.to_string()),
++        }],
++    }
++}
++
+ #[derive(Default)]
+ struct CodegenCtx {
+     double_labels: HashMap<u64, String>,
+@@ -1061,13 +1136,6 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
+             };
+             let mut out = prelude;
+             if is_double {
+-                let cc = match cc {
+-                    TackyCC::L => AsmCC::B,
+-                    TackyCC::LE => AsmCC::BE,
+-                    TackyCC::G => AsmCC::A,
+-                    TackyCC::GE => AsmCC::AE,
+-                    other => map_cc(*other),
+-                };
+                 out.push(Instr::Movsd {
+                     src: cmp_left,
+                     dst: Operand::Reg(Reg::XMM(14)),
+@@ -1076,10 +1144,7 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
+                     left: Operand::Reg(Reg::XMM(14)),
+                     right: right_op,
+                 });
+-                out.push(Instr::SetCC {
+-                    cc,
+-                    dst: Operand::Pseudo(dst.clone()),
+-                });
++                out.extend(set_double_comparison(*cc, dst, ctx));
+             } else if is_long {
+                 let right_op = match right_op {
+                     Operand::Imm(n) if immediate_too_wide(n) => {
+@@ -1167,6 +1232,7 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
+             let mut out = prelude;
+             if is_double {
+                 let zero = Operand::Data(ctx.double_label(0.0));
++                let unordered = ctx.fresh_label("double_jump_if_zero.unordered");
+                 out.push(Instr::Movsd {
+                     src: cmp_left,
+                     dst: Operand::Reg(Reg::XMM(14)),
+@@ -1175,6 +1241,16 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
+                     left: Operand::Reg(Reg::XMM(14)),
+                     right: zero,
+                 });
++                out.push(Instr::JmpCC {
++                    cc: AsmCC::P,
++                    label: unordered.clone(),
++                });
++                out.push(Instr::JmpCC {
++                    cc: AsmCC::E,
++                    label: target.clone(),
++                });
++                out.push(Instr::Label(unordered));
++                return out;
+             } else if is_long {
+                 out.push(Instr::Cmpq {
+                     left: cmp_left,
+@@ -1231,6 +1307,15 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
+                     left: Operand::Reg(Reg::XMM(14)),
+                     right: zero,
+                 });
++                out.push(Instr::JmpCC {
++                    cc: AsmCC::P,
++                    label: target.clone(),
++                });
++                out.push(Instr::JmpCC {
++                    cc: AsmCC::NE,
++                    label: target.clone(),
++                });
++                return out;
+             } else if is_long {
+                 out.push(Instr::Cmpq {
+                     left: cmp_left,
+cleanup=removed /tmp/rustcc-task38-manual.I7cAsP and temporary malformed-output files

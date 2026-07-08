@@ -1,0 +1,34 @@
+TASK 38 W14-T2 code review / slop evidence
+
+Scope fidelity:
+- Implemented only Chapter 13 NaN-aware double comparison and double truthiness handling in src/codegen/codegen.rs.
+- No pointers, arrays, chars, sizeof, structs, unions, optimizations, register allocation, ABI expansion, harness edits, or tests weakening.
+- Accidental broad cargo fmt churn was removed; final source diff is limited to src/codegen/codegen.rs plus this task's evidence/coaching docs.
+
+Implementation review:
+- ucomisd unordered PF handling is explicit.
+- ==, <, <= branch around unordered and force result 0.
+- != branches unordered to result 1.
+- > and >= keep seta/setae because unordered sets CF=1, making those false.
+- double JumpIfZero treats unordered as nonzero; JumpIfNotZero jumps on unordered, matching C scalar truthiness for NaN.
+- Existing core double support is reused; no speculative abstraction beyond two small local helpers for condition-code selection and setcc emission.
+
+Adversarial classes:
+- stale_state: git status captured before/after; pre-existing .omo dirty state preserved and not reverted.
+- dirty_worktree: task-owned diff isolated from unrelated orchestration/evidence files.
+- malformed_input: malformed NaN-ish literal `0.nan` rejected with nonzero compile exit.
+- long_external_commands: cargo/harness gates were announced with WORKING phases and recorded with exit codes.
+- misleading_success_output: manual QA checks executable exit codes, not stdout-only success.
+- flaky_tests: chapter 13 --nan harness rerun in manual/adversarial probe, still OK.
+- scope_fidelity: git diff captured in manual QA evidence; no broad formatting churn remains.
+
+No stale/misleading evidence:
+- Baseline failure and post-fix pass are both included with timestamps.
+- Gates were run after rebuilding target/release/rustcc from the modified source.
+
+Remaining risks:
+- Assembly labels are emitted using the existing indented-label emitter style; assembler and harness accept it.
+- No new Rust unit tests were added because the official compiler harness and manual executable probes cover the observable behavior for this compiler task.
+
+Final verification note:
+- An attempted parallel harness run produced test-directory artifact races (`Text file busy` / missing temporary `.i`, `.s`, `.o` files), so final harness evidence was rerun sequentially. The sequential chapter 13 core, chapter 13 --nan, and chapter 5 sanity gates all passed.

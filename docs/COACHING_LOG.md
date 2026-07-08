@@ -900,3 +900,23 @@ Added the Chapter 13 core `double` foundation: parsing and typed lowering for do
 - `.omo/evidence/task-37-ch13-core-gate.txt`
 - `.omo/evidence/task-37-manual-qa.txt`
 - `.omo/evidence/task-37-regressions.txt`
+
+## Wave 14 / Chapter 13 NaN extra (task 38)
+
+Added NaN-aware Chapter 13 double comparisons for the `--nan` extra. The backend now treats unordered `ucomisd` results as false for `==`, `<`, `<=`, `>`, `>=`, true for `!=`, and treats NaN as nonzero in double conditions.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `cargo build --release` | exit 0, zero warnings |
+| `cargo test --release` | 9 passed, 0 failed |
+| chapter 13 `--latest-only` | `Ran 50 tests … OK` |
+| chapter 13 `--latest-only --nan` | `Ran 51 tests … OK` |
+| chapter 5 `--latest-only --bitwise --compound --increment` | `Ran 82 tests … OK` |
+| manual `double x = 0.0/0.0; return x != x;` | compiles and exits 1 as expected |
+
+### Evidence
+- `.omo/evidence/task-38-ch13-nan-gate.txt`
+- `.omo/evidence/task-38-manual-qa.txt`
+- `.omo/evidence/task-38-code-review.txt`

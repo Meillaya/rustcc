@@ -107,6 +107,81 @@ fn map_integer_cc(cc: TackyCC, is_unsigned: bool) -> AsmCC {
     }
 }
 
+fn double_cc(cc: TackyCC) -> AsmCC {
+    match cc {
+        TackyCC::L => AsmCC::B,
+        TackyCC::LE => AsmCC::BE,
+        TackyCC::G => AsmCC::A,
+        TackyCC::GE => AsmCC::AE,
+        other => map_cc(other),
+    }
+}
+
+fn set_double_comparison(cc: TackyCC, dst: &str, ctx: &mut CodegenCtx) -> Vec<Instr> {
+    let asm_cc = double_cc(cc);
+    match cc {
+        // `ucomisd` marks unordered comparisons with PF=1, CF=1, ZF=1.
+        // That makes the raw equality, below, and below-or-equal condition
+        // codes accept NaN operands.  Branch around the raw `setcc` so C's
+        // NaN comparisons remain false for ==, <, and <=.
+        TackyCC::E | TackyCC::L | TackyCC::LE => {
+            let unordered = ctx.fresh_label("double_cmp.unordered_false");
+            let end = ctx.fresh_label("double_cmp.end");
+            vec![
+                Instr::JmpCC {
+                    cc: AsmCC::P,
+                    label: unordered.clone(),
+                },
+                Instr::SetCC {
+                    cc: asm_cc,
+                    dst: Operand::Pseudo(dst.to_string()),
+                },
+                Instr::Jmp(end.clone()),
+                Instr::Label(unordered),
+                Instr::Mov {
+                    src: Operand::Imm(0),
+                    dst: Operand::Pseudo(dst.to_string()),
+                },
+                Instr::Label(end),
+            ]
+        }
+        // C's `!=` is true for unordered comparisons.
+        TackyCC::NE => {
+            let unordered = ctx.fresh_label("double_cmp.unordered_true");
+            let end = ctx.fresh_label("double_cmp.end");
+            vec![
+                Instr::JmpCC {
+                    cc: AsmCC::P,
+                    label: unordered.clone(),
+                },
+                Instr::SetCC {
+                    cc: asm_cc,
+                    dst: Operand::Pseudo(dst.to_string()),
+                },
+                Instr::Jmp(end.clone()),
+                Instr::Label(unordered),
+                Instr::Mov {
+                    src: Operand::Imm(1),
+                    dst: Operand::Pseudo(dst.to_string()),
+                },
+                Instr::Label(end),
+            ]
+        }
+        // `seta` and `setae` are already false when PF=1 because unordered
+        // also sets CF=1, so > and >= need no extra parity guard.
+        TackyCC::G | TackyCC::GE => vec![Instr::SetCC {
+            cc: asm_cc,
+            dst: Operand::Pseudo(dst.to_string()),
+        }],
+        // The lowerer should only request signed comparison codes for double
+        // expressions; keep the mapping total for robustness.
+        _ => vec![Instr::SetCC {
+            cc: asm_cc,
+            dst: Operand::Pseudo(dst.to_string()),
+        }],
+    }
+}
+
 #[derive(Default)]
 struct CodegenCtx {
     double_labels: HashMap<u64, String>,
@@ -1061,13 +1136,6 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
             };
             let mut out = prelude;
             if is_double {
-                let cc = match cc {
-                    TackyCC::L => AsmCC::B,
-                    TackyCC::LE => AsmCC::BE,
-                    TackyCC::G => AsmCC::A,
-                    TackyCC::GE => AsmCC::AE,
-                    other => map_cc(*other),
-                };
                 out.push(Instr::Movsd {
                     src: cmp_left,
                     dst: Operand::Reg(Reg::XMM(14)),
@@ -1076,10 +1144,7 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
                     left: Operand::Reg(Reg::XMM(14)),
                     right: right_op,
                 });
-                out.push(Instr::SetCC {
-                    cc,
-                    dst: Operand::Pseudo(dst.clone()),
-                });
+                out.extend(set_double_comparison(*cc, dst, ctx));
             } else if is_long {
                 let right_op = match right_op {
                     Operand::Imm(n) if immediate_too_wide(n) => {
@@ -1167,6 +1232,7 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
             let mut out = prelude;
             if is_double {
                 let zero = Operand::Data(ctx.double_label(0.0));
+                let unordered = ctx.fresh_label("double_jump_if_zero.unordered");
                 out.push(Instr::Movsd {
                     src: cmp_left,
                     dst: Operand::Reg(Reg::XMM(14)),
@@ -1175,6 +1241,16 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
                     left: Operand::Reg(Reg::XMM(14)),
                     right: zero,
                 });
+                out.push(Instr::JmpCC {
+                    cc: AsmCC::P,
+                    label: unordered.clone(),
+                });
+                out.push(Instr::JmpCC {
+                    cc: AsmCC::E,
+                    label: target.clone(),
+                });
+                out.push(Instr::Label(unordered));
+                return out;
             } else if is_long {
                 out.push(Instr::Cmpq {
                     left: cmp_left,
@@ -1231,6 +1307,15 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
                     left: Operand::Reg(Reg::XMM(14)),
                     right: zero,
                 });
+                out.push(Instr::JmpCC {
+                    cc: AsmCC::P,
+                    label: target.clone(),
+                });
+                out.push(Instr::JmpCC {
+                    cc: AsmCC::NE,
+                    label: target.clone(),
+                });
+                return out;
             } else if is_long {
                 out.push(Instr::Cmpq {
                     left: cmp_left,
