@@ -1,0 +1,4 @@
+$ ./target/release/rustcc /tmp/rustcc-ch17-qa/sizeof-side-effect.c
+compile_exit_code=0
+$ /tmp/rustcc-ch17-qa/sizeof-side-effect
+program_exit_code=0

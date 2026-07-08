@@ -1,0 +1,14 @@
+$ for p in tests/tests/chapter_17/valid/sizeof/sizeof_consts.c tests/tests/chapter_17/valid/sizeof/sizeof_consts tests/tests/chapter_17/valid/sizeof/sizeof_expressions.c tests/tests/chapter_17/valid/sizeof/sizeof_expressions.s tests/tests/chapter_17/valid/void_pointer/explicit_cast.c tests/tests/chapter_17/valid/void_pointer/explicit_cast.i; do ls -l "$p"; done
+-rw-r--r-- 1 mei mei 641 Mar 18 05:30 tests/tests/chapter_17/valid/sizeof/sizeof_consts.c
+ls_exit_code=0 path=tests/tests/chapter_17/valid/sizeof/sizeof_consts.c
+ls: cannot access 'tests/tests/chapter_17/valid/sizeof/sizeof_consts': No such file or directory
+ls_exit_code=2 path=tests/tests/chapter_17/valid/sizeof/sizeof_consts
+-rw-r--r-- 1 mei mei 997 Mar 18 05:30 tests/tests/chapter_17/valid/sizeof/sizeof_expressions.c
+ls_exit_code=0 path=tests/tests/chapter_17/valid/sizeof/sizeof_expressions.c
+ls: cannot access 'tests/tests/chapter_17/valid/sizeof/sizeof_expressions.s': No such file or directory
+ls_exit_code=2 path=tests/tests/chapter_17/valid/sizeof/sizeof_expressions.s
+-rw-r--r-- 1 mei mei 1368 Mar 18 05:30 tests/tests/chapter_17/valid/void_pointer/explicit_cast.c
+ls_exit_code=0 path=tests/tests/chapter_17/valid/void_pointer/explicit_cast.c
+ls: cannot access 'tests/tests/chapter_17/valid/void_pointer/explicit_cast.i': No such file or directory
+ls_exit_code=2 path=tests/tests/chapter_17/valid/void_pointer/explicit_cast.i
+$ git status --short tests/tests/chapter_17 | sed -n 1,80p

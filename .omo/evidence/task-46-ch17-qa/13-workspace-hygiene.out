@@ -1,0 +1,51 @@
+$ git status --short
+ M src/ast/expr.rs
+ M src/ast/stmt.rs
+ M src/ast/ty.rs
+ M src/compiler.rs
+ M src/ir/lower.rs
+ M src/parse/parser.rs
+ M src/semantics/label_loops.rs
+ M src/semantics/resolve.rs
+ M src/semantics/typecheck.rs
+?? .omo/evidence/task-18-adversarial-verify-2.txt
+?? .omo/evidence/task-18-adversarial-verify-3.txt
+?? .omo/evidence/task-18-adversarial-verify-4.txt
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/evidence/task-37-adversarial-verify-2.txt
+?? .omo/evidence/task-37-adversarial-verify.txt
+?? .omo/evidence/task-38-adversarial-verify.txt
+?? .omo/evidence/task-39-adversarial-verify.txt
+?? .omo/evidence/task-40-adversarial-verify-2.txt
+?? .omo/evidence/task-40-adversarial-verify.txt
+?? .omo/evidence/task-41-adversarial-verify.txt
+?? .omo/evidence/task-46-ch17-implementation.txt
+?? .omo/evidence/task-46-ch17-qa/
+?? .omo/start-work/
+$ rm -f tests/tests/chapter_17/valid/sizeof/sizeof_consts # QA-generated executable from direct compile probe
+$ git status --short
+ M src/ast/expr.rs
+ M src/ast/stmt.rs
+ M src/ast/ty.rs
+ M src/compiler.rs
+ M src/ir/lower.rs
+ M src/parse/parser.rs
+ M src/semantics/label_loops.rs
+ M src/semantics/resolve.rs
+ M src/semantics/typecheck.rs
+?? .omo/evidence/task-18-adversarial-verify-2.txt
+?? .omo/evidence/task-18-adversarial-verify-3.txt
+?? .omo/evidence/task-18-adversarial-verify-4.txt
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/evidence/task-37-adversarial-verify-2.txt
+?? .omo/evidence/task-37-adversarial-verify.txt
+?? .omo/evidence/task-38-adversarial-verify.txt
+?? .omo/evidence/task-39-adversarial-verify.txt
+?? .omo/evidence/task-40-adversarial-verify-2.txt
+?? .omo/evidence/task-40-adversarial-verify.txt
+?? .omo/evidence/task-41-adversarial-verify.txt
+?? .omo/evidence/task-46-ch17-implementation.txt
+?? .omo/evidence/task-46-ch17-qa/
+?? .omo/start-work/

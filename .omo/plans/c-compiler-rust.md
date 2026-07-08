@@ -1690,7 +1690,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   ```
 
 
-- [ ] 46. W18-T1: Chapter 17 - `void`, `void*`, `sizeof`, dynamic memory (`malloc`/`free` declarations)
+- [x] 46. W18-T1: Chapter 17 - `void`, `void*`, `sizeof`, dynamic memory (`malloc`/`free` declarations)
 
   **What to do**: Add `void` and `sizeof` operator.
   - Extend AST `Type` with `Void`.
@@ -1714,7 +1714,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   - [ ] `int main(void) { void *p = (void *)0; return p == 0; }` -> exit 1.
   - [ ] `./tests/test_compiler ./target/release/rustcc --chapter 17 --latest-only` green.
 
-- [ ] 47. W18-T2: Chapter 17 - gate verification + commit.
+- [x] 47. W18-T2: Chapter 17 - gate verification + commit.
 
   **What to do**: Run chapter 17 gate (sizeof, void, void*), update COACHING_LOG, commit.
 

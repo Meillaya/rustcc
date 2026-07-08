@@ -985,3 +985,24 @@ Implemented Chapter 16 natively in the Rust compiler pipeline: `char` now flows 
 - `.omo/evidence/task-44-adversarial-verify-2.txt`
 - `.omo/evidence/task-44-ch16-qa/`
 - `.omo/evidence/task-45-ch16-gate.txt`
+
+## Wave 18 / Chapter 17 void, sizeof, and libc-linked dynamic memory (task 46/47)
+
+Implemented Chapter 17 natively in the Rust compiler pipeline: `void` now works as a real return type and pointer element type, `return;` is accepted for void functions, `sizeof(expr)` and `sizeof(type)` are parsed and lowered as non-evaluated constants, incomplete types such as `void` are rejected where required, and external dynamic-memory declarations/calls (`malloc`/`free`) link through libc without any source-content bridge fallback. The gate verification below confirms the chapter 17, 16, and 15 latest-only harnesses stay green and the forbidden bridge scan remains clean.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `cargo build --release` | exit 0 |
+| `cargo test --release` | 10 passed, 0 failed |
+| chapter 17 `--latest-only` | `Ran 70 tests … OK` |
+| chapter 16 `--latest-only` | `Ran 72 tests … OK` |
+| chapter 15 `--latest-only` | `Ran 83 tests … OK` |
+| forbidden bridge scan | no matches in `src/` |
+
+### Evidence
+- `.omo/evidence/task-46-ch17-implementation.txt`
+- `.omo/evidence/task-46-adversarial-verify.txt`
+- `.omo/evidence/task-46-ch17-qa/`
+- `.omo/evidence/task-47-ch17-gate.txt`

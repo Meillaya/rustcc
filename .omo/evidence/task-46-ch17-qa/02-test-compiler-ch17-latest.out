@@ -1,0 +1,540 @@
+======================================================================
+ERROR: test_valid/sizeof/sizeof_consts (test_framework.basic.TestChapter17.test_valid/sizeof/sizeof_consts)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 398, in compile_and_run
+    result = subprocess.run(
+        [exe], check=False, capture_output=True, text=True, timeout=10.0
+    )
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 554, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1876, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1820, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/mei/projects/rustcc/tests/tests/chapter_17/valid/sizeof/sizeof_consts'
+
+======================================================================
+ERROR: test_valid/sizeof/sizeof_derived_types (test_framework.basic.TestChapter17.test_valid/sizeof/sizeof_derived_types)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 398, in compile_and_run
+    result = subprocess.run(
+        [exe], check=False, capture_output=True, text=True, timeout=10.0
+    )
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 554, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1876, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1820, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/mei/projects/rustcc/tests/tests/chapter_17/valid/sizeof/sizeof_derived_types'
+
+======================================================================
+ERROR: test_valid/sizeof/sizeof_not_evaluated (test_framework.basic.TestChapter17.test_valid/sizeof/sizeof_not_evaluated)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 398, in compile_and_run
+    result = subprocess.run(
+        [exe], check=False, capture_output=True, text=True, timeout=10.0
+    )
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 554, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1876, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1820, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/mei/projects/rustcc/tests/tests/chapter_17/valid/sizeof/sizeof_not_evaluated'
+
+======================================================================
+ERROR: test_valid/sizeof/sizeof_result_is_ulong (test_framework.basic.TestChapter17.test_valid/sizeof/sizeof_result_is_ulong)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 398, in compile_and_run
+    result = subprocess.run(
+        [exe], check=False, capture_output=True, text=True, timeout=10.0
+    )
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 554, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1876, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1820, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/mei/projects/rustcc/tests/tests/chapter_17/valid/sizeof/sizeof_result_is_ulong'
+
+======================================================================
+ERROR: test_valid/void/cast_to_void (test_framework.basic.TestChapter17.test_valid/void/cast_to_void)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 398, in compile_and_run
+    result = subprocess.run(
+        [exe], check=False, capture_output=True, text=True, timeout=10.0
+    )
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 554, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1876, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1820, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/mei/projects/rustcc/tests/tests/chapter_17/valid/void/cast_to_void'
+
+======================================================================
+ERROR: test_valid/void/ternary (test_framework.basic.TestChapter17.test_valid/void/ternary)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 398, in compile_and_run
+    result = subprocess.run(
+        [exe], check=False, capture_output=True, text=True, timeout=10.0
+    )
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 554, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1876, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1820, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/mei/projects/rustcc/tests/tests/chapter_17/valid/void/ternary'
+
+======================================================================
+ERROR: test_valid/void/void_for_loop (test_framework.basic.TestChapter17.test_valid/void/void_for_loop)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 398, in compile_and_run
+    result = subprocess.run(
+        [exe], check=False, capture_output=True, text=True, timeout=10.0
+    )
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 554, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1876, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1820, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/mei/projects/rustcc/tests/tests/chapter_17/valid/void/void_for_loop'
+
+======================================================================
+ERROR: test_valid/void/void_function (test_framework.basic.TestChapter17.test_valid/void/void_function)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 398, in compile_and_run
+    result = subprocess.run(
+        [exe], check=False, capture_output=True, text=True, timeout=10.0
+    )
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 554, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1876, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1820, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/mei/projects/rustcc/tests/tests/chapter_17/valid/void/void_function'
+
+======================================================================
+ERROR: test_valid/void_pointer/array_of_pointers_to_void (test_framework.basic.TestChapter17.test_valid/void_pointer/array_of_pointers_to_void)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 398, in compile_and_run
+    result = subprocess.run(
+        [exe], check=False, capture_output=True, text=True, timeout=10.0
+    )
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 554, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1876, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1820, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/mei/projects/rustcc/tests/tests/chapter_17/valid/void_pointer/array_of_pointers_to_void'
+
+======================================================================
+ERROR: test_valid/void_pointer/array_of_pointers_to_void (test_framework.basic.TestChapter17.test_valid/void_pointer/array_of_pointers_to_void)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 242, in tearDown
+    junk.unlink()
+    ~~~~~~~~~~~^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/pathlib/_local.py", line 746, in unlink
+    os.unlink(self)
+    ~~~~~~~~~^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/mei/projects/rustcc/tests/tests/chapter_17/invalid_types/scalar_expressions/or_void.i'
+
+======================================================================
+ERROR: test_valid/void_pointer/common_pointer_type (test_framework.basic.TestChapter17.test_valid/void_pointer/common_pointer_type)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 398, in compile_and_run
+    result = subprocess.run(
+        [exe], check=False, capture_output=True, text=True, timeout=10.0
+    )
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 554, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1876, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1820, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/mei/projects/rustcc/tests/tests/chapter_17/valid/void_pointer/common_pointer_type'
+
+======================================================================
+ERROR: test_valid/void_pointer/conversion_by_assignment (test_framework.basic.TestChapter17.test_valid/void_pointer/conversion_by_assignment)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 398, in compile_and_run
+    result = subprocess.run(
+        [exe], check=False, capture_output=True, text=True, timeout=10.0
+    )
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 554, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1876, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1820, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/mei/projects/rustcc/tests/tests/chapter_17/valid/void_pointer/conversion_by_assignment'
+
+======================================================================
+ERROR: test_valid/void_pointer/simple (test_framework.basic.TestChapter17.test_valid/void_pointer/simple)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 398, in compile_and_run
+    result = subprocess.run(
+        [exe], check=False, capture_output=True, text=True, timeout=10.0
+    )
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 554, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1876, in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      p2cread, p2cwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      c2pread, c2pwrite,
+                      ^^^^^^^^^^^^^^^^^^
+                      errread, errwrite)
+                      ^^^^^^^^^^^^^^^^^^
+  File "/nix/store/l9k0anq0z7zz81zcwy035jfwap9ga6rl-python3-3.13.13/lib/python3.13/subprocess.py", line 1820, in _posix_spawn
+    self.pid = os.posix_spawn(executable, args, env, **kwargs)
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/mei/projects/rustcc/tests/tests/chapter_17/valid/void_pointer/simple'
+
+======================================================================
+FAIL: test_valid/sizeof/sizeof_expressions (test_framework.basic.TestChapter17.test_valid/sizeof/sizeof_expressions)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_17/valid/sizeof/sizeof_expressions.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_17/valid/sizeof/sizeof_expressions.s: Assembler messages:
+Error: can't open /home/mei/projects/rustcc/tests/tests/chapter_17/valid/sizeof/sizeof_expressions.s for reading: No such file or directory
+assemble/link failed for /home/mei/projects/rustcc/tests/tests/chapter_17/valid/sizeof/sizeof_expressions.s
+
+
+======================================================================
+FAIL: test_valid/void_pointer/explicit_cast (test_framework.basic.TestChapter17.test_valid/void_pointer/explicit_cast)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_17/valid/void_pointer/explicit_cast.c failed with error:
+failed to read /home/mei/projects/rustcc/tests/tests/chapter_17/valid/void_pointer/explicit_cast.i: No such file or directory (os error 2)
+
+
+======================================================================
+FAIL: test_valid/void_pointer/memory_management_functions (test_framework.basic.TestChapter17.test_valid/void_pointer/memory_management_functions)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_17/valid/void_pointer/memory_management_functions.c failed with error:
+failed to read /home/mei/projects/rustcc/tests/tests/chapter_17/valid/void_pointer/memory_management_functions.i: No such file or directory (os error 2)
+
+
+----------------------------------------------------------------------
+Ran 70 tests in 5.136s
+
+FAILED (failures=3, errors=13)

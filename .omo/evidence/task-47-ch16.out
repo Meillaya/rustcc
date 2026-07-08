@@ -1,0 +1,7 @@
+----------------------------------------------------------------------
+Ran 72 tests in 1.295s
+
+OK
+/home/mei/projects/rustcc/tests/tests/chapter_16/valid/chars/explicit_casts.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_16/valid/chars/explicit_casts.s:1028: Warning: 0x12c shortened to 0x2c
+

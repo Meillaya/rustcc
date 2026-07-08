@@ -1,0 +1,7 @@
+$ ./target/release/rustcc tests/tests/chapter_17/valid/sizeof/sizeof_consts.c
+compile_exit_code=0
+$ ls -l tests/tests/chapter_17/valid/sizeof/sizeof_consts tests/tests/chapter_17/valid/sizeof/sizeof_consts.s tests/tests/chapter_17/valid/sizeof/sizeof_consts.i
+ls: cannot access 'tests/tests/chapter_17/valid/sizeof/sizeof_consts.s': No such file or directory
+ls: cannot access 'tests/tests/chapter_17/valid/sizeof/sizeof_consts.i': No such file or directory
+-rwxr-xr-x 1 mei mei 15984 Jul  8 16:45 tests/tests/chapter_17/valid/sizeof/sizeof_consts
+ls_exit_code=2

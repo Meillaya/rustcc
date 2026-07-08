@@ -1,0 +1,60 @@
+$ ./target/release/rustcc --validate /tmp/rustcc-ch17-qa/sizeof-side-effect.c
+validated: TypedProgram {
+    program: Program {
+        top_level_items: [
+            Function(
+                Function {
+                    name: "main",
+                    ret_ty: Int,
+                    params: [],
+                    body: Some(
+                        [
+                            Declaration(
+                                VarDecl {
+                                    name: "main.i.0",
+                                    ty: Int,
+                                    init: Some(
+                                        Constant(
+                                            0,
+                                        ),
+                                    ),
+                                    storage: Auto,
+                                },
+                            ),
+                            Statement(
+                                Expr(
+                                    Some(
+                                        SizeOfExpr(
+                                            Paren(
+                                                Assign {
+                                                    op: Assign,
+                                                    target: Var(
+                                                        "main.i.0",
+                                                    ),
+                                                    value: Constant(
+                                                        3,
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                            Statement(
+                                Return(
+                                    Some(
+                                        Var(
+                                            "main.i.0",
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ],
+                    ),
+                    storage: Auto,
+                },
+            ),
+        ],
+    },
+}
+validate_exit_code=0

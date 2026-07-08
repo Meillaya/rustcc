@@ -1,0 +1,87 @@
+{
+  "overallVerdict": "PASS_WITH_TRANSIENT_HARNESS_FAILURE_RETRIED_PASS",
+  "surfaceEvidence": [
+    {
+      "scenarioId": "S1",
+      "criterionReference": "cargo build --release",
+      "surface": "native compiler build CLI",
+      "exactInvocation": "cargo build --release",
+      "verdict": "PASS",
+      "artifactRefs": ["A01", "A02"]
+    },
+    {
+      "scenarioId": "S2",
+      "criterionReference": "./tests/test_compiler ./target/release/rustcc --chapter 17 --latest-only",
+      "surface": "native compiler CLI through official test harness",
+      "exactInvocation": "./tests/test_compiler ./target/release/rustcc --chapter 17 --latest-only",
+      "verdict": "PASS_ON_RETRY; FIRST_CAPTURED_RUN_FAILED_TRANSIENTLY",
+      "artifactRefs": ["A03", "A04", "A17", "A18", "A19", "A20"]
+    },
+    {
+      "scenarioId": "S3",
+      "criterionReference": "compile/run acceptance: sizeof(int) exits 4",
+      "surface": "native compiler CLI + emitted ELF execution",
+      "exactInvocation": "./target/release/rustcc /tmp/rustcc-ch17-qa/sizeof-int.c && /tmp/rustcc-ch17-qa/sizeof-int",
+      "verdict": "PASS",
+      "artifactRefs": ["A05", "A06", "A07"]
+    },
+    {
+      "scenarioId": "S4",
+      "criterionReference": "compile/run acceptance: void *p=(void*)0; return p==0; exits 1",
+      "surface": "native compiler CLI + emitted ELF execution",
+      "exactInvocation": "./target/release/rustcc /tmp/rustcc-ch17-qa/void-p-null.c && /tmp/rustcc-ch17-qa/void-p-null",
+      "verdict": "PASS",
+      "artifactRefs": ["A08", "A09", "A10"]
+    },
+    {
+      "scenarioId": "S5",
+      "criterionReference": "--validate/--tacky probe: sizeof operand side effects are not lowered/evaluated",
+      "surface": "native compiler CLI validation/tacky stages + emitted ELF execution",
+      "exactInvocation": "./target/release/rustcc --validate /tmp/rustcc-ch17-qa/sizeof-side-effect.c; ./target/release/rustcc --tacky /tmp/rustcc-ch17-qa/sizeof-side-effect.c; ./target/release/rustcc /tmp/rustcc-ch17-qa/sizeof-side-effect.c && /tmp/rustcc-ch17-qa/sizeof-side-effect",
+      "verdict": "PASS",
+      "artifactRefs": ["A11", "A12", "A13", "A14", "A15", "A16"]
+    }
+  ],
+  "adversarialCases": [
+    {
+      "scenarioId": "ADV1",
+      "criterionReference": "sizeof operand side effects must not execute",
+      "adversarialClass": "side-effectful assignment inside sizeof expression",
+      "expectedBehavior": "validated AST may contain assignment under SizeOfExpr; tacky must not lower assignment or Constant 3; runtime returns original i=0",
+      "verdict": "PASS",
+      "artifactRefs": ["A11", "A12", "A13", "A14", "A15", "A16"]
+    },
+    {
+      "scenarioId": "ADV2",
+      "criterionReference": "void pointer null comparison",
+      "adversarialClass": "void pointer cast from integer null and equality against integer zero",
+      "expectedBehavior": "compile succeeds; program exits 1 for true comparison",
+      "verdict": "PASS",
+      "artifactRefs": ["A08", "A09", "A10"]
+    }
+  ],
+  "artifactRefs": [
+    {"id":"A01","kind":"stdout/stderr","description":"cargo release build output","path":".omo/evidence/task-46-ch17-qa/01-cargo-build-release.out"},
+    {"id":"A02","kind":"exit-code","description":"cargo release build exit code 0","path":".omo/evidence/task-46-ch17-qa/01-cargo-build-release.exit"},
+    {"id":"A03","kind":"stdout/stderr","description":"first captured chapter 17 harness run; failed transiently","path":".omo/evidence/task-46-ch17-qa/02-test-compiler-ch17-latest.out"},
+    {"id":"A04","kind":"exit-code","description":"first captured chapter 17 harness run exit code 1","path":".omo/evidence/task-46-ch17-qa/02-test-compiler-ch17-latest.exit"},
+    {"id":"A05","kind":"source","description":"sizeof(int) acceptance source","path":".omo/evidence/task-46-ch17-qa/03-sizeof-int.c"},
+    {"id":"A06","kind":"stdout/stderr","description":"sizeof(int) compile/run output with program_exit_code=4","path":".omo/evidence/task-46-ch17-qa/03-sizeof-int.out"},
+    {"id":"A07","kind":"exit-code","description":"sizeof(int) compile/run exit summary","path":".omo/evidence/task-46-ch17-qa/03-sizeof-int.exit"},
+    {"id":"A08","kind":"source","description":"void pointer null acceptance source","path":".omo/evidence/task-46-ch17-qa/04-void-p-null.c"},
+    {"id":"A09","kind":"stdout/stderr","description":"void pointer null compile/run output with program_exit_code=1","path":".omo/evidence/task-46-ch17-qa/04-void-p-null.out"},
+    {"id":"A10","kind":"exit-code","description":"void pointer null compile/run exit summary","path":".omo/evidence/task-46-ch17-qa/04-void-p-null.exit"},
+    {"id":"A11","kind":"source","description":"sizeof side-effect probe source","path":".omo/evidence/task-46-ch17-qa/05-sizeof-side-effect.c"},
+    {"id":"A12","kind":"stdout/stderr","description":"validate output showing Assign under SizeOfExpr","path":".omo/evidence/task-46-ch17-qa/05-sizeof-side-effect-validate.out"},
+    {"id":"A13","kind":"stdout/stderr","description":"tacky output with Constant 4 only and no lowered assignment","path":".omo/evidence/task-46-ch17-qa/06-sizeof-side-effect-tacky.out"},
+    {"id":"A14","kind":"stdout/stderr","description":"compile/run output for side-effect probe with program_exit_code=0","path":".omo/evidence/task-46-ch17-qa/07-sizeof-side-effect-run.out"},
+    {"id":"A15","kind":"stdout/stderr","description":"Python inspection confirms no Assign/no value 3 and value 4 present in tacky","path":".omo/evidence/task-46-ch17-qa/08-tacky-artifact-check.out"},
+    {"id":"A16","kind":"exit-code","description":"tacky inspection script exit code 0","path":".omo/evidence/task-46-ch17-qa/08-tacky-artifact-check.exit"},
+    {"id":"A17","kind":"stdout/stderr","description":"root-cause probe for transient harness failure paths","path":".omo/evidence/task-46-ch17-qa/09-harness-failure-root-cause-probe.out"},
+    {"id":"A18","kind":"stdout/stderr","description":"direct compile of one reported failing fixture produced executable","path":".omo/evidence/task-46-ch17-qa/10-direct-fixture-compile-probe.out"},
+    {"id":"A19","kind":"stdout/stderr","description":"retry chapter 17 harness run passed 70 tests","path":".omo/evidence/task-46-ch17-qa/11-test-compiler-ch17-latest-retry.out"},
+    {"id":"A20","kind":"exit-code","description":"retry chapter 17 harness run exit code 0","path":".omo/evidence/task-46-ch17-qa/11-test-compiler-ch17-latest-retry.exit"},
+    {"id":"A21","kind":"inventory","description":"artifact inventory with non-empty sizes","path":".omo/evidence/task-46-ch17-qa/12-artifact-inventory.txt"},
+    {"id":"A22","kind":"stdout/stderr","description":"workspace hygiene/status capture; QA-generated fixture executable removed","path":".omo/evidence/task-46-ch17-qa/13-workspace-hygiene.out"}
+  ]
+}
