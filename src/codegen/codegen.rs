@@ -350,22 +350,37 @@ fn add_offset(op: Operand, offset: i64) -> Operand {
 }
 
 fn copy_mem_to_stack(src: Operand, size: i64) -> Vec<Instr> {
-    let mut out = vec![
-        Instr::AllocateStack(8),
-        Instr::Movq {
+    let mut out = Vec::new();
+    let mut offset = 0;
+    while offset + 8 <= size {
+        out.push(Instr::AllocateStack(8));
+        out.push(Instr::Movq {
+            src: add_offset(src.clone(), offset),
+            dst: Operand::Reg(Reg::R10),
+        });
+        out.push(Instr::Movq {
+            src: Operand::Reg(Reg::R10),
+            dst: Operand::Memory(Reg::SP, 0),
+        });
+        offset += 8;
+    }
+    if offset < size {
+        out.push(Instr::AllocateStack(8));
+        out.push(Instr::Movq {
             src: Operand::Imm(0),
             dst: Operand::Memory(Reg::SP, 0),
-        },
-    ];
-    for offset in 0..size {
+        });
+    }
+    while offset < size {
         out.push(Instr::MovByte {
             src: add_offset(src.clone(), offset),
             dst: Operand::Reg(Reg::R10),
         });
         out.push(Instr::MovByte {
             src: Operand::Reg(Reg::R10),
-            dst: Operand::Memory(Reg::SP, offset as i32),
+            dst: Operand::Memory(Reg::SP, (offset % 8) as i32),
         });
+        offset += 1;
     }
     out
 }
@@ -1236,53 +1251,16 @@ fn lower_instruction(
                     },
                 ];
             }
-            let is_long = dst_ty.is_long_word();
-            let op = if is_long {
+            let op = if dst_ty.is_long_word() {
                 BinaryOpInstr::MultQ
             } else {
                 BinaryOpInstr::Mult
             };
-            let (mov_to_ax, mov_to_r10, mov_from_ax) = if is_long {
-                (
-                    Instr::Movq {
-                        src: Operand::Pseudo(dst.clone()),
-                        dst: Operand::Reg(Reg::AX),
-                    },
-                    Instr::Movq {
-                        src: convert_val(src, ctx),
-                        dst: Operand::Reg(Reg::R10),
-                    },
-                    Instr::Movq {
-                        src: Operand::Reg(Reg::AX),
-                        dst: Operand::Pseudo(dst.clone()),
-                    },
-                )
-            } else {
-                (
-                    Instr::Mov {
-                        src: Operand::Pseudo(dst.clone()),
-                        dst: Operand::Reg(Reg::AX),
-                    },
-                    Instr::Mov {
-                        src: convert_val(src, ctx),
-                        dst: Operand::Reg(Reg::R10),
-                    },
-                    Instr::Mov {
-                        src: Operand::Reg(Reg::AX),
-                        dst: Operand::Pseudo(dst.clone()),
-                    },
-                )
-            };
-            vec![
-                mov_to_ax,
-                mov_to_r10,
-                Instr::BinaryOp {
-                    op,
-                    src: Operand::Reg(Reg::R10),
-                    dst: Operand::Reg(Reg::AX),
-                },
-                mov_from_ax,
-            ]
+            vec![Instr::BinaryOp {
+                op,
+                src: convert_val(src, ctx),
+                dst: Operand::Pseudo(dst.clone()),
+            }]
         }
         Instruction::DivSigned { src, dst } => {
             let dst_ty = type_of_val(&Val::Var(dst.clone()), env);

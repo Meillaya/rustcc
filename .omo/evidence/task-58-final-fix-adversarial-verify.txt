@@ -1,0 +1,193 @@
+VERDICT: needs-fix
+recommendation: REJECT
+
+Task: Task58 / W21-T3 Chapter 20 coloring + select phase final adversarial gate
+Date: 2026-07-09
+Workspace: /home/mei/projects/rustcc
+Mode: read-only verification except writing this artifact.
+
+originalIntent
+- Complete Task58 by implementing Chapter 20 coloring/select enough for `--chapter 20 --latest-only --no-coalescing`.
+- Independently validate the latest executor DoneClaim in `.omo/evidence/task-58-final-fix.txt` after prior failures.
+- Preserve plan guardrails: native compiler path, no forbidden path/test-name bridge, no R10/R11/XMM14/XMM15 allocatable-register regression, no invalid modifications to official tests/harness, and no stale-log approval.
+
+desiredOutcome
+- User can mark Task58 complete only if fresh commands, source review, evidence artifacts, and scope fidelity all support completion.
+
+DoneClaim assessment
+- Fresh cargo/build/test/chapter gates passed from the current worktree.
+- The prior `source_path_hint.contains("chapter_20")` production bridge is gone from `src/compiler.rs`/`src/driver.rs` and the current production allocation gate is option-driven via `!options.regalloc_options.coalescing_enabled`.
+- Current `src/codegen/regalloc/types.rs` excludes R10/R11 from GP hardregs/caller-saved/contains and excludes XMM14/XMM15 via XMM 0..=13.
+- The durable probe now compiles/runs and reports the no-R11 OCaml-derived mapping.
+- The adversarial store-spill probe from the final-fix claim now emits `movq %r8, %r11` and `movq %r10, 0(%r11)`, then exits 146 as expected, so the R10 self-clobber blocker appears fixed.
+- BLOCKING: the green no-coalescing official gate depends on modifying `tests/test_framework/runner.py` to append `--no-coalescing` to compiler invocations. This violates `.omo/plans/c-compiler-rust.md:91-92` (`official test_compiler harness` as verification path; `Tests tests/ directory contents remain unchanged`) and the user explicitly said not to confirm if green depends on modifying official tests/harness against plan constraints.
+- BLOCKING: available code-review artifacts do not support final approval. `.omo/evidence/task-58-coloring-code-review-2.md` is a REJECT report from an earlier state; `.omo/evidence/task-58-final-fix-code-review.md` is also BLOCK/REQUEST_CHANGES and documents the pre-fix store-spill crash. The final evidence references `.omo/evidence/task-58-postfix-code-review.md if present`, but no such artifact exists.
+
+final verdict rationale
+- This gate is not rejected for stale build/test failures: all required fresh commands passed.
+- It is rejected for scope fidelity and unsupported review coverage. A passing command that relies on a modified official harness cannot satisfy Task58 under the stated plan guardrails without an explicit human plan change/approval.
+
+checked artifact paths
+- `.omo/evidence/task-58-final-fix.txt`
+- `.omo/evidence/task-58-coloring-code-review-2.md`
+- `.omo/evidence/task-58-coloring-adversarial-verify-2.txt`
+- `.omo/evidence/task-58-final-fix-code-review.md`
+- `.omo/evidence/task-58-verify-run.log`
+- `.omo/evidence/task-58-coloring-probe.rs`
+- `.omo/plans/c-compiler-rust.md`
+- `src/compiler.rs`
+- `src/driver.rs`
+- `tests/test_framework/runner.py`
+- `src/codegen/regalloc/types.rs`
+- `src/codegen/regalloc/color.rs`
+- `src/codegen/regalloc/graph.rs`
+- `src/codegen/regalloc/allocate.rs`
+- `src/codegen/regalloc/rewrite.rs`
+- `src/codegen/regalloc/scratch.rs`
+- `src/codegen/regalloc/mod.rs`
+- `src/codegen/regalloc/operands.rs`
+- `nqcc2/lib/backend/regalloc.ml`
+
+blockers
+1. Modified official test harness: `git diff -- tests/test_framework/runner.py` shows:
+   - `cc_options: list[str] = list(args.extra_cc_options)`
+   - `if args.no_coalescing: cc_options.append("--no-coalescing")`
+   Plan evidence: `.omo/plans/c-compiler-rust.md:91-92` requires the official harness as the verification path and says tests directory contents remain unchanged. A /tmp wrapper probe confirmed all 66 chapter20 invocations received `--no-coalescing`; without the runner diff shown above, the gate would not exercise the compiler's no-coalescing flag through the harness.
+2. Missing supportive post-fix code review: required review coverage is absent/unsupported. `task-58-coloring-code-review-2.md` and `task-58-final-fix-code-review.md` both recommend REQUEST_CHANGES/BLOCK for earlier states; no `.omo/evidence/task-58-postfix-code-review.md` exists.
+3. Dirty-worktree durability risk: chapter20 helper `.s` files are present but ignored/untracked due `.gitignore:17:*.s`. This gate did not alter them, but a clean checkout/commit will not include them unless deliberately force-added or otherwise made durable.
+
+exact command evidence
+
+$ cargo fmt --all -- --check
+exit: 0; completed, no timeout.
+
+$ cargo check --release
+output: `Finished release profile [optimized] target(s) in 0.01s`
+exit: 0; completed, no timeout.
+
+$ cargo build --release
+output: `Finished release profile [optimized] target(s) in 0.01s`
+exit: 0; completed, no timeout.
+
+$ cargo test --release
+output: main binary tests ran 10 tests; `10 passed; 0 failed`; lib/doc tests empty.
+exit: 0; completed, no timeout.
+
+$ ./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only --no-coalescing
+output: `Ran 66 tests in 3.106s` / `OK`
+exit: 0; completed, no timeout.
+
+$ ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only
+output: `Ran 120 tests in 2.791s` / `OK`
+exit: 0; completed, no timeout.
+
+$ ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-dead-stores
+output: `Ran 27 tests in 0.594s` / `OK`
+exit: 0; completed, no timeout.
+
+$ ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union
+output: `Ran 286 tests in 5.082s` / `OK`; assembler truncation warnings printed for two chapter18 initializer assembly files, non-fatal.
+exit: 0; completed, no timeout.
+
+$ rustc .omo/evidence/task-58-coloring-probe.rs -o /tmp/task58-coloring-probe-gate && /tmp/task58-coloring-probe-gate
+output included warnings only plus:
+- `ocaml_color_mapping`: `{0: R9, 1: R8, 2: SI, 3: DI, 4: DX, 5: CX, 6: AX, 7: BX, 8: R12, 9: R13, 10: R14, 11: R15}`
+- `reserved`: GP `[AX, BX, CX, DX, DI, SI, R8, R9, R12, R13, R14, R15]`, XMM `[XMM(0)..XMM(13)]`
+- `small_conflict`: `b -> R9`, `a -> R8`
+- `hardreg_conflict`: `Some(R8)`
+- `spill_marker`: `None`
+exit: 0; completed, no timeout. `/tmp/task58-coloring-probe-gate` removed; cleanup verified.
+
+$ git diff --check
+exit: 0; completed, no timeout.
+
+$ rg -n 'source_path_hint|chapter_20' src/compiler.rs src/driver.rs src/codegen/regalloc
+output: no matches
+exit: 1 (expected for no matches); proves the prior path/chapter_20 bridge is absent in reviewed production source.
+
+$ python3 source register-class allocatable invariants
+output:
+- `gp_all_excludes_R10=True`
+- `gp_all_excludes_R11=True`
+- `gp_caller_excludes_R10=True`
+- `gp_caller_excludes_R11=True`
+- `xmm_all_is_0_through_13=True`
+- `xmm_caller_is_0_through_13=True`
+- `contains_excludes_R10=True`
+- `contains_excludes_R11=True`
+- `contains_xmm_0_through_13=True`
+exit: 0.
+
+$ rg -n 'R11|R10|XMM\(14\)|XMM\(15\)' src/codegen/regalloc .omo/evidence/task-58-coloring-probe.rs
+output: R10/R11/XMM14/XMM15 only appear in probe assertions and `scratch.rs` reserved R11 address-scratch rewriting, not in allocatable `types.rs`.
+exit: 0.
+
+$ ./tests/test_compiler /tmp/task58-rustcc-arglog --chapter 20 --latest-only --no-coalescing
+output: `Ran 66 tests in 4.685s` / `OK`; wrapper log: `logged_invocations=66`, `invocations_with_no_coalescing=66`, `every_invocation_has_no_coalescing=True`, sample argv begins with optimization flags plus `--no-coalescing`.
+exit: 0. `/tmp/task58-rustcc-arglog*` cleaned.
+
+$ ./target/release/rustcc --no-coalescing -S /tmp/task58_store_spill_gate.c && rg -n 'movq .*%r11|0\(%r11\)|0\(%r10\)' /tmp/task58_store_spill_gate.s && gcc /tmp/task58_store_spill_gate.s -o /tmp/task58_store_spill_gate && /tmp/task58_store_spill_gate; test runtime exit == 146
+output: `87:    movq %r8, %r11`; `89:    movq %r10, 0(%r11)`; runtime exit 146 expected.
+exit: 0. `/tmp/task58_store_spill_gate*` cleaned.
+
+$ cargo clippy --release --bin rustcc -- -A warnings -D clippy::collapsible_if
+output: exits 101 due pre-existing collapsible_if findings in `src/ir/lower.rs` and `src/semantics/*`; no `src/codegen/regalloc/rewrite.rs` finding appeared in the output.
+exit: 101 (repo-wide static-analysis still red outside Task58 scope; scoped prior rewrite warning appears fixed).
+
+$ python3 -m py_compile tests/test_framework/runner.py
+exit: 0. Generated `tests/test_framework/__pycache__` was removed; no pycache remains in git status.
+
+$ git status --short --ignored -- tests/tests/chapter_20/helper_libs
+output:
+- `!! tests/tests/chapter_20/helper_libs/alignment_check_wrapper_linux.s`
+- `!! tests/tests/chapter_20/helper_libs/clobber_xmm_regs_linux.s`
+- `!! tests/tests/chapter_20/helper_libs/wrapper_linux.s`
+exit: 0.
+
+$ git ls-files tests/tests/chapter_20/helper_libs/*.s
+output: empty
+exit: 0.
+
+$ git check-ignore -v tests/tests/chapter_20/helper_libs/*.s
+output: `.gitignore:17:*.s` for all three helper fixtures
+exit: 0.
+
+$ git diff --name-status
+output tracked dirty files:
+- `.omo/boulder.json`
+- `src/codegen/codegen.rs`
+- `src/codegen/codegen/copy_prop_support.rs`
+- `src/codegen/emit.rs`
+- `src/codegen/fixup.rs`
+- `src/codegen/regalloc/graph.rs`
+- `src/codegen/regalloc/mod.rs`
+- `src/codegen/regalloc/operands.rs`
+- `src/compiler.rs`
+- `src/driver.rs`
+- `src/ir/copy_propagation/rewrite_support.rs`
+- `src/pipeline.rs`
+- `tests/test_framework/runner.py`
+exit: 0.
+
+current Task58 files / dirty-worktree scope
+- Task58 production/codegen scope inspected: `src/compiler.rs`, `src/driver.rs`, `src/pipeline.rs`, `src/codegen/codegen.rs`, `src/codegen/codegen/copy_prop_support.rs`, `src/codegen/emit.rs`, `src/codegen/fixup.rs`, `src/ir/copy_propagation/rewrite_support.rs`, `src/codegen/regalloc/{types,color,graph,allocate,rewrite,scratch,mod,operands}.rs`.
+- New untracked Task58 production files: `src/codegen/regalloc/allocate.rs`, `src/codegen/regalloc/color.rs`, `src/codegen/regalloc/rewrite.rs`, `src/codegen/regalloc/scratch.rs`.
+- Task58 evidence inspected: `task-58-final-fix.txt`, `task-58-coloring-code-review-2.md`, `task-58-coloring-adversarial-verify-2.txt`, `task-58-final-fix-code-review.md`, `task-58-verify-run.log`, `task-58-coloring-probe.rs`.
+- Ignored helper `.s` fixtures are present but untracked as listed above.
+- Unrelated old untracked evidence (`task-18*`, `task-37*`, `task-38*`, `task-39*`, `task-40*`, `task-41*`) was observed and excluded from this Task58 verdict.
+
+ultraqa class probes
+- stale_state: PASS for command freshness. Required cargo/test/rustc/git gates were rerun in this session from the current worktree; no stale logs used for pass/fail.
+- dirty_worktree: NEEDS-FIX/RISK. Current Task58 dirty files and ignored `.s` fixtures identified. The modified `tests/test_framework/runner.py` is part of the dirty worktree and is the main scope blocker; ignored `.s` fixtures are durability risk.
+- misleading_success_output: PASS for output inspection. I inspected pass summaries and exit codes. Chapter gates report `OK` with concrete test counts; runtime store-spill exit code was checked against 146.
+- scope_fidelity: NEEDS-FIX. Source path/chapter_20 bridge is gone and R11 is not allocatable, but official harness modification violates plan/user constraints and the passing gate depends on that modification.
+- generated_artifacts: PASS. Durable probe compiled and ran; /tmp probe, store-spill, and wrapper artifacts were removed and cleanup checks passed.
+- long_commands: PASS. Long cargo/test harness commands completed normally with no timeout in tool execution.
+- remove-ai-slops/programming direct pass: NEEDS-FIX due false-confidence review coverage and scope drift, not because of current regalloc algorithm slop. I loaded `omo:remove-ai-slops`, `omo:programming`, Rust README, and code-smells reference. No excessive/deletion-only/tautological tests were added; the standalone probe is low-level but acceptable as evidence now that expectations match OCaml. New regalloc files are under the 250 pure-LOC ceiling (`allocate.rs` near warning band). However, the missing post-fix supportive code review and modified test harness create maintenance/scope risk.
+
+exact evidence gaps
+- No approval-quality post-fix code review artifact exists after the R11 scratch correction; existing review artifacts are negative or stale.
+- No evidence of human approval to modify the official `tests/test_framework/runner.py` despite the plan guardrail that `tests/` contents remain unchanged.
+- Chapter20 helper `.s` fixtures are ignored/untracked; current green gates depend on local files that are not represented by `git diff`/`git ls-files`.
+
+Final verdict: needs-fix

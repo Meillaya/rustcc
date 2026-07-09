@@ -1338,3 +1338,47 @@ Implemented the Chapter 20 W21-T2 interference graph and simplification foundati
 - W21-T3 must implement select/coloring over the simplification stack.
 - `src/codegen/regalloc/graph.rs` is in the 200-250 pure LOC watch band; future regalloc growth should go into new modules rather than this file.
 - Strict repo-wide clippy remains red on pre-existing diagnostics outside the changed regalloc files and is recorded as a watch item.
+
+## Wave 21 / Chapter 20 coloring and no-coalescing allocation (task 58)
+
+Implemented the Chapter 20 W21-T3 select/coloring phase and wired the no-coalescing allocation path through the native backend. Coloring now assigns pseudos from the simplification stack using the OCaml register color order, keeps R10/R11 and XMM14/XMM15 reserved/non-allocatable, rewrites colored pseudos before the existing pseudo replacement pass, preserves callee-saved registers, and keeps the default Chapter 20a mode as no-coalescing until W21-T5 implements conservative coalescing. Earlier review-found issues around path-based allocation, R11 allocation, and test-harness forwarding were fixed; the final gate confirmed the official tests harness diff is empty.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `git diff -- tests` | empty; official harness unchanged |
+| `cargo fmt --all -- --check` | exit 0 |
+| `cargo check --release` | exit 0 |
+| `cargo build --release` | exit 0 |
+| `cargo test --release` | 10 passed, 0 failed |
+| chapter 20 `--latest-only --no-coalescing` | `Ran 66 tests ... OK` |
+| chapter 19 default `--latest-only` | `Ran 120 tests ... OK` |
+| chapter 19 `--latest-only --eliminate-dead-stores` | `Ran 27 tests ... OK` |
+| chapter 18 `--latest-only --union` | `Ran 286 tests ... OK` |
+| durable coloring probe | OCaml mapping `{0:R9,1:R8,2:SI,3:DI,4:DX,5:CX,6:AX,7:BX,8:R12,9:R13,10:R14,11:R15}`; reserved-register assertions passed |
+| scope scan | no source-path/chapter/test bridge; no tests diff; R10/R11/XMM14/XMM15 not allocatable |
+| final code review | APPROVE with WATCH items only |
+| final adversarial gate | APPROVE/confirmed |
+| `git diff --check` | exit 0 |
+
+### Evidence
+
+- `.omo/evidence/task-58-coloring-implementation.txt`
+- `.omo/evidence/task-58-coloring-fix.txt`
+- `.omo/evidence/task-58-no-coalescing-gate-fix.txt`
+- `.omo/evidence/task-58-final-fix.txt`
+- `.omo/evidence/task-58-harness-scope-fix.txt`
+- `.omo/evidence/task-58-coloring-probe.rs`
+- `.omo/evidence/task-58-verify-run.log`
+- `.omo/evidence/task-58-manual-qa.log`
+- `.omo/evidence/task-58-hands-on-qa/`
+- `.omo/evidence/task-58-harness-scope-code-review.md`
+- `.omo/evidence/task-58-harness-scope-adversarial-verify.txt`
+
+### Remaining scope
+
+- W21-T4 must add the full spill/re-allocation loop. Task 58 contains enough rewrite support for the current no-coalescing gate but does not claim full spill-loop completion.
+- W21-T5 must implement conservative coalescing and revisit the Chapter 20 default mode.
+- `src/codegen/regalloc/allocate.rs` remains in the 200-250 pure LOC warning band; future growth should split into focused helpers.
+- Chapter 20 helper `.s` fixtures are required by the official harness and were restored as force-added ignored files.

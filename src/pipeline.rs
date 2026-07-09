@@ -132,6 +132,23 @@ pub mod asm_fixup {
     }
 }
 
+pub mod regalloc {
+    use std::collections::HashSet;
+
+    use anyhow::Result;
+
+    use crate::codegen::{AsmProgram, allocate as allocate_pass};
+    use crate::driver::RegallocOptions;
+
+    pub(crate) fn allocate_registers(
+        asm: AsmProgram,
+        globals: &HashSet<String>,
+        _options: RegallocOptions,
+    ) -> Result<AsmProgram> {
+        allocate_pass(asm, globals)
+    }
+}
+
 pub mod replace_pseudos {
     //! AsmProgram -> AsmProgram.
     use std::collections::HashSet;

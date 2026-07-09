@@ -429,7 +429,7 @@ fn format_instruction(instr: &Instr) -> Result<String> {
         Instr::SetCC { cc, dst } => Ok(format!(
             "set{} {}",
             format_cond_code(*cc),
-            format_operand(dst)?
+            format_byte_operand(dst)?
         )),
         Instr::Label(name) => Ok(format!("{name}:")),
         other => Err(anyhow!(

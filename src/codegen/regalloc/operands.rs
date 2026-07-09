@@ -120,7 +120,7 @@ fn raw_operands(
                 .collect();
             Ok((used, written))
         }
-        Instr::Pop(reg) => Err(LivenessError::PopInLiveness { reg: reg.clone() }),
+        Instr::Pop(reg) => Ok((Vec::new(), vec![Operand::Reg(reg.clone())])),
         Instr::Ret
         | Instr::Jmp(_)
         | Instr::JmpCC { .. }

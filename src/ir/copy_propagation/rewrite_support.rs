@@ -155,7 +155,7 @@ pub(super) fn replace_instruction_sources(
             dst: dst.clone(),
         },
         Instruction::Store { src, dst_pointer } => Instruction::Store {
-            src: replace_val(src, copies),
+            src: replace_store_src(src, copies, type_env),
             dst_pointer: replace_val(dst_pointer, copies),
         },
         Instruction::CopyBytes {
@@ -208,6 +208,23 @@ fn replace_val(val: &Val, copies: &ReachingCopies) -> Val {
         .iter()
         .find(|copy| copy.dst == key)
         .map_or_else(|| val.clone(), |copy| copy.src.to_val())
+}
+
+fn replace_store_src(src: &Val, copies: &ReachingCopies, type_env: &TypeEnv) -> Val {
+    let Val::Var(name) = src else {
+        return src.clone();
+    };
+    if !store_width_is_self_describing(var_type(name, type_env)) {
+        return src.clone();
+    }
+    replace_val(src, copies)
+}
+
+fn store_width_is_self_describing(ty: OperandType) -> bool {
+    matches!(
+        ty,
+        OperandType::Int | OperandType::UInt | OperandType::Double
+    )
 }
 
 fn replace_address_source(src: &str, copies: &ReachingCopies, type_env: &TypeEnv) -> String {

@@ -166,8 +166,10 @@ fn add_pseudo_nodes(
 ) {
     for instr in instructions {
         for op in instr_operands(instr) {
-            if let Operand::Pseudo(name) = op
-                && pseudo_is_current_class(&name, context.class, context.type_env)
+            let Operand::Pseudo(name) = op else {
+                continue;
+            };
+            if pseudo_is_current_class(&name, context.class, context.type_env)
                 && !context.config.static_symbols.contains(&name)
                 && !context.config.aliased_pseudos.contains(&name)
             {

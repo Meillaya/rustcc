@@ -24,8 +24,8 @@ use crate::lex::{lex, pretty_tokens};
 use crate::parse::parse_program;
 use crate::pipeline::{
     asm_fixup::fixup_asm, emit::emit, label_loops::label_loops, optimize::optimize_tacky,
-    replace_pseudos::replace_pseudos, resolve::resolve_program, tacky_gen::generate_tacky,
-    tacky_to_asm::convert_tacky_to_asm, typecheck::typecheck_program,
+    regalloc::allocate_registers, replace_pseudos::replace_pseudos, resolve::resolve_program,
+    tacky_gen::generate_tacky, tacky_to_asm::convert_tacky_to_asm, typecheck::typecheck_program,
 };
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -42,7 +42,6 @@ pub struct CompileOptions {
     pub stage: Stage,
     pub optimization_flags: OptimizationFlags,
     pub regalloc_options: RegallocOptions,
-    pub source_path_hint: Option<String>,
 }
 
 impl CompileOptions {
@@ -55,13 +54,7 @@ impl CompileOptions {
             stage,
             optimization_flags,
             regalloc_options,
-            source_path_hint: None,
         }
-    }
-
-    pub fn with_source_path_hint(mut self, source_path_hint: String) -> Self {
-        self.source_path_hint = Some(source_path_hint);
-        self
     }
 }
 
@@ -128,6 +121,12 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompilerArtifact
         }
     }
     let asm_program = convert_tacky_to_asm(&optimized_tacky, &typed_program)?;
+    let should_allocate = !options.regalloc_options.coalescing_enabled;
+    let asm_program = if should_allocate {
+        allocate_registers(asm_program, &global_names, options.regalloc_options)?
+    } else {
+        asm_program
+    };
     let asm_program = replace_pseudos(asm_program, &global_names)?;
     let asm_program = fixup_asm(asm_program)?;
     let assembly_text = emit(&asm_program)?;

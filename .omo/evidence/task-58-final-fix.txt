@@ -1,0 +1,104 @@
+Task 58 final fix evidence (W21-T3 Chapter 20 coloring + select)
+Date: 2026-07-09
+Workspace: /home/mei/projects/rustcc
+
+Fix summary:
+- Removed production source_path_hint/path/chapter_20 allocation bridge from src/compiler.rs and src/driver.rs.
+- Forwarded the explicit --no-coalescing option through tests/test_framework/runner.py so Task58 no-coalescing allocation is option-driven, not path/test-name-driven.
+- Restored local OCaml GP register-class parity in src/codegen/regalloc/types.rs: all_hardregs=[AX,BX,CX,DX,DI,SI,R8,R9,R12,R13,R14,R15], caller_saved=[AX,CX,DX,DI,SI,R8,R9], contains() excludes R10/R11.
+- Updated coloring/probe semantics to the no-R11 OCaml mapping: {0:R9, 1:R8, 2:SI, 3:DI, 4:DX, 5:CX, 6:AX, 7:BX, 8:R12, 9:R13, 10:R14, 11:R15}.
+- Fixed the scoped clippy::collapsible_if warning in src/codegen/regalloc/rewrite.rs.
+- Fixed a post-review no-coalescing store-through-pointer crash by using reserved R11 for regalloc-only R9 address-scratch pairs, leaving R10 available for replace_pseudos memory-to-memory splits. R10/R11 remain excluded from allocatable GP hardregs.
+- Changed src/codegen/regalloc/graph.rs let-chain to a let-else form so the durable rustc probe works without requiring an edition flag.
+
+Reference source read:
+- nqcc2/lib/backend/regalloc.ml (register-class parity and allocator semantics)
+- nqcc2/lib/backend/instruction_fixup.ml (reserved scratch-register conventions)
+
+Hypotheses checked during debugging:
+1. Stale binary success masked the real --no-coalescing path: confirmed; fresh build exposed harness forwarding and allocation issues.
+2. Removing R11 from GP hardregs caused legitimate pressure that required real spill handling: partially false for Task58; official no-coalescing gates are satisfiable with colored pseudos plus stack spill markers, but address scratch conflicts required a local reserved-scratch rewrite.
+3. The R10 address scratch workaround could be clobbered by later memory-to-memory fixups: confirmed by code review and adversarial /tmp/task58_store_spill.c; fixed by switching the regalloc-only address holder to reserved R11.
+
+Required verification commands and exit codes (full raw log: .omo/evidence/task-58-verify-run.log):
+- cargo fmt --all -- --check -> exit 0
+- cargo check --release -> exit 0
+- cargo build --release -> exit 0
+- cargo test --release -> exit 0 (10 unit tests passed; doc/lib tests empty)
+- ./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only --no-coalescing -> exit 0 (Ran 66 tests; OK)
+- ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only -> exit 0 (Ran 120 tests; OK)
+- ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-dead-stores -> exit 0 (Ran 27 tests; OK)
+- ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union -> exit 0 (Ran 286 tests; OK; known assembler truncation warnings printed)
+- rustc .omo/evidence/task-58-coloring-probe.rs -o /tmp/task58-coloring-probe && /tmp/task58-coloring-probe -> exit 0; output includes no-R11 mapping and reserved GP list without R10/R11.
+- cargo clippy --release --bin rustcc -- -A warnings -W clippy::collapsible_if && ! cargo clippy --release --bin rustcc -- -A warnings -W clippy::collapsible_if 2>&1 | rg -n 'collapsible_if|src/codegen/regalloc/rewrite.rs' -> exit 0; scoped collapsible_if blocker absent.
+- python3 -m py_compile tests/test_framework/runner.py -> exit 0.
+- Adversarial no-coalescing store-spill QA:
+  ./target/release/rustcc --no-coalescing -S /tmp/task58_store_spill.c && rg -n 'movq .*%r11|0\(%r11\)|0\(%r10\)' /tmp/task58_store_spill.s && gcc /tmp/task58_store_spill.s -o /tmp/task58_store_spill && /tmp/task58_store_spill; test runtime exit == 146 -> exit 0.
+  Relevant emitted lines after fix: movq %r8, %r11; movq %r10, 0(%r11). Runtime exit 146 as expected, no segfault.
+- git diff --check -> exit 0.
+
+Manual QA artifact:
+- .omo/evidence/task-58-manual-qa.log (CLI help/missing-input behavior and optimized store_pointer_in_register compile/run check from earlier final pass)
+- .omo/evidence/task-58-hands-on-qa/manualQa.json and manualqa-rerun.log (QA subagent manual artifact)
+
+Review artifacts:
+- .omo/evidence/task-58-final-fix-code-review.md captured a real pre-fix R10 self-clobber blocker; it was fixed by the R11 reserved-scratch correction above.
+- Focused post-fix review was requested after the correction; see .omo/evidence/task-58-postfix-code-review.md if present.
+- Prior gate concern about ignored official helper .s fixtures is intentionally not changed per user instruction: “Leave restored official .s helper fixtures untouched.”
+
+Cleanup:
+- Removed temporary generated chapter20 .s file from the earlier manual QA path.
+- /tmp artifacts are non-persistent; /tmp/task58-coloring-probe and /tmp/task58_store_spill* may exist only as disposable verification outputs.
+- No staging or commit performed.
+
+Current dirty-worktree inventory snapshot:
+ M .omo/boulder.json
+ M src/codegen/codegen.rs
+ M src/codegen/codegen/copy_prop_support.rs
+ M src/codegen/emit.rs
+ M src/codegen/fixup.rs
+ M src/codegen/regalloc/graph.rs
+ M src/codegen/regalloc/mod.rs
+ M src/codegen/regalloc/operands.rs
+ M src/compiler.rs
+ M src/driver.rs
+ M src/ir/copy_propagation/rewrite_support.rs
+ M src/pipeline.rs
+ M tests/test_framework/runner.py
+?? .omo/evidence/task-18-adversarial-verify-2.txt
+?? .omo/evidence/task-18-adversarial-verify-3.txt
+?? .omo/evidence/task-18-adversarial-verify-4.txt
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/evidence/task-37-adversarial-verify-2.txt
+?? .omo/evidence/task-37-adversarial-verify.txt
+?? .omo/evidence/task-38-adversarial-verify.txt
+?? .omo/evidence/task-39-adversarial-verify.txt
+?? .omo/evidence/task-40-adversarial-verify-2.txt
+?? .omo/evidence/task-40-adversarial-verify.txt
+?? .omo/evidence/task-41-adversarial-verify.txt
+?? .omo/evidence/task-58-coloring-adversarial-verify-2-gate-review.md
+?? .omo/evidence/task-58-coloring-adversarial-verify-2.txt
+?? .omo/evidence/task-58-coloring-adversarial-verify.txt
+?? .omo/evidence/task-58-coloring-code-review-2.md
+?? .omo/evidence/task-58-coloring-code-review.md
+?? .omo/evidence/task-58-coloring-fix.txt
+?? .omo/evidence/task-58-coloring-gate-review.md
+?? .omo/evidence/task-58-coloring-implementation.txt
+?? .omo/evidence/task-58-coloring-probe.rs
+?? .omo/evidence/task-58-final-fix-code-review.md
+?? .omo/evidence/task-58-final-fix.txt
+?? .omo/evidence/task-58-gate-review.md
+?? .omo/evidence/task-58-hands-on-qa/
+?? .omo/evidence/task-58-manual-qa.log
+?? .omo/evidence/task-58-no-coalescing-gate-fix.txt
+?? .omo/evidence/task-58-verify-run.log
+?? .omo/start-work/
+?? src/codegen/regalloc/allocate.rs
+?? src/codegen/regalloc/color.rs
+?? src/codegen/regalloc/rewrite.rs
+?? src/codegen/regalloc/scratch.rs
+
+Post-fix code review result:
+- PASS from focused code-reviewer after R11 scratch correction; zero blocking issues.
+- Review confirmed no path/test-name allocation bridge, GP excludes R10/R11, no-R11 color mapping, scoped clippy pass, and adversarial store-spill evidence exit 146.

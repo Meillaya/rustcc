@@ -56,7 +56,7 @@ pub(super) fn move_call_arg(
     ctx: &mut CodegenCtx,
 ) -> Instr {
     let ty = type_of_val(val, type_env);
-    if ty.is_long_word() || matches!(param_ty, Some(Type::Pointer(_))) {
+    if ty.is_long_word() || param_needs_quadword(param_ty) {
         Instr::Movq {
             src: convert_val(val, ctx),
             dst: Operand::Reg(reg),
@@ -77,6 +77,13 @@ pub(super) fn move_call_arg(
             dst: Operand::Reg(reg),
         }
     }
+}
+
+fn param_needs_quadword(param_ty: Option<&Type>) -> bool {
+    matches!(
+        param_ty,
+        Some(Type::Long | Type::UnsignedLong | Type::Pointer(_))
+    )
 }
 
 pub(super) fn lower_const_index_addptr(

@@ -1,23 +1,30 @@
 // Mirrors nqcc2/lib/backend/regalloc.ml (651 LOC; uses Briggs/George coalescing).
 //
-// Chapter 20 starts with the liveness foundation used by later interference
-// graph construction. Coloring, spilling, and coalescing remain intentionally
-// out of scope for W21-T1.
+// Chapter 20 builds register allocation incrementally: liveness, interference,
+// simplification, select/color, and no-coalescing allocation are wired here.
+// Coalescing and iterative spill rewriting remain later wave work.
 #![allow(dead_code)]
 
 use anyhow::Result;
 use std::error::Error;
 use std::fmt;
 
+use std::collections::HashSet;
+
 use crate::codegen::assembly::{AsmProgram, Instr};
 use crate::ir::cfg::{self, CfgBuildError};
 
+mod allocate;
+mod color;
 mod graph;
 mod liveness;
 mod operands;
+mod rewrite;
+mod scratch;
 mod simplify;
 mod types;
 
+pub use color::{ColorMap, SelectResult, select};
 pub use graph::{
     InterferenceBuild, InterferenceConfig, InterferenceGraph, InterferenceNode,
     NodeId as InterferenceNodeId, NodeSet as InterferenceNodeSet, build_interference, hardreg_node,
@@ -67,8 +74,8 @@ pub fn analyze_function_liveness(
     analyze_liveness(cfg, class, config).map_err(Into::into)
 }
 
-/// Assign a physical register to every `Reg` use in the assembly, spilling
-/// when the available callee-saved set is exhausted.
-pub fn allocate(_asm: AsmProgram) -> Result<AsmProgram> {
-    unimplemented!("ch.20 regalloc wired in wave 21")
+/// Assign physical registers where coloring succeeds; uncolored pseudos stay
+/// as spill markers for `replace_pseudos` to place on the stack.
+pub fn allocate(asm: AsmProgram, globals: &HashSet<String>) -> Result<AsmProgram> {
+    allocate::allocate(asm, globals)
 }

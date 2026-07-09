@@ -70,6 +70,57 @@ fn split_mem_to_mem(instr: Instr) -> Vec<Instr> {
                 dst,
             },
         ],
+        Instr::BinaryOp {
+            op: op @ (BinaryOpInstr::Mult | BinaryOpInstr::MultQ),
+            src,
+            dst: dst @ (Operand::Memory(..) | Operand::Stack(_)),
+        } => {
+            let scratch_reg = if src == Operand::Reg(Reg::R11) {
+                Reg::R10
+            } else {
+                Reg::R11
+            };
+            let scratch = Operand::Reg(scratch_reg.clone());
+            let load = if matches!(op, BinaryOpInstr::MultQ) {
+                Instr::Movq {
+                    src: dst.clone(),
+                    dst: scratch.clone(),
+                }
+            } else {
+                Instr::Mov {
+                    src: dst.clone(),
+                    dst: scratch.clone(),
+                }
+            };
+            let store = if matches!(op, BinaryOpInstr::MultQ) {
+                Instr::Movq {
+                    src: scratch.clone(),
+                    dst,
+                }
+            } else {
+                Instr::Mov {
+                    src: scratch.clone(),
+                    dst,
+                }
+            };
+            let mut out = Vec::new();
+            if scratch_reg == Reg::R11 {
+                out.push(Instr::Push(Operand::Reg(Reg::R11)));
+            }
+            out.extend([
+                load,
+                Instr::BinaryOp {
+                    op,
+                    src,
+                    dst: scratch,
+                },
+                store,
+            ]);
+            if scratch_reg == Reg::R11 {
+                out.push(Instr::Pop(Reg::R11));
+            }
+            out
+        }
         // `binaryOp op mem, mem` is invalid — route through %r10.
         // Chapter 11: the 64-bit ops (AddQ/SubQ/MultQ/DivQ/RemQ)
         // require a 64-bit scratch move, not the default 32-bit.

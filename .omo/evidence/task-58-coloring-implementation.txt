@@ -1,0 +1,132 @@
+Task 58 / W21-T3 coloring implementation evidence
+Date: 2026-07-09
+Workspace: /home/mei/projects/rustcc
+
+Implementation summary
+- Added src/codegen/regalloc/color.rs as the Chapter 20 select/coloring phase.
+- Exported ColorMap, SelectResult, and select from src/codegen/regalloc/mod.rs.
+- select consumes the W21-T2 Simplification stack in reverse, precolors hard-register neighbors from RegisterClass::all_hardregs(), assigns the lowest available class register to pseudo nodes, records used callee-saved registers, and records None for uncolorable pseudo nodes as the W21-T4 spill marker.
+- Register-class allocation respects Task 56 reserved registers through RegisterClass::all_hardregs(): GP excludes R10/R11/SP/BP; XMM excludes XMM14/XMM15.
+- No stack-slot spill rewrite, iterative reallocation, coalescing, Cargo dependency, official test, plan checkbox, docs, COACHING_LOG, boulder, staging, or commit changes were made.
+
+Manual durable probe
+File: .omo/evidence/task-58-coloring-probe.rs
+Command: rustc --edition=2024 -A dead_code .omo/evidence/task-58-coloring-probe.rs -o /tmp/task-58-coloring-probe
+Result: exit 0
+Command: /tmp/task-58-coloring-probe
+Result: exit 0
+Output:
+{
+    "gp_allocatable": "[AX, BX, CX, DX, DI, SI, R8, R9, R12, R13, R14, R15]",
+    "hardreg_conflict": "{Pseudo(\"c\"): Some(BX)}",
+    "small_graph": "{Pseudo(\"a\"): Some(BX), Pseudo(\"b\"): Some(AX)}",
+    "spill_candidate": "{Pseudo(\"pressure\"): None}",
+    "xmm_allocatable": "[XMM(0), XMM(1), XMM(2), XMM(3), XMM(4), XMM(5), XMM(6), XMM(7), XMM(8), XMM(9), XMM(10), XMM(11), XMM(12), XMM(13)]",
+}
+Manual checks covered:
+- small_graph: two interfering pseudos receive different hard registers.
+- hardreg_conflict: pseudo c neighbors precolored AX, so AX is not assigned and BX is chosen.
+- spill_candidate: pseudo pressure neighbors every allocatable GP hard register, so it is mapped to None.
+- gp_allocatable/xmm_allocatable show reserved R10/R11/XMM14/XMM15 are not in allocation classes.
+
+LSP diagnostics
+Command: mcp__lsp.diagnostics /home/mei/projects/rustcc/src/codegen/regalloc/color.rs severity=all
+Result: No diagnostics found
+Command: mcp__lsp.diagnostics /home/mei/projects/rustcc/src/codegen/regalloc/mod.rs severity=all
+Result: No diagnostics found
+
+Verification commands
+Command: cargo fmt --all -- --check
+Result: exit 0, no stdout/stderr
+
+Command: cargo check --release
+Result: exit 0
+Output:
+    Finished `release` profile [optimized] target(s) in 0.03s
+
+Command: cargo build --release
+Result: exit 0
+Output:
+    Finished `release` profile [optimized] target(s) in 0.01s
+
+Command: cargo test --release
+Result: exit 0
+Output:
+    Finished `release` profile [optimized] target(s) in 0.01s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 10 tests
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test driver::tests::derives_all_output_paths ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test compiler::tests::parses_sizeof_expression_without_evaluating_it ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test driver::tests::parses_default_run_stage ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+Command: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only
+Result: exit 0
+Output:
+----------------------------------------------------------------------
+Ran 120 tests in 2.824s
+
+OK
+
+Command: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-dead-stores
+Result: exit 0
+Output:
+----------------------------------------------------------------------
+Ran 27 tests in 0.602s
+
+OK
+
+Command: ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union
+Result: exit 0
+Output:
+----------------------------------------------------------------------
+Ran 286 tests in 5.058s
+
+OK
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s:17: Warning: value 0x1000000080000000 truncated to 0x80000000
+
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s:9: Warning: value 0x400000005 truncated to 0x5
+
+Command: rustfmt --edition 2024 --check .omo/evidence/task-58-coloring-probe.rs
+Result: exit 0, no stdout/stderr
+
+Command: pure LOC check
+Result: exit 0
+Output:
+pure LOC:
+src/codegen/regalloc/color.rs 85
+src/codegen/regalloc/mod.rs 56
+.omo/evidence/task-58-coloring-probe.rs 220
+
+Command: rg -n "unwrap\(|expect\(|unsafe|dbg!|println!|eprintln!" src/codegen/regalloc/color.rs src/codegen/regalloc/mod.rs .omo/evidence/task-58-coloring-probe.rs || true
+Result: exit 0
+Output: no matches
+
+Command: git diff --check
+Result: exit 0, no stdout/stderr
+
+Chapter 20 no-coalescing gate note
+- Not run as a W21-T3 success criterion because W21-T4 spill rewriting/reallocation remains explicitly out of scope for this task and src/codegen/regalloc::allocate still has the pre-existing W21 placeholder. This slice provides select/coloring API and manual coloring evidence only, while preserving prior chapter gates.

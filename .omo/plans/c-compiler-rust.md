@@ -1923,7 +1923,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   **Acceptance Criteria**:
   - [ ] For a program with 5 variables used in different scopes, interference graph has at most the expected edges.
 
-- [ ] 58. W21-T3: Chapter 20 - coloring + select phase (graph-coloring register allocation)
+- [x] 58. W21-T3: Chapter 20 - coloring + select phase (graph-coloring register allocation)
 
   **What to do**: Color the graph.
   - `pub fn select(graph, k) -> HashMap<PseudoReg, Option<Reg>>`. Iterate simplification stack in reverse; assign registers to nodes that were simplified without conflict. If a node's degree > k at selection time, mark for spilling.

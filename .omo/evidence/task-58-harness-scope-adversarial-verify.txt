@@ -1,0 +1,114 @@
+Task 58 harness-scope adversarial final gate
+Date: 2026-07-09T04:22:00-04:00
+Workspace: /home/mei/projects/rustcc
+Mode: read-only verification except this artifact; no staging/commit.
+
+recommendation: APPROVE
+finalVerdict: confirmed
+
+originalIntent:
+- Complete Task58 / W21-T3: Chapter 20 coloring + select phase, accepted only for `--chapter 20 --latest-only --no-coalescing`.
+- Repair prior final-gate failure where the green Chapter 20 run depended on a modified `tests/test_framework/runner.py` harness.
+- Preserve scope guardrails: no official tests/harness diff, no source-path/test-name/chapter bridge, no R10/R11/XMM14/XMM15 allocatable register regression, no stale logs, no Task60 default coalescing requirement.
+
+desiredOutcome:
+- User can check off Task58 and commit only if fresh commands from the current worktree, source review, probes, and scope-fidelity checks all support completion.
+
+userOutcomeReview:
+- PASS. The current worktree satisfies the user-visible Task58 outcome: the official Chapter 20 no-coalescing harness passes with `tests/` diff empty, and a wrapper probe confirms the harness does not forward `--no-coalescing` into rustcc; the compiler now succeeds because native `RegallocOptions::default()` is no-coalescing until W21-T5.
+- PASS. I did not require or run the Task60 default-with-coalescing gate (`--chapter 20 --latest-only`).
+- PASS with delivery note. Task58 source files are still unstaged/untracked as expected in this review state; they must be staged intentionally for commit, while unrelated old evidence remains excluded.
+
+checked artifact paths:
+- .omo/evidence/task-58-harness-scope-fix.txt
+- .omo/evidence/task-58-final-fix-code-review-2.md
+- .omo/evidence/task-58-final-fix-adversarial-verify.txt
+- .omo/evidence/task-58-coloring-probe.rs
+- .omo/evidence/task-58-hands-on-qa/manualQa.json
+- .omo/evidence/task-58-hands-on-qa/manualqa-rerun.log
+- .omo/evidence/task-58-manual-qa.log
+- .omo/plans/c-compiler-rust.md
+- .omx/notepad.md
+- src/driver.rs
+- src/compiler.rs
+- src/codegen/regalloc/types.rs
+- src/codegen/regalloc/color.rs
+- src/codegen/regalloc/graph.rs
+- src/codegen/regalloc/allocate.rs
+- src/codegen/regalloc/rewrite.rs
+- src/codegen/regalloc/scratch.rs
+- src/codegen/regalloc/mod.rs
+- src/codegen/regalloc/operands.rs
+- tests/test_framework/runner.py
+- tests/test_framework/regalloc.py
+- nqcc2/lib/backend/regalloc.ml
+
+inspected prior evidence assessment:
+- task-58-final-fix-code-review-2.md: REJECT was valid for the earlier state because `tests/test_framework/runner.py` was modified. It explicitly included the required remove-ai-slops/programming skill-perspective and overfit/slop coverage. Fresh current evidence below shows that exact blocker is repaired: `git diff -- tests` is empty, `runner.py` matches HEAD, and wrapper arg logging shows zero compiler invocations include `--no-coalescing`.
+- task-58-final-fix-adversarial-verify.txt: previous `needs-fix` blockers were the modified runner, missing post-fix support, and ignored helper .s durability note. The modified-runner blocker is repaired; this artifact supplies the requested post-repair adversarial gate. Ignored helper .s files remain identified as local ignored fixtures, not a Task58 source/test diff.
+- task-58-harness-scope-fix.txt: claims tests were restored and compiler default no-coalescing was used. Fresh commands below independently reran the required gates instead of trusting that log.
+
+fresh command evidence (current worktree, rerun 2026-07-09T04:17:48-04:18:01-04:00):
+- `git diff -- tests` -> exit 0; output empty; completed, no timeout.
+- `cargo fmt --all -- --check` -> exit 0; completed, no timeout.
+- `cargo check --release` -> exit 0; `Finished release profile [optimized] target(s) in 0.04s`; completed, no timeout.
+- `cargo build --release` -> exit 0; `Finished release profile [optimized] target(s) in 0.01s`; completed, no timeout.
+- `cargo test --release` -> exit 0; main binary ran 10 tests, `10 passed; 0 failed`; lib/doc tests empty; completed, no timeout.
+- `./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only --no-coalescing` -> exit 0; `Ran 66 tests in 3.077s` / `OK`; completed, no timeout.
+- `./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only` -> exit 0; `Ran 120 tests in 2.886s` / `OK`; completed, no timeout.
+- `./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-dead-stores` -> exit 0; `Ran 27 tests in 0.613s` / `OK`; completed, no timeout.
+- `./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union` -> exit 0; `Ran 286 tests in 5.311s` / `OK`; assembler truncation warnings were printed for two chapter18 static initializer clients but were non-fatal; completed, no timeout.
+- `rustc .omo/evidence/task-58-coloring-probe.rs -o /tmp/task58-coloring-probe-finalgate && /tmp/task58-coloring-probe-finalgate` -> exit 0; output included the expected mapping `{0: R9, 1: R8, 2: SI, 3: DI, 4: DX, 5: CX, 6: AX, 7: BX, 8: R12, 9: R13, 10: R14, 11: R15}`, reserved GP `[AX, BX, CX, DX, DI, SI, R8, R9, R12, R13, R14, R15]`, reserved XMM `[XMM(0)..XMM(13)]`, `hardreg_conflict: Some(R8)`, `spill_marker: None`; probe binary cleanup check exit 0.
+- `rg -n 'source_path_hint|with_source_path_hint|chapter_20|latest-only|test_valid|test_invalid|tests/tests|TestChapter|current_test|test_name|case_name|program_path' src/compiler.rs src/driver.rs src/pipeline.rs src/codegen/regalloc src/codegen/fixup.rs` -> exit 1 expected no matches; no source-path/chapter/test-name bridge found in production path.
+- `rg -n 'Reg::R10|Reg::R11|XMM\(14\)|XMM\(15\)' src/codegen/regalloc/types.rs` -> exit 1 expected no matches; forbidden registers are not allocatable in the register-class source.
+- `git diff --check` -> exit 0; completed, no timeout.
+
+additional harness-scope probe (fresh):
+- Wrapper command: `./tests/test_compiler /tmp/task58-rustcc-arglog-finalgate --chapter 20 --latest-only --no-coalescing` -> exit 0; `Ran 66 tests in 3.243s` / `OK`.
+- Wrapper logged `logged_invocations=66`, `invocations_with_no_coalescing=0`, `any_invocation_has_no_coalescing=False`.
+- Sample compiler argv began with optimization flags and `-S .../chapter_20/all_types/no_coalescing/aliasing_optimized_away.c`, not `--no-coalescing`.
+- Wrapper/log/output files under /tmp were removed; cleanup exit 0.
+
+scope-fidelity assessment:
+- PASS: `git diff -- tests` is empty; `git diff -- tests/test_framework/runner.py` was inspected and empty.
+- PASS: `tests/test_framework/runner.py` current lines 468-508 use `cc_options: list[str] = args.extra_cc_options`, extend only optimization flags, and pass `args.no_coalescing` to `test_framework.regalloc.configure_tests`; no append/forwarding of `--no-coalescing` to compiler args remains.
+- PASS: no production `source_path_hint`, `with_source_path_hint`, `chapter_20`, `latest-only`, or test-name/path bridge remains in `src/compiler.rs`, `src/driver.rs`, `src/pipeline.rs`, `src/codegen/regalloc`, or `src/codegen/fixup.rs`.
+- PASS: `src/compiler.rs` decides allocation from `!options.regalloc_options.coalescing_enabled`; `src/driver.rs` default `RegallocOptions` is no-coalescing until W21-T5; this is native compiler behavior, not a tests/harness patch.
+- PASS: OCaml parity for allocatable registers holds. Rust GP hardregs/caller-saved/contains exclude R10/R11 and XMM is 0..=13, matching `nqcc2/lib/backend/regalloc.ml` GP `[AX; BX; CX; DX; DI; SI; R8; R9; R12; R13; R14; R15]` and XMM0-XMM13.
+- PASS: R11 appears only as an intentionally reserved address scratch in `src/codegen/regalloc/scratch.rs`, not as allocatable register-class data.
+- PASS: no official tests/harness modification remains, so the prior scope blocker is repaired.
+
+ultraqa probes:
+- stale_state: PASS. All required cargo/test/rustc/git gates above were rerun during this final gate from the current worktree; prior evidence was treated as untrusted context only.
+- dirty_worktree: PASS with inventory. Current tracked Task58-related dirty files: `.omo/boulder.json`, `src/codegen/codegen.rs`, `src/codegen/codegen/copy_prop_support.rs`, `src/codegen/emit.rs`, `src/codegen/fixup.rs`, `src/codegen/regalloc/graph.rs`, `src/codegen/regalloc/mod.rs`, `src/codegen/regalloc/operands.rs`, `src/compiler.rs`, `src/driver.rs`, `src/ir/copy_propagation/rewrite_support.rs`, `src/pipeline.rs`. New untracked Task58 source files: `src/codegen/regalloc/allocate.rs`, `color.rs`, `rewrite.rs`, `scratch.rs`. Relevant untracked Task58 evidence/probe files are present. Unrelated old untracked evidence for task-18/task-37/task-38/task-39/task-40/task-41 was observed and excluded from this verdict.
+- dirty_worktree ignored fixtures: IDENTIFIED. `git status --short --ignored -- tests/tests/chapter_20/helper_libs` shows ignored `.s` helpers: `alignment_check_wrapper_linux.s`, `clobber_xmm_regs_linux.s`, `wrapper_linux.s`; `git ls-files tests/tests/chapter_20/helper_libs/*.s` is empty; `git check-ignore -v` reports `.gitignore:17:*.s` for all three. Ignored Python `__pycache__` files under `tests/test_framework` are also present. These are not official tests diff and were not edited by this gate.
+- misleading_success_output: PASS. I inspected exit codes plus OK summaries/counts. Chapter20 no-coalescing ran 66 OK, Chapter19 latest ran 120 OK, Chapter19 DSE ran 27 OK, Chapter18 union ran 286 OK; cargo test ran 10 main binary tests OK. `rg` no-match exits were interpreted as expected only for the explicit absence greps.
+- scope_fidelity: PASS. No tests diff remains; no source-path/test-name/chapter bridge exists; R10/R11/XMM14/XMM15 are not allocatable; no Task60 default coalescing gate was required.
+- generated_artifacts: PASS. Durable Rust probe compiled and ran, `/tmp/task58-coloring-probe-finalgate` was removed and absence checked. Harness wrapper/log/output files were also removed. No staging/commit performed.
+- long_commands: PASS. All long cargo/test harness commands completed with recorded exits and durations; no command timed out.
+
+remove-ai-slops / programming direct pass:
+- Required skills consulted: `omo:remove-ai-slops` and `omo:programming` plus Rust README.
+- Overfit/slop test review: PASS. No production/tests diff adds deletion-only, tautological, or implementation-mirroring tests. The standalone `.omo/evidence/task-58-coloring-probe.rs` is an explicit evidence probe requested for this gate and asserts observable allocator invariants against the OCaml register-class contract; it is not an official harness/test modification.
+- Production slop review: PASS for Task58 scope. No new dependency, no path/test-name bridge, no R11 allocatable regression, no broad new parsing/normalization layer, no untracked official test edits. `src/codegen/regalloc/allocate.rs` is 247 pure LOC (warning band but under the 250 defect ceiling); `src/codegen/regalloc/graph.rs` is 237; probe is 231. `src/driver.rs` remains 278 pure LOC as pre-existing architecture debt and should not grow, but the Task58 repair hunk is minimal and does not introduce the prior false-confidence bridge.
+- Code review report coverage: PRESENT. `.omo/evidence/task-58-final-fix-code-review-2.md` explicitly records remove-ai-slops/programming perspective checks and overfit/slop coverage. Its blocking runner-diff finding is stale after the harness-scope repair and is superseded by the fresh empty tests diff plus wrapper arglog evidence above.
+
+fresh source/diff findings:
+- `src/driver.rs`: `RegallocOptions::default()` now sets `coalescing_enabled: false`; `run_checked` no longer adds `source_path_hint`.
+- `src/compiler.rs`: `CompileOptions` no longer carries source path; native allocation path runs only when `!options.regalloc_options.coalescing_enabled`.
+- `src/codegen/regalloc/types.rs`: GP hardregs/caller-saved/contains exclude R10/R11; XMM hardregs/caller-saved/contains are 0..=13.
+- `src/codegen/regalloc/color.rs`: `select` assigns pseudo colors using hardreg-derived color map; durable probe confirms no-R11 OCaml mapping.
+- `src/codegen/regalloc/allocate.rs`, `rewrite.rs`, `scratch.rs`, `graph.rs`, `mod.rs`, `operands.rs`: inspected current source; no scope-fidelity blocker found. R11 scratch use is reserved-address handling, not allocatable-register use.
+- `tests/test_framework/runner.py`: status/diff clean; no `--no-coalescing` forwarding remains.
+
+blockers:
+- None.
+
+exact evidence gaps:
+- None blocking for Task58. Prior negative code-review/adversarial artifacts are stale for the runner-diff blocker, but their stated failing condition is directly resolved by fresh current-worktree evidence in this report.
+- Remaining delivery note: ignored chapter20 helper `.s` fixtures are local ignored test fixtures and must remain understood when reproducing harness runs from a pristine checkout; they are not a Task58 source/test diff.
+- Remaining architecture note: `src/driver.rs` is over the programming 250 pure-LOC guideline from pre-existing structure. Do not grow it further without a split, but this is not a Task58 blocker.
+
+Final verdict: confirmed
+
+/tmp scratch cleanup: script/logdir removed; rc=0

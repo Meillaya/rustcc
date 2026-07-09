@@ -1,0 +1,2933 @@
+Task 58 harness scope fix evidence
+Date: 2026-07-09T04:05:52-04:00
+
+Change summary:
+- Restored tests/ with git restore -- tests; tests/test_framework/runner.py now matches HEAD.
+- Set RegallocOptions::default().coalescing_enabled to false so the official harness's chapter20 --no-coalescing selector passes via native compiler default allocation behavior, without test/path/name bridges.
+- Did not add coalescing; W21-T5 can later enable/flip coalescing deliberately.
+
+===== git diff -- tests/test_framework/runner.py =====
+COMMAND: git diff -- tests/test_framework/runner.py
+EXIT: 0
+
+===== cargo fmt --all -- --check =====
+COMMAND: cargo fmt --all -- --check
+EXIT: 0
+
+===== cargo check --release =====
+COMMAND: cargo check --release
+    Checking rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 0.69s
+EXIT: 0
+
+===== cargo build --release =====
+COMMAND: cargo build --release
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 3.10s
+EXIT: 0
+
+===== cargo test --release =====
+COMMAND: cargo test --release
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 3.19s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 10 tests
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test driver::tests::derives_all_output_paths ... ok
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test driver::tests::parses_default_run_stage ... ok
+test compiler::tests::parses_sizeof_expression_without_evaluating_it ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+EXIT: 0
+
+===== chapter20 latest no-coalescing official harness =====
+COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only --no-coalescing
+----------------------------------------------------------------------
+Ran 66 tests in 3.072s
+
+OK
+EXIT: 0
+
+===== chapter19 latest =====
+COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only
+----------------------------------------------------------------------
+Ran 120 tests in 2.835s
+
+OK
+EXIT: 0
+
+===== chapter19 latest eliminate dead stores =====
+COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-dead-stores
+----------------------------------------------------------------------
+Ran 27 tests in 0.612s
+
+OK
+EXIT: 0
+
+===== chapter18 latest union =====
+COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union
+======================================================================
+FAIL: test_valid/extra_credit/libraries/classify_unions (test_framework.basic.TestChapter18.test_valid/extra_credit/libraries/classify_unions)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:71: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:92: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:125: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:142: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:176: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:195: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:219: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:258: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:302: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:337: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:361: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:524: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:543: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:567: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:602: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:619: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:643: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:669: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:695: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:735: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:756: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:781: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:821: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:842: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:867: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:945: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:964: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:1089: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:1137: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:1464: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:1487: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:1712: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:1731: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:1786: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:1840: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:1881: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:1904: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:1943: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:1996: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:2050: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:2069: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:2097: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:2178: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:2282: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:2301: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s:2336: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/classify_unions.s
+
+
+======================================================================
+FAIL: test_valid/extra_credit/libraries/param_passing (test_framework.basic.TestChapter18.test_valid/extra_credit/libraries/param_passing)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:55: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:182: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:205: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:239: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:400: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:423: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:500: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:550: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:564: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:585: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:606: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:646: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:669: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:708: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:731: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:765: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:784: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:952: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:966: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:987: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1008: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1029: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1069: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1092: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1126: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1145: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1202: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1216: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1237: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1258: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1381: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1399: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1546: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1564: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1599: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1673: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1692: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1718: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1755: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s:1773: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/param_passing.s
+
+
+======================================================================
+FAIL: test_valid/extra_credit/libraries/static_union_inits (test_framework.basic.TestChapter18.test_valid/extra_credit/libraries/static_union_inits)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/static_union_inits.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/static_union_inits.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/static_union_inits.s:196: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/static_union_inits.s:283: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/static_union_inits.s
+
+
+======================================================================
+FAIL: test_valid/extra_credit/libraries/union_inits (test_framework.basic.TestChapter18.test_valid/extra_credit/libraries/union_inits)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_inits.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_inits.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_inits.s:14: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_inits.s:39: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_inits.s
+
+
+======================================================================
+FAIL: test_valid/extra_credit/libraries/union_retvals (test_framework.basic.TestChapter18.test_valid/extra_credit/libraries/union_retvals)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals.s:295: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals.s:326: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals.s:380: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals.s:405: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals.s:432: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals.s:460: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals.s:498: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals.s
+
+
+======================================================================
+FAIL: test_valid/extra_credit/libraries/union_retvals_client (test_framework.basic.TestChapter18.test_valid/extra_credit/libraries/union_retvals_client)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 612, in test_client
+    self.compile_client_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 455, in compile_client_and_run
+    self.library_test_helper(client_path, [lib_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals_client.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals_client.s:33: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals_client.s:50: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals_client.s:101: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals_client.s:143: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals_client.s:162: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals_client.s:220: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals_client.s:301: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals_client.s:355: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals_client.s:376: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals_client.s:474: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals_client.s:499: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals_client.s:526: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals_client.s:554: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/libraries/union_retvals_client.s
+
+
+======================================================================
+FAIL: test_valid/extra_credit/member_access/nested_union_access (test_framework.basic.TestChapter18.test_valid/extra_credit/member_access/nested_union_access)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 402, in compile_and_run
+    self.validate_runs(source_file, result)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 308, in validate_runs
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        expected_retcode,
+        ^^^^^^^^^^^^^^^^^
+        actual.returncode,
+        ^^^^^^^^^^^^^^^^^^
+        msg=build_error_message(expected_retcode, expected_stdout, actual, exe),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Incorrect behavior in /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/member_access/nested_union_access
+* Bad return code: expected 0 and got 1
+
+======================================================================
+FAIL: test_valid/extra_credit/member_access/static_union_access (test_framework.basic.TestChapter18.test_valid/extra_credit/member_access/static_union_access)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 402, in compile_and_run
+    self.validate_runs(source_file, result)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 308, in validate_runs
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        expected_retcode,
+        ^^^^^^^^^^^^^^^^^
+        actual.returncode,
+        ^^^^^^^^^^^^^^^^^^
+        msg=build_error_message(expected_retcode, expected_stdout, actual, exe),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Incorrect behavior in /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/member_access/static_union_access
+* Bad return code: expected 0 and got 1
+
+======================================================================
+FAIL: test_valid/extra_credit/member_access/union_init_and_member_access (test_framework.basic.TestChapter18.test_valid/extra_credit/member_access/union_init_and_member_access)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/member_access/union_init_and_member_access.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/member_access/union_init_and_member_access.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/member_access/union_init_and_member_access.s:18: Error: operand type mismatch for `mov'
+assemble/link failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/member_access/union_init_and_member_access.s
+
+
+======================================================================
+FAIL: test_valid/extra_credit/semantic_analysis/incomplete_union_types (test_framework.basic.TestChapter18.test_valid/extra_credit/semantic_analysis/incomplete_union_types)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 402, in compile_and_run
+    self.validate_runs(source_file, result)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 308, in validate_runs
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        expected_retcode,
+        ^^^^^^^^^^^^^^^^^
+        actual.returncode,
+        ^^^^^^^^^^^^^^^^^^
+        msg=build_error_message(expected_retcode, expected_stdout, actual, exe),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Incorrect behavior in /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/semantic_analysis/incomplete_union_types
+* Bad return code: expected 0 and got 1
+
+======================================================================
+FAIL: test_valid/extra_credit/semantic_analysis/union_namespace (test_framework.basic.TestChapter18.test_valid/extra_credit/semantic_analysis/union_namespace)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/semantic_analysis/union_namespace.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/semantic_analysis/union_namespace.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/semantic_analysis/union_namespace.s:70: Error: operand type mismatch for `mov'
+assemble/link failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/semantic_analysis/union_namespace.s
+
+
+======================================================================
+FAIL: test_valid/extra_credit/size_and_offset/compare_union_pointers (test_framework.basic.TestChapter18.test_valid/extra_credit/size_and_offset/compare_union_pointers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 402, in compile_and_run
+    self.validate_runs(source_file, result)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 308, in validate_runs
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        expected_retcode,
+        ^^^^^^^^^^^^^^^^^
+        actual.returncode,
+        ^^^^^^^^^^^^^^^^^^
+        msg=build_error_message(expected_retcode, expected_stdout, actual, exe),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Incorrect behavior in /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/size_and_offset/compare_union_pointers
+* Bad return code: expected 0 and got 4
+
+======================================================================
+FAIL: test_valid/extra_credit/union_copy/assign_to_union (test_framework.basic.TestChapter18.test_valid/extra_credit/union_copy/assign_to_union)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/union_copy/assign_to_union.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/union_copy/assign_to_union.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/union_copy/assign_to_union.s:161: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/union_copy/assign_to_union.s:189: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/union_copy/assign_to_union.s:217: Error: operand type mismatch for `mov'
+assemble/link failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/union_copy/assign_to_union.s
+
+
+======================================================================
+FAIL: test_valid/extra_credit/union_copy/copy_thru_pointer (test_framework.basic.TestChapter18.test_valid/extra_credit/union_copy/copy_thru_pointer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/union_copy/copy_thru_pointer.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/union_copy/copy_thru_pointer.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/union_copy/copy_thru_pointer.s:248: Error: operand type mismatch for `mov'
+assemble/link failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/extra_credit/union_copy/copy_thru_pointer.s
+
+
+======================================================================
+FAIL: test_valid/no_structure_parameters/libraries/global_struct_client (test_framework.basic.TestChapter18.test_valid/no_structure_parameters/libraries/global_struct_client)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 612, in test_client
+    self.compile_client_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 455, in compile_client_and_run
+    self.library_test_helper(client_path, [lib_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/global_struct_client.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/global_struct_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/global_struct_client.s:54: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/global_struct_client.s
+
+
+======================================================================
+FAIL: test_valid/no_structure_parameters/libraries/initializers/auto_struct_initializers (test_framework.basic.TestChapter18.test_valid/no_structure_parameters/libraries/initializers/auto_struct_initializers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/auto_struct_initializers.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/auto_struct_initializers.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/auto_struct_initializers.s:113: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/auto_struct_initializers.s:140: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/auto_struct_initializers.s:393: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/auto_struct_initializers.s:420: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/auto_struct_initializers.s:551: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/auto_struct_initializers.s:578: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/auto_struct_initializers.s
+
+
+======================================================================
+FAIL: test_valid/no_structure_parameters/libraries/initializers/nested_auto_struct_initializers (test_framework.basic.TestChapter18.test_valid/no_structure_parameters/libraries/initializers/nested_auto_struct_initializers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_auto_struct_initializers.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_auto_struct_initializers.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_auto_struct_initializers.s:188: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_auto_struct_initializers.s:547: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_auto_struct_initializers.s:821: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_auto_struct_initializers.s:1048: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_auto_struct_initializers.s:1260: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_auto_struct_initializers.s
+
+
+======================================================================
+FAIL: test_valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers (test_framework.basic.TestChapter18.test_valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers.s:357: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers.s:542: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers.s:741: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers.s:874: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers.s
+
+
+======================================================================
+FAIL: test_valid/no_structure_parameters/libraries/initializers/static_struct_initializers (test_framework.basic.TestChapter18.test_valid/no_structure_parameters/libraries/initializers/static_struct_initializers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers.s:121: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers.s:235: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers.s:359: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers.s
+
+
+======================================================================
+FAIL: test_valid/no_structure_parameters/libraries/opaque_struct (test_framework.basic.TestChapter18.test_valid/no_structure_parameters/libraries/opaque_struct)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/opaque_struct.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/opaque_struct.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/opaque_struct.s:128: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/opaque_struct.s
+
+
+======================================================================
+FAIL: test_valid/no_structure_parameters/libraries/param_struct_pointer (test_framework.basic.TestChapter18.test_valid/no_structure_parameters/libraries/param_struct_pointer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/param_struct_pointer.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/param_struct_pointer.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/param_struct_pointer.s:47: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/param_struct_pointer.s
+
+
+======================================================================
+FAIL: test_valid/no_structure_parameters/libraries/param_struct_pointer_client (test_framework.basic.TestChapter18.test_valid/no_structure_parameters/libraries/param_struct_pointer_client)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 612, in test_client
+    self.compile_client_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 455, in compile_client_and_run
+    self.library_test_helper(client_path, [lib_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/param_struct_pointer_client.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/param_struct_pointer_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/param_struct_pointer_client.s:122: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/param_struct_pointer_client.s
+
+
+======================================================================
+FAIL: test_valid/no_structure_parameters/libraries/return_struct_pointer_client (test_framework.basic.TestChapter18.test_valid/no_structure_parameters/libraries/return_struct_pointer_client)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 612, in test_client
+    self.compile_client_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 455, in compile_client_and_run
+    self.library_test_helper(client_path, [lib_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/return_struct_pointer_client.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/return_struct_pointer_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/return_struct_pointer_client.s:22: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/return_struct_pointer_client.s:174: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/return_struct_pointer_client.s:245: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/return_struct_pointer_client.s:272: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/return_struct_pointer_client.s:362: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/return_struct_pointer_client.s:438: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/return_struct_pointer_client.s
+
+
+======================================================================
+FAIL: test_valid/no_structure_parameters/scalar_member_access/arrow (test_framework.basic.TestChapter18.test_valid/no_structure_parameters/scalar_member_access/arrow)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/arrow.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/arrow.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/arrow.s:56: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/arrow.s:147: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/arrow.s:256: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/arrow.s:346: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/arrow.s:543: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/arrow.s:633: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/arrow.s:890: Error: operand type mismatch for `mov'
+assemble/link failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/arrow.s
+
+
+======================================================================
+FAIL: test_valid/no_structure_parameters/scalar_member_access/dot (test_framework.basic.TestChapter18.test_valid/no_structure_parameters/scalar_member_access/dot)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/dot.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/dot.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/dot.s:41: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/dot.s:104: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/dot.s:139: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/dot.s:236: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/dot.s:326: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/dot.s:511: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/dot.s:601: Error: operand type mismatch for `mov'
+assemble/link failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/dot.s
+
+
+======================================================================
+FAIL: test_valid/no_structure_parameters/scalar_member_access/nested_struct (test_framework.basic.TestChapter18.test_valid/no_structure_parameters/scalar_member_access/nested_struct)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:67: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:192: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:248: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:373: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:498: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:539: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:566: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:778: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:819: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:846: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:1163: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:1236: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:1300: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:1352: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:1617: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:1691: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:1738: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:2047: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:2127: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:2159: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s:2191: Error: operand type mismatch for `mov'
+assemble/link failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/scalar_member_access/nested_struct.s
+
+
+======================================================================
+FAIL: test_valid/no_structure_parameters/semantic_analysis/namespaces (test_framework.basic.TestChapter18.test_valid/no_structure_parameters/semantic_analysis/namespaces)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/semantic_analysis/namespaces.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/semantic_analysis/namespaces.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/semantic_analysis/namespaces.s:50: Error: operand type mismatch for `mov'
+assemble/link failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/semantic_analysis/namespaces.s
+
+
+======================================================================
+FAIL: test_valid/no_structure_parameters/semantic_analysis/resolve_tags (test_framework.basic.TestChapter18.test_valid/no_structure_parameters/semantic_analysis/resolve_tags)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/semantic_analysis/resolve_tags.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/semantic_analysis/resolve_tags.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/semantic_analysis/resolve_tags.s:217: Error: operand type mismatch for `mov'
+assemble/link failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/semantic_analysis/resolve_tags.s
+
+
+======================================================================
+FAIL: test_valid/no_structure_parameters/size_and_offset_calculations/member_comparisons (test_framework.basic.TestChapter18.test_valid/no_structure_parameters/size_and_offset_calculations/member_comparisons)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 402, in compile_and_run
+    self.validate_runs(source_file, result)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 308, in validate_runs
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        expected_retcode,
+        ^^^^^^^^^^^^^^^^^
+        actual.returncode,
+        ^^^^^^^^^^^^^^^^^^
+        msg=build_error_message(expected_retcode, expected_stdout, actual, exe),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Incorrect behavior in /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/size_and_offset_calculations/member_comparisons
+* Bad return code: expected 0 and got 3
+
+======================================================================
+FAIL: test_valid/no_structure_parameters/size_and_offset_calculations/member_offsets (test_framework.basic.TestChapter18.test_valid/no_structure_parameters/size_and_offset_calculations/member_offsets)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 402, in compile_and_run
+    self.validate_runs(source_file, result)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 308, in validate_runs
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        expected_retcode,
+        ^^^^^^^^^^^^^^^^^
+        actual.returncode,
+        ^^^^^^^^^^^^^^^^^^
+        msg=build_error_message(expected_retcode, expected_stdout, actual, exe),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: Incorrect behavior in /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/size_and_offset_calculations/member_offsets
+* Bad return code: expected 0 and got 4
+
+======================================================================
+FAIL: test_valid/no_structure_parameters/struct_copy/copy_struct_with_arrow_operator (test_framework.basic.TestChapter18.test_valid/no_structure_parameters/struct_copy/copy_struct_with_arrow_operator)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/struct_copy/copy_struct_with_arrow_operator.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/struct_copy/copy_struct_with_arrow_operator.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/struct_copy/copy_struct_with_arrow_operator.s:60: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/struct_copy/copy_struct_with_arrow_operator.s:153: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/struct_copy/copy_struct_with_arrow_operator.s:327: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/struct_copy/copy_struct_with_arrow_operator.s:478: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/struct_copy/copy_struct_with_arrow_operator.s:794: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/struct_copy/copy_struct_with_arrow_operator.s:945: Error: operand type mismatch for `mov'
+assemble/link failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/struct_copy/copy_struct_with_arrow_operator.s
+
+
+======================================================================
+FAIL: test_valid/parameters/libraries/classify_params (test_framework.basic.TestChapter18.test_valid/parameters/libraries/classify_params)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/classify_params.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/classify_params.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/classify_params.s:227: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/classify_params.s:333: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/classify_params.s:368: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/classify_params.s:429: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/classify_params.s:453: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/classify_params.s
+
+
+======================================================================
+FAIL: test_valid/parameters/libraries/modify_param (test_framework.basic.TestChapter18.test_valid/parameters/libraries/modify_param)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/modify_param.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/modify_param.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/modify_param.s:63: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/modify_param.s:194: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/modify_param.s:244: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/modify_param.s:308: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/modify_param.s:358: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/modify_param.s
+
+
+======================================================================
+FAIL: test_valid/parameters/libraries/modify_param_client (test_framework.basic.TestChapter18.test_valid/parameters/libraries/modify_param_client)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 612, in test_client
+    self.compile_client_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 455, in compile_client_and_run
+    self.library_test_helper(client_path, [lib_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/modify_param_client.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/modify_param_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/modify_param_client.s:40: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/modify_param_client.s:142: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/modify_param_client.s:225: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/modify_param_client.s
+
+
+======================================================================
+FAIL: test_valid/parameters/libraries/param_calling_conventions (test_framework.basic.TestChapter18.test_valid/parameters/libraries/param_calling_conventions)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:46: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:65: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:129: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:161: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:433: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:478: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:548: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:593: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:607: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:628: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:669: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:723: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:742: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:795: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:826: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:978: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:1085: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:1370: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:1520: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s:1729: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/libraries/param_calling_conventions.s
+
+
+======================================================================
+FAIL: test_valid/parameters/simple (test_framework.basic.TestChapter18.test_valid/parameters/simple)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/simple.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/simple.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/simple.s:24: Error: operand type mismatch for `mov'
+assemble/link failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/simple.s
+
+
+======================================================================
+FAIL: test_valid/parameters/stack_clobber (test_framework.basic.TestChapter18.test_valid/parameters/stack_clobber)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/stack_clobber.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/stack_clobber.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/stack_clobber.s:542: Error: operand type mismatch for `mov'
+assemble/link failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/parameters/stack_clobber.s
+
+
+======================================================================
+FAIL: test_valid/params_and_returns/ignore_retval (test_framework.basic.TestChapter18.test_valid/params_and_returns/ignore_retval)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/ignore_retval.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/ignore_retval.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/ignore_retval.s:123: Error: operand type mismatch for `mov'
+assemble/link failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/ignore_retval.s
+
+
+======================================================================
+FAIL: test_valid/params_and_returns/libraries/access_retval_members_client (test_framework.basic.TestChapter18.test_valid/params_and_returns/libraries/access_retval_members_client)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 612, in test_client
+    self.compile_client_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 455, in compile_client_and_run
+    self.library_test_helper(client_path, [lib_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/libraries/access_retval_members_client.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/libraries/access_retval_members_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/libraries/access_retval_members_client.s:35: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/libraries/access_retval_members_client.s
+
+
+======================================================================
+FAIL: test_valid/params_and_returns/libraries/return_calling_conventions (test_framework.basic.TestChapter18.test_valid/params_and_returns/libraries/return_calling_conventions)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 621, in test_lib
+    self.compile_lib_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 462, in compile_lib_and_run
+    self.library_test_helper(lib_path, [client_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/libraries/return_calling_conventions.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/libraries/return_calling_conventions.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/libraries/return_calling_conventions.s:442: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/libraries/return_calling_conventions.s
+
+
+======================================================================
+FAIL: test_valid/params_and_returns/libraries/return_calling_conventions_client (test_framework.basic.TestChapter18.test_valid/params_and_returns/libraries/return_calling_conventions_client)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 612, in test_client
+    self.compile_client_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 455, in compile_client_and_run
+    self.library_test_helper(client_path, [lib_path])
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 425, in library_test_helper
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compilation_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {file_under_test} failed with error:\n{compilation_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/libraries/return_calling_conventions_client.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/libraries/return_calling_conventions_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/libraries/return_calling_conventions_client.s:247: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/libraries/return_calling_conventions_client.s:294: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/libraries/return_calling_conventions_client.s:313: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/libraries/return_calling_conventions_client.s:375: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/libraries/return_calling_conventions_client.s:448: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/libraries/return_calling_conventions_client.s:522: Error: operand type mismatch for `mov'
+assembler failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/libraries/return_calling_conventions_client.s
+
+
+======================================================================
+FAIL: test_valid/params_and_returns/simple (test_framework.basic.TestChapter18.test_valid/params_and_returns/simple)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/simple.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/simple.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/simple.s:91: Error: operand type mismatch for `mov'
+assemble/link failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/simple.s
+
+
+======================================================================
+FAIL: test_valid/params_and_returns/stack_clobber (test_framework.basic.TestChapter18.test_valid/params_and_returns/stack_clobber)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 603, in test_run
+    self.compile_and_run(program)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/mei/projects/rustcc/tests/test_framework/basic.py", line 385, in compile_and_run
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        compile_result.returncode,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        0,
+        ^^
+        msg=f"compilation of {source_file} failed with error:\n{compile_result.stderr}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: compilation of /home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/stack_clobber.c failed with error:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/stack_clobber.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/stack_clobber.s:962: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/stack_clobber.s:1228: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/stack_clobber.s:1247: Error: operand type mismatch for `mov'
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/stack_clobber.s:1538: Error: operand type mismatch for `mov'
+assemble/link failed for /home/mei/projects/rustcc/tests/tests/chapter_18/valid/params_and_returns/stack_clobber.s
+
+
+----------------------------------------------------------------------
+Ran 286 tests in 4.581s
+
+FAILED (failures=43)
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s:17: Warning: value 0x1000000080000000 truncated to 0x80000000
+
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s:9: Warning: value 0x400000005 truncated to 0x5
+
+EXIT: 1
+
+
+Final corrective notes:
+- Added regalloc aggregate capability guard: functions containing ByteArray pseudos remain on stack allocation until aggregate-aware register allocation lands.
+- Made colored pseudo replacement register-class aware so XMM coloring cannot rewrite integer operand positions, and GP coloring cannot rewrite SSE operand positions.
+- Added redundant move cleanup equivalent to OCaml cleanup_movs to remove self-moves such as movl %r9d,%r9d that can zero-extend pointer values after coloring.
+
+===== FINAL git diff -- tests/test_framework/runner.py =====
+COMMAND: git diff -- tests/test_framework/runner.py
+EXIT: 0
+
+===== FINAL cargo fmt --all -- --check =====
+COMMAND: cargo fmt --all -- --check
+EXIT: 0
+
+===== FINAL cargo check --release =====
+COMMAND: cargo check --release
+    Checking rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 0.64s
+EXIT: 0
+
+===== FINAL cargo build --release =====
+COMMAND: cargo build --release
+    Finished `release` profile [optimized] target(s) in 0.01s
+EXIT: 0
+
+===== FINAL cargo test --release =====
+COMMAND: cargo test --release
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 3.13s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 10 tests
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test driver::tests::derives_all_output_paths ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test compiler::tests::parses_sizeof_expression_without_evaluating_it ... ok
+test driver::tests::parses_default_run_stage ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+EXIT: 0
+
+===== FINAL chapter20 latest no-coalescing official harness =====
+COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only --no-coalescing
+======================================================================
+FAIL: test_all_types/no_coalescing/mixed_type_arg_registers (test_framework.regalloc.TestRegAlloc.test_all_types/no_coalescing/mixed_type_arg_registers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/regalloc.py", line 440, in test
+    self.spill_test(
+    ~~~~~~~~~~~~~~~^
+        program,
+        ^^^^^^^^
+    ...<2 lines>...
+        target_fun=spilltest_info.target_fun,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/mei/projects/rustcc/tests/test_framework/regalloc.py", line 188, in spill_test
+    self.assertLessEqual(
+    ~~~~~~~~~~~~~~~~~~~~^
+        len(spill_instructions),
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+        ),
+        ^^
+    )
+    ^
+AssertionError: Should only need 15 instructions involving spilled pseudos but found 243
+Bad instructions:
+	mov %DI, -4(%BP)
+	mov %SI, -8(%BP)
+	mov %DX, -12(%BP)
+	mov %XMM0, -24(%BP)
+	mov %XMM1, -32(%BP)
+	mov -8(%BP), %R10
+	mov %R10, -36(%BP)
+	add $2, -36(%BP)
+	movs -36(%BP), %R10
+	mov %R10, -48(%BP)
+	mov -12(%BP), %R10
+	mov %R10, -52(%BP)
+	mov -8(%BP), %R10
+	add %R10, -52(%BP)
+	mov -52(%BP), %R10
+	mov %R10, -56(%BP)
+	mov $12, -60(%BP)
+	mov -4(%BP), %R10
+	sub %R10, -60(%BP)
+	mov -60(%BP), %R10
+	mov %R10, -64(%BP)
+	mov -8(%BP), %R10
+	sub %R10, -64(%BP)
+	mov -64(%BP), %R10
+	mov %R10, -68(%BP)
+	mov -12(%BP), %R10
+	sub %R10, -68(%BP)
+	mov $13, -72(%BP)
+	mov -68(%BP), %R10
+	sub %R10, -72(%BP)
+	mov -72(%BP), %R10
+	mov %R10, -76(%BP)
+	movs -8(%BP), %R10
+	mov %R10, -88(%BP)
+	mov -48(%BP), %R10
+	mov %R10, -96(%BP)
+	mov -88(%BP), %R10
+	mov -96(%BP), %R11
+	mov %R11, -96(%BP)
+	mov -96(%BP), %R10
+	mov %R10, -100(%BP)
+	mov -12(%BP), %R10
+	mov %R10, -104(%BP)
+	mov -12(%BP), %R10
+	mov -104(%BP), %R11
+	mov %R11, -104(%BP)
+	movs -104(%BP), %R10
+	mov %R10, -112(%BP)
+	movs -68(%BP), %R10
+	mov %R10, -120(%BP)
+	mov -120(%BP), %R10
+	mov %R10, -128(%BP)
+	mov -48(%BP), %R10
+	add %R10, -128(%BP)
+	mov -68(%BP), %R10
+	mov %R10, -132(%BP)
+	mov -8(%BP), %R10
+	mov -132(%BP), %R11
+	mov %R11, -132(%BP)
+	mov -132(%BP), %R10
+	mov %R10, -136(%BP)
+	mov -4(%BP), %R10
+	sub %R10, -136(%BP)
+	mov -136(%BP), %R10
+	mov %R10, -140(%BP)
+	mov -140(%BP), %R10
+	mov %R10, -144(%BP)
+	mov -68(%BP), %R10
+	mov %R10, -148(%BP)
+	mov -8(%BP), %R10
+	mov -148(%BP), %R11
+	mov %R11, -148(%BP)
+	mov -24(%BP), %XMM15
+	mov %XMM15, -160(%BP)
+	mov -160(%BP), %XMM14
+	add -32(%BP), %XMM14
+	mov %XMM14, -160(%BP)
+	mov -160(%BP), %XMM15
+	mov %XMM15, -168(%BP)
+	mov -168(%BP), %XMM14
+	add -24(%BP), %XMM14
+	mov %XMM14, -168(%BP)
+	mov -32(%BP), %XMM15
+	mov %XMM15, -176(%BP)
+	mov -176(%BP), %XMM14
+	add -160(%BP), %XMM14
+	mov %XMM14, -176(%BP)
+	mov -160(%BP), %XMM15
+	mov %XMM15, -184(%BP)
+	mov -184(%BP), %XMM14
+	imul -32(%BP), %XMM14
+	mov %XMM14, -184(%BP)
+	mov %XMM15, -192(%BP)
+	mov -192(%BP), %XMM14
+	sub -184(%BP), %XMM14
+	mov %XMM14, -192(%BP)
+	mov -168(%BP), %XMM15
+	mov %XMM15, -200(%BP)
+	mov -200(%BP), %XMM14
+	imul -32(%BP), %XMM14
+	mov %XMM14, -200(%BP)
+	mov -160(%BP), %XMM15
+	mov %XMM15, -208(%BP)
+	mov -208(%BP), %XMM14
+	imul -160(%BP), %XMM14
+	mov %XMM14, -208(%BP)
+	mov -176(%BP), %XMM15
+	mov %XMM15, -216(%BP)
+	mov -216(%BP), %XMM14
+	imul -32(%BP), %XMM14
+	mov %XMM14, -216(%BP)
+	mov -192(%BP), %XMM15
+	mov %XMM15, -224(%BP)
+	mov -224(%BP), %XMM14
+	imul -32(%BP), %XMM14
+	mov %XMM14, -224(%BP)
+	mov -224(%BP), %XMM15
+	mov %XMM15, -232(%BP)
+	mov -232(%BP), %XMM14
+	sub -160(%BP), %XMM14
+	mov %XMM14, -232(%BP)
+	mov -200(%BP), %XMM15
+	mov %XMM15, -240(%BP)
+	mov -240(%BP), %XMM14
+	imul -168(%BP), %XMM14
+	mov %XMM14, -240(%BP)
+	mov -240(%BP), %XMM15
+	mov %XMM15, -248(%BP)
+	mov -248(%BP), %XMM14
+	mov %XMM14, -248(%BP)
+	mov -208(%BP), %XMM15
+	mov %XMM15, -256(%BP)
+	mov -256(%BP), %XMM14
+	add -216(%BP), %XMM14
+	mov %XMM14, -256(%BP)
+	mov -256(%BP), %XMM15
+	mov %XMM15, -264(%BP)
+	mov -264(%BP), %XMM14
+	sub -184(%BP), %XMM14
+	mov %XMM14, -264(%BP)
+	mov -232(%BP), %XMM15
+	mov %XMM15, -272(%BP)
+	mov -272(%BP), %XMM14
+	mov %XMM14, -272(%BP)
+	mov -4(%BP), %R10
+	movs -8(%BP), %R10
+	mov %R10, -280(%BP)
+	mov -280(%BP), %R10
+	mov -12(%BP), %R10
+	mov %R10, -284(%BP)
+	mov -284(%BP), %R10
+	mov -48(%BP), %R10
+	mov %R10, -296(%BP)
+	mov -296(%BP), %R10
+	mov -56(%BP), %R10
+	mov -68(%BP), %R10
+	mov %R10, -300(%BP)
+	mov -300(%BP), %R10
+	mov -76(%BP), %R10
+	mov %R10, -304(%BP)
+	mov -304(%BP), %R10
+	mov -24(%BP), %XMM15
+	mov -32(%BP), %XMM15
+	mov -160(%BP), %XMM15
+	mov -168(%BP), %XMM15
+	mov -176(%BP), %XMM15
+	mov -184(%BP), %XMM15
+	mov -192(%BP), %XMM15
+	mov -200(%BP), %XMM15
+	mov -208(%BP), %XMM15
+	mov -216(%BP), %XMM15
+	mov %R10, -328(%BP)
+	mov -328(%BP), %R9
+	mov -328(%BP), %R10
+	mov %R10, -336(%BP)
+	mov $0, -340(%BP)
+	mov -336(%BP), %R9
+	mov -340(%BP), %R10
+	mov -328(%BP), %R10
+	mov %R10, -352(%BP)
+	mov -352(%BP), %R9
+	mov -328(%BP), %R9
+	mov -232(%BP), %XMM15
+	mov -328(%BP), %R10
+	mov %R10, -360(%BP)
+	mov -100(%BP), %R10
+	mov %R10, -364(%BP)
+	mov -360(%BP), %R9
+	mov -364(%BP), %R10
+	mov -328(%BP), %R10
+	mov %R10, -376(%BP)
+	mov -112(%BP), %R10
+	mov %R10, -380(%BP)
+	mov -376(%BP), %R9
+	mov -380(%BP), %R10
+	mov %R10, -408(%BP)
+	mov $0, -416(%BP)
+	mov -408(%BP), %R9
+	mov -416(%BP), %R10
+	mov -408(%BP), %R10
+	mov %R10, -424(%BP)
+	mov -424(%BP), %R9
+	mov -128(%BP), %R10
+	mov %R10, -432(%BP)
+	mov -408(%BP), %R9
+	mov -432(%BP), %R10
+	mov -408(%BP), %R10
+	mov %R10, -440(%BP)
+	mov -440(%BP), %R9
+	mov -248(%BP), %XMM15
+	mov %R10, -472(%BP)
+	mov -472(%BP), %R9
+	mov -472(%BP), %R10
+	mov %R10, -480(%BP)
+	mov -480(%BP), %R9
+	mov -472(%BP), %R10
+	mov %R10, -488(%BP)
+	mov $0, -492(%BP)
+	mov -488(%BP), %R9
+	mov -492(%BP), %R10
+	mov -472(%BP), %R9
+	mov -264(%BP), %XMM15
+	mov -472(%BP), %R10
+	mov %R10, -504(%BP)
+	mov -504(%BP), %R9
+	mov -272(%BP), %XMM15
+	mov -472(%BP), %R10
+	mov %R10, -512(%BP)
+	mov -512(%BP), %R9
+	mov -144(%BP), %R10
+	mov -148(%BP), %R10
+	mov %R10, -516(%BP)
+	mov -312(%BP), %DI
+	mov -400(%BP), %SI
+	movs -516(%BP), %DX
+	mov -320(%BP), %XMM0
+	mov -392(%BP), %XMM1
+	mov -448(%BP), %R10
+	mov -456(%BP), %R10
+	mov -464(%BP), %R10
+	mov %AX, -520(%BP)
+	mov %AX, -524(%BP)
+	mov %AX, -528(%BP)
+Complete assembly function: <too long, not shown>
+Program: /home/mei/projects/rustcc/tests/tests/chapter_20/all_types/no_coalescing/mixed_type_arg_registers.c
+
+======================================================================
+FAIL: test_all_types/no_coalescing/return_all_int_struct (test_framework.regalloc.TestRegAlloc.test_all_types/no_coalescing/return_all_int_struct)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/regalloc.py", line 440, in test
+    self.spill_test(
+    ~~~~~~~~~~~~~~~^
+        program,
+        ^^^^^^^^
+    ...<2 lines>...
+        target_fun=spilltest_info.target_fun,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/mei/projects/rustcc/tests/test_framework/regalloc.py", line 188, in spill_test
+    self.assertLessEqual(
+    ~~~~~~~~~~~~~~~~~~~~^
+        len(spill_instructions),
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+        ),
+        ^^
+    )
+    ^
+AssertionError: Should only need 10 instructions involving spilled pseudos but found 223
+Bad instructions:
+	mov %XMM15, -8(%BP)
+	mov -8(%BP), %XMM14
+	mov %XMM14, -8(%BP)
+	mov %XMM15, -16(%BP)
+	mov -16(%BP), %XMM14
+	mov %XMM14, -16(%BP)
+	mov -8(%BP), %XMM15
+	mov %XMM15, -24(%BP)
+	mov -24(%BP), %XMM14
+	mov %XMM14, -24(%BP)
+	mov %XMM15, -32(%BP)
+	mov -16(%BP), %XMM15
+	mov %XMM15, -40(%BP)
+	mov -40(%BP), %XMM14
+	sub -32(%BP), %XMM14
+	mov %XMM14, -40(%BP)
+	mov %XMM15, -48(%BP)
+	mov -48(%BP), %XMM14
+	mov %XMM14, -48(%BP)
+	mov %XMM15, -56(%BP)
+	mov -56(%BP), %XMM14
+	mov %XMM14, -56(%BP)
+	mov -24(%BP), %XMM15
+	mov %XMM15, -64(%BP)
+	mov -64(%BP), %XMM14
+	mov %XMM14, -64(%BP)
+	mov -40(%BP), %XMM15
+	mov %XMM15, -72(%BP)
+	mov -72(%BP), %XMM14
+	mov %XMM14, -72(%BP)
+	mov -48(%BP), %XMM15
+	mov %XMM15, -80(%BP)
+	mov -80(%BP), %XMM14
+	mov %XMM14, -80(%BP)
+	mov -64(%BP), %XMM15
+	mov %XMM15, -88(%BP)
+	mov -88(%BP), %XMM14
+	add -56(%BP), %XMM14
+	mov %XMM14, -88(%BP)
+	mov -72(%BP), %XMM15
+	mov %XMM15, -96(%BP)
+	mov -96(%BP), %XMM14
+	sub -88(%BP), %XMM14
+	mov %XMM14, -96(%BP)
+	mov -80(%BP), %XMM15
+	mov %XMM15, -104(%BP)
+	mov -104(%BP), %XMM14
+	mov %XMM14, -104(%BP)
+	mov -88(%BP), %XMM15
+	mov %XMM15, -112(%BP)
+	mov -112(%BP), %XMM14
+	sub -40(%BP), %XMM14
+	mov %XMM14, -112(%BP)
+	mov -112(%BP), %XMM15
+	mov %XMM15, -120(%BP)
+	mov -120(%BP), %XMM14
+	imul -104(%BP), %XMM14
+	mov %XMM14, -120(%BP)
+	mov -8(%BP), %XMM14
+	setcc -124(%BP)
+	mov $0, -124(%BP)
+	movz -124(%BP), %R10
+	mov %R10, -124(%BP)
+	cmp $0, -124(%BP)
+	mov -16(%BP), %XMM14
+	setcc -128(%BP)
+	mov $0, -128(%BP)
+	movz -128(%BP), %R10
+	mov %R10, -128(%BP)
+	cmp $0, -128(%BP)
+	mov $1, -132(%BP)
+	mov $0, -132(%BP)
+	cmp $0, -132(%BP)
+	mov -24(%BP), %XMM14
+	setcc -136(%BP)
+	mov $0, -136(%BP)
+	movz -136(%BP), %R10
+	mov %R10, -136(%BP)
+	cmp $0, -136(%BP)
+	mov $1, -140(%BP)
+	mov $0, -140(%BP)
+	cmp $0, -140(%BP)
+	mov -40(%BP), %XMM14
+	setcc -144(%BP)
+	mov $0, -144(%BP)
+	movz -144(%BP), %R10
+	mov %R10, -144(%BP)
+	cmp $0, -144(%BP)
+	mov $1, -148(%BP)
+	mov $0, -148(%BP)
+	cmp $0, -148(%BP)
+	mov -48(%BP), %XMM14
+	setcc -152(%BP)
+	mov $0, -152(%BP)
+	movz -152(%BP), %R10
+	mov %R10, -152(%BP)
+	cmp $0, -152(%BP)
+	mov $1, -156(%BP)
+	mov $0, -156(%BP)
+	cmp $0, -156(%BP)
+	mov -56(%BP), %XMM14
+	setcc -160(%BP)
+	mov $0, -160(%BP)
+	movz -160(%BP), %R10
+	mov %R10, -160(%BP)
+	cmp $0, -160(%BP)
+	mov $1, -164(%BP)
+	mov $0, -164(%BP)
+	cmp $0, -164(%BP)
+	mov -64(%BP), %XMM14
+	setcc -168(%BP)
+	mov $0, -168(%BP)
+	movz -168(%BP), %R10
+	mov %R10, -168(%BP)
+	cmp $0, -168(%BP)
+	mov $1, -172(%BP)
+	mov $0, -172(%BP)
+	cmp $0, -172(%BP)
+	mov -72(%BP), %XMM14
+	setcc -176(%BP)
+	mov $0, -176(%BP)
+	movz -176(%BP), %R10
+	mov %R10, -176(%BP)
+	cmp $0, -176(%BP)
+	mov $1, -180(%BP)
+	mov $0, -180(%BP)
+	cmp $0, -180(%BP)
+	mov -80(%BP), %XMM14
+	setcc -184(%BP)
+	mov $0, -184(%BP)
+	movz -184(%BP), %R10
+	mov %R10, -184(%BP)
+	cmp $0, -184(%BP)
+	mov $1, -188(%BP)
+	mov $0, -188(%BP)
+	cmp $0, -188(%BP)
+	mov -88(%BP), %XMM14
+	setcc -192(%BP)
+	mov $0, -192(%BP)
+	movz -192(%BP), %R10
+	mov %R10, -192(%BP)
+	cmp $0, -192(%BP)
+	mov $1, -196(%BP)
+	mov $0, -196(%BP)
+	cmp $0, -196(%BP)
+	mov -96(%BP), %XMM14
+	setcc -200(%BP)
+	mov $0, -200(%BP)
+	movz -200(%BP), %R10
+	mov %R10, -200(%BP)
+	cmp $0, -200(%BP)
+	mov $1, -204(%BP)
+	mov $0, -204(%BP)
+	cmp $0, -204(%BP)
+	mov -104(%BP), %XMM14
+	setcc -208(%BP)
+	mov $0, -208(%BP)
+	movz -208(%BP), %R10
+	mov %R10, -208(%BP)
+	cmp $0, -208(%BP)
+	mov $1, -212(%BP)
+	mov $0, -212(%BP)
+	cmp $0, -212(%BP)
+	mov -112(%BP), %XMM14
+	setcc -216(%BP)
+	mov $0, -216(%BP)
+	movz -216(%BP), %R10
+	mov %R10, -216(%BP)
+	cmp $0, -216(%BP)
+	mov $1, -220(%BP)
+	mov $0, -220(%BP)
+	cmp $0, -220(%BP)
+	mov -120(%BP), %XMM14
+	setcc -224(%BP)
+	mov $0, -224(%BP)
+	movz -224(%BP), %R10
+	mov %R10, -224(%BP)
+	cmp $0, -224(%BP)
+	mov $1, -228(%BP)
+	mov $0, -228(%BP)
+	cmp $0, -228(%BP)
+	mov %R10, -264(%BP)
+	mov -264(%BP), %R9
+	mov -264(%BP), %R10
+	mov %R10, -272(%BP)
+	mov -272(%BP), %R9
+	mov -264(%BP), %R10
+	mov %R10, -280(%BP)
+	mov $0, -288(%BP)
+	mov -280(%BP), %R9
+	mov -288(%BP), %R10
+	mov -264(%BP), %R9
+	mov -264(%BP), %R10
+	mov %R10, -296(%BP)
+	mov -296(%BP), %R9
+	mov -264(%BP), %R10
+	mov %R10, -304(%BP)
+	mov $40, -312(%BP)
+	mov -304(%BP), %R9
+	mov -312(%BP), %R10
+	mov -256(%BP), %AX
+	mov -248(%BP), %DX
+	mov %R10, -344(%BP)
+	mov -344(%BP), %R9
+	mov -344(%BP), %R10
+	mov %R10, -352(%BP)
+	mov -352(%BP), %R9
+	mov -344(%BP), %R10
+	mov %R10, -360(%BP)
+	mov $0, -368(%BP)
+	mov -360(%BP), %R9
+	mov -368(%BP), %R10
+	mov -344(%BP), %R9
+	mov -344(%BP), %R10
+	mov %R10, -376(%BP)
+	mov -376(%BP), %R9
+	mov -344(%BP), %R10
+	mov %R10, -384(%BP)
+	mov $-3, -392(%BP)
+	mov -384(%BP), %R9
+	mov -392(%BP), %R10
+	mov -336(%BP), %AX
+	mov -328(%BP), %DX
+Complete assembly function: <too long, not shown>
+Program: /home/mei/projects/rustcc/tests/tests/chapter_20/all_types/no_coalescing/return_all_int_struct.c
+
+======================================================================
+FAIL: test_all_types/no_coalescing/return_double_struct (test_framework.regalloc.TestRegAlloc.test_all_types/no_coalescing/return_double_struct)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/mei/projects/rustcc/tests/test_framework/regalloc.py", line 440, in test
+    self.spill_test(
+    ~~~~~~~~~~~~~~~^
+        program,
+        ^^^^^^^^
+    ...<2 lines>...
+        target_fun=spilltest_info.target_fun,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/mei/projects/rustcc/tests/test_framework/regalloc.py", line 188, in spill_test
+    self.assertLessEqual(
+    ~~~~~~~~~~~~~~~~~~~~^
+        len(spill_instructions),
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+        ),
+        ^^
+    )
+    ^
+AssertionError: Should only need 8 instructions involving spilled pseudos but found 160
+Bad instructions:
+	mov $2, -4(%BP)
+	sub %R10, -4(%BP)
+	mov -4(%BP), %R10
+	mov %R10, -8(%BP)
+	mov -4(%BP), %R10
+	add %R10, -8(%BP)
+	mov $2, -12(%BP)
+	mov -4(%BP), %R10
+	add %R10, -12(%BP)
+	mov -8(%BP), %R10
+	mov %R10, -16(%BP)
+	mov -8(%BP), %R10
+	mov -16(%BP), %R11
+	mov %R11, -16(%BP)
+	mov $6, -20(%BP)
+	mov -4(%BP), %R10
+	sub %R10, -20(%BP)
+	mov -8(%BP), %R10
+	mov %R10, -24(%BP)
+	mov -12(%BP), %R10
+	mov -24(%BP), %R11
+	mov %R11, -24(%BP)
+	mov -4(%BP), %R10
+	mov %R10, -28(%BP)
+	add $6, -28(%BP)
+	mov -8(%BP), %R10
+	mov %R10, -32(%BP)
+	mov -32(%BP), %R11
+	mov %R11, -32(%BP)
+	mov -12(%BP), %R10
+	mov %R10, -36(%BP)
+	mov -12(%BP), %R10
+	mov -36(%BP), %R11
+	mov %R11, -36(%BP)
+	mov -16(%BP), %R10
+	mov %R10, -40(%BP)
+	mov -24(%BP), %R10
+	add %R10, -40(%BP)
+	mov $16, -44(%BP)
+	mov -20(%BP), %R10
+	sub %R10, -44(%BP)
+	mov -24(%BP), %R10
+	mov %R10, -48(%BP)
+	mov -24(%BP), %R10
+	add %R10, -48(%BP)
+	cmp $1, -4(%BP)
+	setcc -52(%BP)
+	movz -52(%BP), %R10
+	mov %R10, -52(%BP)
+	cmp $0, -52(%BP)
+	cmp $2, -8(%BP)
+	setcc -56(%BP)
+	movz -56(%BP), %R10
+	mov %R10, -56(%BP)
+	cmp $0, -56(%BP)
+	mov $1, -60(%BP)
+	mov $0, -60(%BP)
+	cmp $0, -60(%BP)
+	cmp $3, -12(%BP)
+	setcc -64(%BP)
+	movz -64(%BP), %R10
+	mov %R10, -64(%BP)
+	cmp $0, -64(%BP)
+	mov $1, -68(%BP)
+	mov $0, -68(%BP)
+	cmp $0, -68(%BP)
+	cmp $4, -16(%BP)
+	setcc -72(%BP)
+	movz -72(%BP), %R10
+	mov %R10, -72(%BP)
+	cmp $0, -72(%BP)
+	mov $1, -76(%BP)
+	mov $0, -76(%BP)
+	cmp $0, -76(%BP)
+	cmp $5, -20(%BP)
+	setcc -80(%BP)
+	movz -80(%BP), %R10
+	mov %R10, -80(%BP)
+	cmp $0, -80(%BP)
+	mov $1, -84(%BP)
+	mov $0, -84(%BP)
+	cmp $0, -84(%BP)
+	cmp $6, -24(%BP)
+	setcc -88(%BP)
+	movz -88(%BP), %R10
+	mov %R10, -88(%BP)
+	cmp $0, -88(%BP)
+	mov $1, -92(%BP)
+	mov $0, -92(%BP)
+	cmp $0, -92(%BP)
+	cmp $7, -28(%BP)
+	setcc -96(%BP)
+	movz -96(%BP), %R10
+	mov %R10, -96(%BP)
+	cmp $0, -96(%BP)
+	mov $1, -100(%BP)
+	mov $0, -100(%BP)
+	cmp $0, -100(%BP)
+	cmp $8, -32(%BP)
+	setcc -104(%BP)
+	movz -104(%BP), %R10
+	mov %R10, -104(%BP)
+	cmp $0, -104(%BP)
+	mov $1, -108(%BP)
+	mov $0, -108(%BP)
+	cmp $0, -108(%BP)
+	cmp $9, -36(%BP)
+	setcc -112(%BP)
+	movz -112(%BP), %R10
+	mov %R10, -112(%BP)
+	cmp $0, -112(%BP)
+	mov $1, -116(%BP)
+	mov $0, -116(%BP)
+	cmp $0, -116(%BP)
+	cmp $10, -40(%BP)
+	setcc -120(%BP)
+	movz -120(%BP), %R10
+	mov %R10, -120(%BP)
+	cmp $0, -120(%BP)
+	mov $1, -124(%BP)
+	mov $0, -124(%BP)
+	cmp $0, -124(%BP)
+	cmp $11, -44(%BP)
+	setcc -128(%BP)
+	movz -128(%BP), %R10
+	mov %R10, -128(%BP)
+	cmp $0, -128(%BP)
+	mov $1, -132(%BP)
+	mov $0, -132(%BP)
+	cmp $0, -132(%BP)
+	cmp $12, -48(%BP)
+	setcc -136(%BP)
+	movz -136(%BP), %R10
+	mov %R10, -136(%BP)
+	cmp $0, -136(%BP)
+	mov $1, -140(%BP)
+	mov $0, -140(%BP)
+	cmp $0, -140(%BP)
+	mov %R10, -168(%BP)
+	mov -168(%BP), %R9
+	mov -168(%BP), %R10
+	mov %R10, -176(%BP)
+	mov -176(%BP), %R9
+	mov -168(%BP), %R9
+	mov -168(%BP), %R10
+	mov %R10, -184(%BP)
+	mov -184(%BP), %R9
+	mov -160(%BP), %XMM0
+	mov -152(%BP), %XMM1
+	mov %R10, -216(%BP)
+	mov -216(%BP), %R9
+	mov -216(%BP), %R10
+	mov %R10, -224(%BP)
+	mov -224(%BP), %R9
+	mov -216(%BP), %R9
+	mov -216(%BP), %R10
+	mov %R10, -232(%BP)
+	mov -232(%BP), %R9
+	mov -208(%BP), %XMM0
+	mov -200(%BP), %XMM1
+Complete assembly function: <too long, not shown>
+Program: /home/mei/projects/rustcc/tests/tests/chapter_20/all_types/no_coalescing/return_double_struct.c
+
+----------------------------------------------------------------------
+Ran 66 tests in 3.092s
+
+FAILED (failures=3)
+EXIT: 1
+
+
+Superseding final corrective notes:
+- Removed the broad aggregate allocation skip because it over-skipped Chapter 20 aggregate spill tests.
+- Final production fix is narrow: default no-coalescing allocation, register-class-aware colored pseudo replacement, and OCaml-equivalent redundant move cleanup.
+
+===== PASS git diff -- tests/test_framework/runner.py =====
+COMMAND: git diff -- tests/test_framework/runner.py
+EXIT: 0
+
+===== PASS cargo fmt --all -- --check =====
+COMMAND: cargo fmt --all -- --check
+EXIT: 0
+
+===== PASS cargo check --release =====
+COMMAND: cargo check --release
+    Checking rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 0.64s
+EXIT: 0
+
+===== PASS cargo build --release =====
+COMMAND: cargo build --release
+    Finished `release` profile [optimized] target(s) in 0.01s
+EXIT: 0
+
+===== PASS cargo test --release =====
+COMMAND: cargo test --release
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 3.16s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 10 tests
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test compiler::tests::parses_sizeof_expression_without_evaluating_it ... ok
+test driver::tests::derives_all_output_paths ... ok
+test driver::tests::parses_default_run_stage ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+EXIT: 0
+
+===== PASS chapter20 latest no-coalescing official harness =====
+COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only --no-coalescing
+----------------------------------------------------------------------
+Ran 66 tests in 3.089s
+
+OK
+EXIT: 0
+
+===== PASS chapter19 latest =====
+COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only
+----------------------------------------------------------------------
+Ran 120 tests in 2.811s
+
+OK
+EXIT: 0
+
+===== PASS chapter19 latest eliminate dead stores =====
+COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-dead-stores
+----------------------------------------------------------------------
+Ran 27 tests in 0.604s
+
+OK
+EXIT: 0
+
+===== PASS chapter18 latest union =====
+COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union
+----------------------------------------------------------------------
+Ran 286 tests in 5.310s
+
+OK
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s:17: Warning: value 0x1000000080000000 truncated to 0x80000000
+
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s:9: Warning: value 0x400000005 truncated to 0x5
+
+EXIT: 0
+
+===== PASS rustc coloring probe =====
+COMMAND: bash -lc rustc .omo/evidence/task-58-coloring-probe.rs -o /tmp/task58-coloring-probe && /tmp/task58-coloring-probe
+warning: type alias `BlockId` is never used
+  --> .omo/evidence/task-58-coloring-probe.rs:11:18
+   |
+11 |         pub type BlockId = usize;
+   |                  ^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: struct `LiveBlock` is never constructed
+  --> .omo/evidence/task-58-coloring-probe.rs:39:20
+   |
+39 |         pub struct LiveBlock {
+   |                    ^^^^^^^^^
+
+warning: struct `LiveCfg` is never constructed
+  --> .omo/evidence/task-58-coloring-probe.rs:43:20
+   |
+43 |         pub struct LiveCfg {
+   |                    ^^^^^^^
+
+warning: method `blocks` is never used
+  --> .omo/evidence/task-58-coloring-probe.rs:48:20
+   |
+47 |         impl LiveCfg {
+   |         ------------ method in this implementation
+48 |             pub fn blocks(&self) -> &[LiveBlock] {
+   |                    ^^^^^^
+
+warning: struct `InterferenceConfig` is never constructed
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:29:12
+   |
+29 | pub struct InterferenceConfig {
+   |            ^^^^^^^^^^^^^^^^^^
+
+warning: struct `InterferenceBuild` is never constructed
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:34:12
+   |
+34 | pub struct InterferenceBuild<'a> {
+   |            ^^^^^^^^^^^^^^^^^
+
+warning: struct `PseudoNodeContext` is never constructed
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:43:8
+   |
+43 | struct PseudoNodeContext<'a> {
+   |        ^^^^^^^^^^^^^^^^^
+
+warning: struct `EdgeContext` is never constructed
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:49:8
+   |
+49 | struct EdgeContext<'a> {
+   |        ^^^^^^^^^^^
+
+warning: multiple methods are never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:76:12
+    |
+ 54 | impl InterferenceGraph {
+    | ---------------------- methods in this implementation
+...
+ 76 |     pub fn len(&self) -> usize {
+    |            ^^^
+...
+ 80 |     pub fn is_empty(&self) -> bool {
+    |            ^^^^^^^^
+...
+ 84 |     pub fn node(&self, id: &NodeId) -> Option<&InterferenceNode> {
+    |            ^^^^
+...
+ 88 |     pub fn nodes(&self) -> impl Iterator<Item = &InterferenceNode> {
+    |            ^^^^^
+...
+104 |     pub fn degree(&self, id: &NodeId) -> Option<usize> {
+    |            ^^^^^^
+...
+118 |     pub fn set_spill_cost(&mut self, id: &NodeId, spill_cost: f64) {
+    |            ^^^^^^^^^^^^^^
+...
+136 |     pub fn are_neighbors(&self, left: &NodeId, right: &NodeId) -> bool {
+    |            ^^^^^^^^^^^^^
+
+warning: function `build_interference` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:143:8
+    |
+143 | pub fn build_interference(
+    |        ^^^^^^^^^^^^^^^^^^
+
+warning: function `add_pseudo_nodes` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:162:4
+    |
+162 | fn add_pseudo_nodes(
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `add_spill_costs` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:182:4
+    |
+182 | fn add_spill_costs(graph: &mut InterferenceGraph, instructions: &[Instr]) {
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `add_edges` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:196:4
+    |
+196 | fn add_edges(
+    |    ^^^^^^^^^
+
+warning: function `move_source_matches_live` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:217:4
+    |
+217 | fn move_source_matches_live(instr: &Instr, live: &Operand) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `pseudo_is_current_class` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:258:4
+    |
+258 | fn pseudo_is_current_class(name: &str, class: RegisterClass, type_env: &TypeEnv) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `is_hardreg_node` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:267:8
+    |
+267 | pub fn is_hardreg_node(id: &NodeId) -> bool {
+    |        ^^^^^^^^^^^^^^^
+
+warning: function `hardreg_node` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:271:8
+    |
+271 | pub fn hardreg_node(reg: Reg) -> NodeId {
+    |        ^^^^^^^^^^^^
+
+warning: struct `UseDef` is never constructed
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/operands.rs:10:12
+   |
+10 | pub struct UseDef {
+   |            ^^^^^^
+
+warning: function `regs_used_and_written` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/operands.rs:15:8
+   |
+15 | pub fn regs_used_and_written(
+   |        ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `instr_operands` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/operands.rs:34:8
+   |
+34 | pub fn instr_operands(instr: &Instr) -> Vec<Operand> {
+   |        ^^^^^^^^^^^^^^
+
+warning: function `raw_operands` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/operands.rs:71:4
+   |
+71 | fn raw_operands(
+   |    ^^^^^^^^^^^^
+
+warning: function `regs_read` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/operands.rs:134:4
+    |
+134 | fn regs_read(op: Operand) -> LiveSet {
+    |    ^^^^^^^^^
+
+warning: function `regs_read_or_written` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/operands.rs:149:4
+    |
+149 | fn regs_read_or_written(op: Operand) -> (LiveSet, LiveSet) {
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `simplify` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/simplify.rs:27:8
+   |
+27 | pub fn simplify(graph: &InterferenceGraph) -> Simplification {
+   |        ^^^^^^^^
+
+warning: function `choose_next` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/simplify.rs:50:4
+   |
+50 | fn choose_next(
+   |    ^^^^^^^^^^^
+
+warning: function `active_degree` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/simplify.rs:76:4
+   |
+76 | fn active_degree(graph: &InterferenceGraph, id: &NodeId, remaining: &BTreeSet<NodeId>) -> usize {
+   |    ^^^^^^^^^^^^^
+
+warning: function `spill_metric` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/simplify.rs:95:4
+   |
+95 | fn spill_metric(
+   |    ^^^^^^^^^^^^
+
+warning: type alias `LiveSet` is never used
+ --> /home/mei/projects/rustcc/src/codegen/regalloc/types.rs:9:10
+  |
+9 | pub type LiveSet = BTreeSet<Operand>;
+  |          ^^^^^^^
+
+warning: type alias `LiveMap` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/types.rs:10:10
+   |
+10 | pub type LiveMap = BTreeMap<crate::ir::cfg::BlockId, BlockLiveness>;
+   |          ^^^^^^^
+
+warning: struct `BlockLiveness` is never constructed
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/types.rs:19:12
+   |
+19 | pub struct BlockLiveness {
+   |            ^^^^^^^^^^^^^
+
+warning: struct `LivenessConfig` is never constructed
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/types.rs:25:12
+   |
+25 | pub struct LivenessConfig {
+   |            ^^^^^^^^^^^^^^
+
+warning: enum `LivenessError` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/types.rs:31:10
+   |
+31 | pub enum LivenessError {
+   |          ^^^^^^^^^^^^^
+
+warning: method `contains` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/types.rs:87:12
+   |
+51 | impl RegisterClass {
+   | ------------------ method in this implementation
+...
+87 |     pub fn contains(self, reg: &Reg) -> bool {
+   |            ^^^^^^^^
+
+warning: function `regs_to_operands` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/types.rs:109:15
+    |
+109 | pub(crate) fn regs_to_operands(regs: &[Reg]) -> LiveSet {
+    |               ^^^^^^^^^^^^^^^^
+
+warning: 34 warnings emitted
+
+{
+    "callee_saved": "{BX}",
+    "hardreg_conflict": "Some(R8)",
+    "ocaml_color_mapping": "{0: R9, 1: R8, 2: SI, 3: DI, 4: DX, 5: CX, 6: AX, 7: BX, 8: R12, 9: R13, 10: R14, 11: R15}",
+    "reserved": "{\"gp\": \"[AX, BX, CX, DX, DI, SI, R8, R9, R12, R13, R14, R15]\", \"xmm\": \"[XMM(0), XMM(1), XMM(2), XMM(3), XMM(4), XMM(5), XMM(6), XMM(7), XMM(8), XMM(9), XMM(10), XMM(11), XMM(12), XMM(13)]\"}",
+    "small_conflict": "{Pseudo(\"a\"): Some(R8), Pseudo(\"b\"): Some(R9)}",
+    "spill_marker": "None",
+}
+EXIT: 0
+
+===== PASS no forbidden source path/chapter bridge in production =====
+COMMAND: bash -lc if rg -n "source_path_hint|chapter_20|chapter 20|chapter20|test_framework|latest-only" src; then exit 1; else exit 0; fi
+EXIT: 0
+
+===== PASS no tests diff =====
+COMMAND: git diff -- tests
+EXIT: 0
+
+===== PASS git diff --check =====
+COMMAND: git diff --check
+EXIT: 0
+
+===== PASS LSP diagnostics =====
+COMMAND: mcp__lsp.diagnostics on src/driver.rs, src/codegen/regalloc/allocate.rs, src/codegen/regalloc/rewrite.rs
+RESULT: No diagnostics found for all three modified Rust files
+EXIT: 0
+
+===== PASS pure LOC check =====
+src/driver.rs: 278 pure LOC
+src/codegen/regalloc/allocate.rs: 262 pure LOC
+src/codegen/regalloc/rewrite.rs: 128 pure LOC
+EXIT: 0
+
+===== FINAL AUDIT SUMMARY =====
+Exact production changes:
+- tests/test_framework/runner.py restored to HEAD; `git diff -- tests/test_framework/runner.py` exits 0 with empty output.
+- No files under tests/ are modified; `git diff -- tests` exits 0 with empty output.
+- src/driver.rs: RegallocOptions::default now sets coalescing_enabled=false, documenting the Chapter 20a no-coalescing default until W21-T5 coalescing lands.
+- src/driver.rs: preserved prior valid removal of the source_path_hint bridge; CompileOptions::new is passed directly.
+- src/codegen/regalloc/rewrite.rs: colored pseudo replacement is register-class aware; GP allocation rewrites integer/address operand positions, XMM allocation rewrites SSE operand positions.
+- src/codegen/regalloc/allocate.rs: after coloring/select, redundant self-moves are removed, matching OCaml cleanup_movs and preventing 32-bit self-moves from zero-extending pointer registers.
+
+Final passing exit codes:
+- git diff -- tests/test_framework/runner.py => 0 (empty)
+- cargo fmt --all -- --check => 0
+- cargo check --release => 0
+- cargo build --release => 0
+- cargo test --release => 0
+- ./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only --no-coalescing => 0
+- ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only => 0
+- ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-dead-stores => 0
+- ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union => 0
+- rustc .omo/evidence/task-58-coloring-probe.rs -o /tmp/task58-coloring-probe && /tmp/task58-coloring-probe => 0
+- rg forbidden bridge terms in src => 1/no matches, wrapped command exit 0
+- git diff -- tests => 0 (empty)
+- git diff --check => 0
+- LSP diagnostics on modified Rust files => clean
+
+Post-LOC refactor note: moved redundant-move cleanup from allocate.rs to rewrite.rs; behavior unchanged; allocate.rs now 247 pure LOC and rewrite.rs 143 pure LOC.
+
+===== FINAL2 git diff -- tests/test_framework/runner.py =====
+COMMAND: git diff -- tests/test_framework/runner.py
+EXIT: 0
+
+===== FINAL2 cargo fmt --all -- --check =====
+COMMAND: cargo fmt --all -- --check
+EXIT: 0
+
+===== FINAL2 cargo check --release =====
+COMMAND: cargo check --release
+    Checking rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 0.68s
+EXIT: 0
+
+===== FINAL2 cargo build --release =====
+COMMAND: cargo build --release
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 3.11s
+EXIT: 0
+
+===== FINAL2 cargo test --release =====
+COMMAND: cargo test --release
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 3.08s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 10 tests
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test driver::tests::derives_all_output_paths ... ok
+test compiler::tests::parses_sizeof_expression_without_evaluating_it ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test driver::tests::parses_default_run_stage ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+EXIT: 0
+
+===== FINAL2 chapter20 latest no-coalescing official harness =====
+COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only --no-coalescing
+----------------------------------------------------------------------
+Ran 66 tests in 3.126s
+
+OK
+EXIT: 0
+
+===== FINAL2 chapter19 latest =====
+COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only
+----------------------------------------------------------------------
+Ran 120 tests in 2.803s
+
+OK
+EXIT: 0
+
+===== FINAL2 chapter19 latest eliminate dead stores =====
+COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-dead-stores
+----------------------------------------------------------------------
+Ran 27 tests in 0.606s
+
+OK
+EXIT: 0
+
+===== FINAL2 chapter18 latest union =====
+COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union
+----------------------------------------------------------------------
+Ran 286 tests in 5.327s
+
+OK
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s:17: Warning: value 0x1000000080000000 truncated to 0x80000000
+
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s:9: Warning: value 0x400000005 truncated to 0x5
+
+EXIT: 0
+
+===== FINAL2 rustc coloring probe =====
+COMMAND: bash -lc rustc .omo/evidence/task-58-coloring-probe.rs -o /tmp/task58-coloring-probe && /tmp/task58-coloring-probe
+warning: type alias `BlockId` is never used
+  --> .omo/evidence/task-58-coloring-probe.rs:11:18
+   |
+11 |         pub type BlockId = usize;
+   |                  ^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: struct `LiveBlock` is never constructed
+  --> .omo/evidence/task-58-coloring-probe.rs:39:20
+   |
+39 |         pub struct LiveBlock {
+   |                    ^^^^^^^^^
+
+warning: struct `LiveCfg` is never constructed
+  --> .omo/evidence/task-58-coloring-probe.rs:43:20
+   |
+43 |         pub struct LiveCfg {
+   |                    ^^^^^^^
+
+warning: method `blocks` is never used
+  --> .omo/evidence/task-58-coloring-probe.rs:48:20
+   |
+47 |         impl LiveCfg {
+   |         ------------ method in this implementation
+48 |             pub fn blocks(&self) -> &[LiveBlock] {
+   |                    ^^^^^^
+
+warning: struct `InterferenceConfig` is never constructed
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:29:12
+   |
+29 | pub struct InterferenceConfig {
+   |            ^^^^^^^^^^^^^^^^^^
+
+warning: struct `InterferenceBuild` is never constructed
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:34:12
+   |
+34 | pub struct InterferenceBuild<'a> {
+   |            ^^^^^^^^^^^^^^^^^
+
+warning: struct `PseudoNodeContext` is never constructed
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:43:8
+   |
+43 | struct PseudoNodeContext<'a> {
+   |        ^^^^^^^^^^^^^^^^^
+
+warning: struct `EdgeContext` is never constructed
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:49:8
+   |
+49 | struct EdgeContext<'a> {
+   |        ^^^^^^^^^^^
+
+warning: multiple methods are never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:76:12
+    |
+ 54 | impl InterferenceGraph {
+    | ---------------------- methods in this implementation
+...
+ 76 |     pub fn len(&self) -> usize {
+    |            ^^^
+...
+ 80 |     pub fn is_empty(&self) -> bool {
+    |            ^^^^^^^^
+...
+ 84 |     pub fn node(&self, id: &NodeId) -> Option<&InterferenceNode> {
+    |            ^^^^
+...
+ 88 |     pub fn nodes(&self) -> impl Iterator<Item = &InterferenceNode> {
+    |            ^^^^^
+...
+104 |     pub fn degree(&self, id: &NodeId) -> Option<usize> {
+    |            ^^^^^^
+...
+118 |     pub fn set_spill_cost(&mut self, id: &NodeId, spill_cost: f64) {
+    |            ^^^^^^^^^^^^^^
+...
+136 |     pub fn are_neighbors(&self, left: &NodeId, right: &NodeId) -> bool {
+    |            ^^^^^^^^^^^^^
+
+warning: function `build_interference` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:143:8
+    |
+143 | pub fn build_interference(
+    |        ^^^^^^^^^^^^^^^^^^
+
+warning: function `add_pseudo_nodes` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:162:4
+    |
+162 | fn add_pseudo_nodes(
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `add_spill_costs` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:182:4
+    |
+182 | fn add_spill_costs(graph: &mut InterferenceGraph, instructions: &[Instr]) {
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `add_edges` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:196:4
+    |
+196 | fn add_edges(
+    |    ^^^^^^^^^
+
+warning: function `move_source_matches_live` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:217:4
+    |
+217 | fn move_source_matches_live(instr: &Instr, live: &Operand) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `pseudo_is_current_class` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:258:4
+    |
+258 | fn pseudo_is_current_class(name: &str, class: RegisterClass, type_env: &TypeEnv) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `is_hardreg_node` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:267:8
+    |
+267 | pub fn is_hardreg_node(id: &NodeId) -> bool {
+    |        ^^^^^^^^^^^^^^^
+
+warning: function `hardreg_node` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/graph.rs:271:8
+    |
+271 | pub fn hardreg_node(reg: Reg) -> NodeId {
+    |        ^^^^^^^^^^^^
+
+warning: struct `UseDef` is never constructed
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/operands.rs:10:12
+   |
+10 | pub struct UseDef {
+   |            ^^^^^^
+
+warning: function `regs_used_and_written` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/operands.rs:15:8
+   |
+15 | pub fn regs_used_and_written(
+   |        ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `instr_operands` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/operands.rs:34:8
+   |
+34 | pub fn instr_operands(instr: &Instr) -> Vec<Operand> {
+   |        ^^^^^^^^^^^^^^
+
+warning: function `raw_operands` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/operands.rs:71:4
+   |
+71 | fn raw_operands(
+   |    ^^^^^^^^^^^^
+
+warning: function `regs_read` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/operands.rs:134:4
+    |
+134 | fn regs_read(op: Operand) -> LiveSet {
+    |    ^^^^^^^^^
+
+warning: function `regs_read_or_written` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/operands.rs:149:4
+    |
+149 | fn regs_read_or_written(op: Operand) -> (LiveSet, LiveSet) {
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `simplify` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/simplify.rs:27:8
+   |
+27 | pub fn simplify(graph: &InterferenceGraph) -> Simplification {
+   |        ^^^^^^^^
+
+warning: function `choose_next` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/simplify.rs:50:4
+   |
+50 | fn choose_next(
+   |    ^^^^^^^^^^^
+
+warning: function `active_degree` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/simplify.rs:76:4
+   |
+76 | fn active_degree(graph: &InterferenceGraph, id: &NodeId, remaining: &BTreeSet<NodeId>) -> usize {
+   |    ^^^^^^^^^^^^^
+
+warning: function `spill_metric` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/simplify.rs:95:4
+   |
+95 | fn spill_metric(
+   |    ^^^^^^^^^^^^
+
+warning: type alias `LiveSet` is never used
+ --> /home/mei/projects/rustcc/src/codegen/regalloc/types.rs:9:10
+  |
+9 | pub type LiveSet = BTreeSet<Operand>;
+  |          ^^^^^^^
+
+warning: type alias `LiveMap` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/types.rs:10:10
+   |
+10 | pub type LiveMap = BTreeMap<crate::ir::cfg::BlockId, BlockLiveness>;
+   |          ^^^^^^^
+
+warning: struct `BlockLiveness` is never constructed
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/types.rs:19:12
+   |
+19 | pub struct BlockLiveness {
+   |            ^^^^^^^^^^^^^
+
+warning: struct `LivenessConfig` is never constructed
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/types.rs:25:12
+   |
+25 | pub struct LivenessConfig {
+   |            ^^^^^^^^^^^^^^
+
+warning: enum `LivenessError` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/types.rs:31:10
+   |
+31 | pub enum LivenessError {
+   |          ^^^^^^^^^^^^^
+
+warning: method `contains` is never used
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/types.rs:87:12
+   |
+51 | impl RegisterClass {
+   | ------------------ method in this implementation
+...
+87 |     pub fn contains(self, reg: &Reg) -> bool {
+   |            ^^^^^^^^
+
+warning: function `regs_to_operands` is never used
+   --> /home/mei/projects/rustcc/src/codegen/regalloc/types.rs:109:15
+    |
+109 | pub(crate) fn regs_to_operands(regs: &[Reg]) -> LiveSet {
+    |               ^^^^^^^^^^^^^^^^
+
+warning: 34 warnings emitted
+
+{
+    "callee_saved": "{BX}",
+    "hardreg_conflict": "Some(R8)",
+    "ocaml_color_mapping": "{0: R9, 1: R8, 2: SI, 3: DI, 4: DX, 5: CX, 6: AX, 7: BX, 8: R12, 9: R13, 10: R14, 11: R15}",
+    "reserved": "{\"gp\": \"[AX, BX, CX, DX, DI, SI, R8, R9, R12, R13, R14, R15]\", \"xmm\": \"[XMM(0), XMM(1), XMM(2), XMM(3), XMM(4), XMM(5), XMM(6), XMM(7), XMM(8), XMM(9), XMM(10), XMM(11), XMM(12), XMM(13)]\"}",
+    "small_conflict": "{Pseudo(\"a\"): Some(R8), Pseudo(\"b\"): Some(R9)}",
+    "spill_marker": "None",
+}
+EXIT: 0
+
+===== FINAL2 no forbidden source path/chapter bridge in production =====
+COMMAND: bash -lc if rg -n "source_path_hint|chapter_20|chapter 20|chapter20|test_framework|latest-only" src; then exit 1; else exit 0; fi
+EXIT: 0
+
+===== FINAL2 no tests diff =====
+COMMAND: git diff -- tests
+EXIT: 0
+
+===== FINAL2 git diff --check =====
+COMMAND: git diff --check
+EXIT: 0
+
+===== FINAL2 LSP diagnostics =====
+COMMAND: mcp__lsp.diagnostics on src/driver.rs, src/codegen/regalloc/allocate.rs, src/codegen/regalloc/rewrite.rs
+RESULT: No diagnostics found for all three modified Rust files
+EXIT: 0
+
+===== FINAL2 pure LOC check =====
+src/driver.rs: 278 pure LOC
+src/codegen/regalloc/allocate.rs: 247 pure LOC
+src/codegen/regalloc/rewrite.rs: 143 pure LOC
+EXIT: 0
+
+===== FINAL2 AUDIT SUMMARY =====
+Exact production changes: default RegallocOptions no-coalescing; class-aware regalloc pseudo rewrite; redundant move cleanup in rewrite module; runner.py/tests restored empty.
+All required final commands above exit 0.
