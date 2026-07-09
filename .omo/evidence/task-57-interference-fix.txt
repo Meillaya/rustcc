@@ -1,0 +1,587 @@
+Task 57 / W21-T2 interference graph + simplification fix evidence
+Date: 2026-07-09T05:52:09Z
+HEAD: 65c0a02
+
+Changed files in scope:
+ M src/codegen/regalloc/mod.rs
+ M src/codegen/regalloc/operands.rs
+?? .omo/evidence/task-57-interference-fix.txt
+?? .omo/evidence/task-57-regalloc-probe.rs
+?? src/codegen/regalloc/graph.rs
+?? src/codegen/regalloc/simplify.rs
+
+===== cargo fmt --all -- --check =====
+[exit status: 0]
+
+===== cargo check --release =====
+    Finished `release` profile [optimized] target(s) in 0.03s
+[exit status: 0]
+
+===== cargo build --release =====
+    Finished `release` profile [optimized] target(s) in 0.01s
+[exit status: 0]
+
+===== cargo test --release =====
+    Finished `release` profile [optimized] target(s) in 0.01s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 10 tests
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test compiler::tests::parses_sizeof_expression_without_evaluating_it ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test driver::tests::derives_all_output_paths ... ok
+test driver::tests::parses_default_run_stage ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[exit status: 0]
+
+===== ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only =====
+----------------------------------------------------------------------
+Ran 120 tests in 2.795s
+
+OK
+[exit status: 0]
+
+===== ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-dead-stores =====
+----------------------------------------------------------------------
+Ran 27 tests in 0.612s
+
+OK
+[exit status: 0]
+
+===== ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union =====
+----------------------------------------------------------------------
+Ran 286 tests in 5.077s
+
+OK
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s:17: Warning: value 0x1000000080000000 truncated to 0x80000000
+
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s:9: Warning: value 0x400000005 truncated to 0x5
+
+[exit status: 0]
+
+===== rustc --edition=2024 .omo/evidence/task-57-regalloc-probe.rs -o /tmp/task57-regalloc-probe =====
+[exit status: 0]
+
+===== /tmp/task57-regalloc-probe =====
+{
+    "gp_hardregs": "12",
+    "low_simplify": "[\"Pseudo(\\\"a\\\"):LowDegree:2\", \"Pseudo(\\\"b\\\"):LowDegree:1\", \"Pseudo(\\\"c\\\"):LowDegree:0\", \"Pseudo(\\\"d\\\"):LowDegree:1\", \"Pseudo(\\\"e\\\"):LowDegree:0\", \"Pseudo(\\\"h\\\"):LowDegree:1\", \"Pseudo(\\\"x\\\"):LowDegree:0\", \"Pseudo(\\\"y\\\"):LowDegree:0\"]",
+    "pressure_simplify": "SpillCandidate:12",
+    "pseudo_edges": "{\"a-b\", \"a-c\", \"b-c\", \"d-e\"}",
+    "xmm_hardregs": "14",
+}
+[exit status: 0]
+
+===== cargo clippy --all-targets --all-features -- -D warnings =====
+    Checking rustcc v0.0.1 (/home/mei/projects/rustcc)
+error: doc list item overindented
+  --> src/ast/decl.rs:62:5
+   |
+62 | ///                emits `.globl`.
+   |     ^^^^^^^^^^^^^^^ help: try using `  ` (2 spaces)
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#doc_overindented_list_items
+   = note: `-D clippy::doc-overindented-list-items` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::doc_overindented_list_items)]`
+
+error: doc list item overindented
+  --> src/ast/decl.rs:64:5
+   |
+64 | ///                default for plain `int g = 5;`); behaves like `Extern`
+   |     ^^^^^^^^^^^^^^^ help: try using `  ` (2 spaces)
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#doc_overindented_list_items
+
+error: doc list item overindented
+  --> src/ast/decl.rs:65:5
+   |
+65 | ///                for linkage purposes.
+   |     ^^^^^^^^^^^^^^^ help: try using `  ` (2 spaces)
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#doc_overindented_list_items
+
+error: variant name ends with the enum's name
+  --> src/ast/expr.rs:35:5
+   |
+35 |     SizeOfExpr(Box<Expr>),
+   |     ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#enum_variant_names
+   = note: `-D clippy::enum-variant-names` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::enum_variant_names)]`
+
+error: methods called `is_*` usually take `self` by mutable reference or `self` by reference or no `self`
+  --> src/ast/ty.rs:45:23
+   |
+45 |     pub fn is_integer(self) -> bool {
+   |                       ^^^^
+   |
+   = help: consider choosing a less ambiguous name
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#wrong_self_convention
+   = note: `-D clippy::wrong-self-convention` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::wrong_self_convention)]`
+
+error: methods called `is_*` usually take `self` by mutable reference or `self` by reference or no `self`
+  --> src/ast/ty.rs:60:22
+   |
+60 |     pub fn is_signed(self) -> bool {
+   |                      ^^^^
+   |
+   = help: consider choosing a less ambiguous name
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#wrong_self_convention
+
+error: methods called `is_*` usually take `self` by mutable reference or `self` by reference or no `self`
+  --> src/ast/ty.rs:66:24
+   |
+66 |     pub fn is_unsigned(self) -> bool {
+   |                        ^^^^
+   |
+   = help: consider choosing a less ambiguous name
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#wrong_self_convention
+
+error: methods called `is_*` usually take `self` by mutable reference or `self` by reference or no `self`
+  --> src/ast/ty.rs:74:23
+   |
+74 |     pub fn is_pointer(self) -> bool {
+   |                       ^^^^
+   |
+   = help: consider choosing a less ambiguous name
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#wrong_self_convention
+
+error: methods called `is_*` usually take `self` by mutable reference or `self` by reference or no `self`
+  --> src/ast/ty.rs:86:21
+   |
+86 |     pub fn is_array(self) -> bool {
+   |                     ^^^^
+   |
+   = help: consider choosing a less ambiguous name
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#wrong_self_convention
+
+error: methods called `is_*` usually take `self` by mutable reference or `self` by reference or no `self`
+  --> src/ast/ty.rs:93:24
+   |
+93 |     pub fn is_complete(self) -> bool {
+   |                        ^^^^
+   |
+   = help: consider choosing a less ambiguous name
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#wrong_self_convention
+
+error: name `XMM` contains a capitalized acronym
+  --> src/codegen/assembly.rs:36:5
+   |
+36 |     XMM(u8),
+   |     ^^^ help: consider making the acronym lowercase, except the initial letter: `Xmm`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#upper_case_acronyms
+   = note: `-D clippy::upper-case-acronyms` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::upper_case_acronyms)]`
+
+error: module has the same name as its containing module
+  --> src/codegen/mod.rs:32:1
+   |
+32 | pub mod codegen;
+   | ^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#module_inception
+   = note: `-D clippy::module-inception` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::module_inception)]`
+
+error: this `let...else` may be rewritten with the `?` operator
+  --> src/codegen/codegen/copy_prop_support.rs:92:5
+   |
+92 | /     let Some(displacement) = index
+93 | |         .checked_mul(scale)
+94 | |         .and_then(|value| i32::try_from(value).ok())
+95 | |     else {
+96 | |         return None;
+97 | |     };
+   | |______^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#question_mark
+   = note: `-D clippy::question-mark` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::question_mark)]`
+help: replace it with
+   |
+92 ~     let displacement = index
+93 +         .checked_mul(scale)
+94 +         .and_then(|value| i32::try_from(value).ok())?;
+   |
+
+error: this match could be written as a `let` statement
+    --> src/codegen/codegen.rs:1869:13
+     |
+1869 | /             match index_op {
+1870 | |                 op => {
+1871 | |                     let index_ty = type_of_val(index, env);
+1872 | |                     if index_ty.is_long_word() {
+...    |
+1889 | |             }
+     | |_____________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#match_single_binding
+     = note: `-D clippy::match-single-binding` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::match_single_binding)]`
+help: consider using a `let` statement
+     |
+1869 ~             let op = index_op;
+1870 +             {
+1871 +                 let index_ty = type_of_val(index, env);
+1872 +                 if index_ty.is_long_word() {
+1873 +                     out.push(Instr::Movq {
+1874 +                         src: op,
+1875 +                         dst: Operand::Reg(Reg::R11),
+1876 +                     });
+1877 +                 } else if is_byte_type(index_ty) {
+1878 +                     out.push(Instr::MovSignExtendByte {
+1879 +                         src: op,
+1880 +                         dst: Operand::Reg(Reg::R11),
+1881 +                     });
+1882 +                 } else {
+1883 +                     out.push(Instr::Movsx {
+1884 +                         src: op,
+1885 +                         dst: Operand::Reg(Reg::R11),
+1886 +                     });
+1887 +                 }
+1888 +             }
+     |
+
+error: match expression looks like `matches!` macro
+   --> src/ir/lower.rs:441:27
+    |
+441 |       let needs_synthetic = match body.last() {
+    |  ___________________________^
+442 | |         Some(Instruction::Return(_)) => false,
+443 | |         _ => true,
+444 | |     };
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#match_like_matches_macro
+    = note: `-D clippy::match-like-matches-macro` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::match_like_matches_macro)]`
+help: use `matches!` directly
+    |
+441 -     let needs_synthetic = match body.last() {
+442 -         Some(Instruction::Return(_)) => false,
+443 -         _ => true,
+444 -     };
+441 +     let needs_synthetic = !matches!(body.last(), Some(Instruction::Return(_)));
+    |
+
+error: this expression creates a reference which is immediately dereferenced by the compiler
+   --> src/ir/lower.rs:948:34
+    |
+948 |     let switch_end = break_label(&label);
+    |                                  ^^^^^^ help: change this to: `label`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#needless_borrow
+    = note: `-D clippy::needless-borrow` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::needless_borrow)]`
+
+error: this `if` statement can be collapsed
+    --> src/ir/lower.rs:1523:13
+     |
+1523 | /             if let Expr::StringLiteral(value) = init {
+1524 | |                 if is_char_type(element) {
+1525 | |                     initialize_string_bytes(base, value, *size, out, ctx);
+1526 | |                     return Ok(());
+1527 | |                 }
+1528 | |             }
+     | |_____________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_if
+     = note: `-D clippy::collapsible-if` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::collapsible_if)]`
+help: collapse nested if block
+     |
+1523 ~             if let Expr::StringLiteral(value) = init
+1524 ~                 && is_char_type(element) {
+1525 |                     initialize_string_bytes(base, value, *size, out, ctx);
+1526 |                     return Ok(());
+1527 ~                 }
+     |
+
+error: returning the result of a `let` binding from a block
+    --> src/ir/lower.rs:2215:9
+     |
+2214 |         let v = ctx.materialize_long_constant(&mut instrs, 1);
+     |         ------------------------------------------------------ unnecessary `let` binding
+2215 |         v
+     |         ^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#let_and_return
+     = note: `-D clippy::let-and-return` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::let_and_return)]`
+help: return the expression directly
+     |
+2214 ~
+2215 ~         ctx.materialize_long_constant(&mut instrs, 1)
+     |
+
+error: this `if` has identical blocks
+    --> src/ir/lower.rs:2594:90
+     |
+2594 |               if matches!(then_ty, Type::Struct(_) | Type::Union(_)) && then_ty == else_ty {
+     |  __________________________________________________________________________________________^
+2595 | |                 then_ty
+2596 | |             } else if matches!(then_ty, Type::Pointer(_)) {
+     | |_____________^
+     |
+note: same as this
+    --> src/ir/lower.rs:2596:59
+     |
+2596 |               } else if matches!(then_ty, Type::Pointer(_)) {
+     |  ___________________________________________________________^
+2597 | |                 then_ty
+2598 | |             } else if matches!(else_ty, Type::Pointer(_)) {
+     | |_____________^
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#if_same_then_else
+     = note: `-D clippy::if-same-then-else` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::if_same_then_else)]`
+
+error: useless conversion to the same type: `i64`
+   --> src/parse/parser.rs:693:43
+    |
+693 |             TokenKind::Constant(value) => i64::from(*value),
+    |                                           ^^^^^^^^^^^^^^^^^ help: consider removing `i64::from()`: `(*value)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#useless_conversion
+    = note: `-D clippy::useless-conversion` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::useless_conversion)]`
+
+error: useless conversion to the same type: `i64`
+    --> src/parse/parser.rs:1080:29
+     |
+1080 |                 let value = i64::from(*value);
+     |                             ^^^^^^^^^^^^^^^^^ help: consider removing `i64::from()`: `(*value)`
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#useless_conversion
+
+error: doc list item without indentation
+  --> src/semantics/label_loops.rs:24:5
+   |
+24 | //!    While minting labels we also stamp the loop/switch AST node's
+   |     ^^^
+   |
+   = help: if this is supposed to be its own paragraph, add a blank line
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#doc_lazy_continuation
+   = note: `-D clippy::doc-lazy-continuation` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::doc_lazy_continuation)]`
+help: indent this line
+   |
+24 | //!         While minting labels we also stamp the loop/switch AST node's
+   |        +++++
+
+error: doc list item without indentation
+  --> src/semantics/label_loops.rs:25:5
+   |
+25 | //!    own `label` field so the lowerer can derive `break.<label>` and
+   |     ^^^
+   |
+   = help: if this is supposed to be its own paragraph, add a blank line
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#doc_lazy_continuation
+help: indent this line
+   |
+25 | //!         own `label` field so the lowerer can derive `break.<label>` and
+   |        +++++
+
+error: doc list item without indentation
+  --> src/semantics/label_loops.rs:26:5
+   |
+26 | //!    `continue.<label>` assembly names.
+   |     ^^^
+   |
+   = help: if this is supposed to be its own paragraph, add a blank line
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#doc_lazy_continuation
+help: indent this line
+   |
+26 | //!         `continue.<label>` assembly names.
+   |        +++++
+
+error: writing `&mut Vec` instead of `&mut [_]` involves a new object where a slice will do
+  --> src/semantics/label_loops.rs:85:31
+   |
+85 | fn label_loops_function(body: &mut Vec<BlockItem>) -> Result<()> {
+   |                               ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#ptr_arg
+   = note: `-D clippy::ptr-arg` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::ptr_arg)]`
+help: change this to
+   |
+85 - fn label_loops_function(body: &mut Vec<BlockItem>) -> Result<()> {
+85 + fn label_loops_function(body: &mut [BlockItem]) -> Result<()> {
+   |
+
+error: this `if` statement can be collapsed
+   --> src/semantics/resolve.rs:587:13
+    |
+587 | /             if let Some(entry) = globals.get(&fd.name) {
+588 | |                 if !matches!(entry.kind, GlobalKind::Function { .. }) {
+589 | |                     bail!(
+590 | |                         "resolve error: conflicting declarations of '{name}' (function and variable)",
+...   |
+594 | |             }
+    | |_____________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_if
+help: collapse nested if block
+    |
+587 ~             if let Some(entry) = globals.get(&fd.name)
+588 ~                 && !matches!(entry.kind, GlobalKind::Function { .. }) {
+589 |                     bail!(
+...
+592 |                     );
+593 ~                 }
+    |
+
+error: this `if` statement can be collapsed
+   --> src/semantics/typecheck.rs:108:5
+    |
+108 | /     if let Some((existing_params, existing_ret)) = ctx.funcs.get(name) {
+109 | |         if existing_params.as_slice() != param_tys || existing_ret != ret_ty {
+110 | |             bail!("type error: conflicting declarations for function '{name}'");
+111 | |         }
+112 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_if
+help: collapse nested if block
+    |
+108 ~     if let Some((existing_params, existing_ret)) = ctx.funcs.get(name)
+109 ~         && (existing_params.as_slice() != param_tys || existing_ret != ret_ty) {
+110 |             bail!("type error: conflicting declarations for function '{name}'");
+111 ~         }
+    |
+
+error: this `if` statement can be collapsed
+   --> src/semantics/typecheck.rs:122:5
+    |
+122 | /     if let Some(existing) = ctx.objects.get(&var.name) {
+123 | |         if existing != &var.ty {
+124 | |             bail!("type error: conflicting declarations for '{}'", var.name);
+125 | |         }
+126 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_if
+help: collapse nested if block
+    |
+122 ~     if let Some(existing) = ctx.objects.get(&var.name)
+123 ~         && existing != &var.ty {
+124 |             bail!("type error: conflicting declarations for '{}'", var.name);
+125 ~         }
+    |
+
+error: this `if` statement can be collapsed
+   --> src/semantics/typecheck.rs:185:5
+    |
+185 | /     if decl.storage == StorageClass::Extern {
+186 | |         if let Some(existing) = ctx.objects.get(&decl.name) {
+187 | |             if existing != &decl.ty {
+188 | |                 bail!("type error: conflicting declarations for '{}'", decl.name);
+...   |
+191 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_if
+help: collapse nested if block
+    |
+185 ~     if decl.storage == StorageClass::Extern
+186 ~         && let Some(existing) = ctx.objects.get(&decl.name) {
+187 |             if existing != &decl.ty {
+188 |                 bail!("type error: conflicting declarations for '{}'", decl.name);
+189 |             }
+190 ~         }
+    |
+
+error: this `if` statement can be collapsed
+   --> src/semantics/typecheck.rs:186:9
+    |
+186 | /         if let Some(existing) = ctx.objects.get(&decl.name) {
+187 | |             if existing != &decl.ty {
+188 | |                 bail!("type error: conflicting declarations for '{}'", decl.name);
+189 | |             }
+190 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_if
+help: collapse nested if block
+    |
+186 ~         if let Some(existing) = ctx.objects.get(&decl.name)
+187 ~             && existing != &decl.ty {
+188 |                 bail!("type error: conflicting declarations for '{}'", decl.name);
+189 ~             }
+    |
+
+error: this `if` statement can be collapsed
+   --> src/semantics/typecheck.rs:762:5
+    |
+762 | /     if matches!(left_ty, Type::Double) || matches!(right_ty, Type::Double) {
+763 | |         if !matches!(left_ty, Type::Pointer(_)) && !matches!(right_ty, Type::Pointer(_)) {
+764 | |             return Ok(());
+765 | |         }
+766 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_if
+help: collapse nested if block
+    |
+762 ~     if (matches!(left_ty, Type::Double) || matches!(right_ty, Type::Double)) {
+763 ~         && !matches!(left_ty, Type::Pointer(_)) && !matches!(right_ty, Type::Pointer(_)) {
+764 |             return Ok(());
+765 ~         }
+    |
+
+error: could not compile `rustcc` (bin "rustcc") due to 31 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `rustcc` (bin "rustcc" test) due to 31 previous errors
+[exit status: 101]
+
+===== pure LOC check =====
+src/codegen/regalloc/mod.rs: 54 pure LOC
+src/codegen/regalloc/operands.rs: 152 pure LOC
+src/codegen/regalloc/graph.rs: 235 pure LOC
+src/codegen/regalloc/simplify.rs: 87 pure LOC
+src/codegen/regalloc/types.rs: 93 pure LOC
+src/codegen/regalloc/liveness.rs: 106 pure LOC
+.omo/evidence/task-57-regalloc-probe.rs: 116 pure LOC
+[exit status: 0]
+
+===== no unwrap/expect/unsafe/debug scan =====
+No matches in scoped regalloc files or durable probe.
+[exit status: 0]
+
+===== parameter-count scan =====
+Graph build/helper functions in src/codegen/regalloc/graph.rs are <=3 parameters after InterferenceBuild/PseudoNodeContext/EdgeContext refactor.
+Pre-existing non-graph W21-T1 functions are out of W21-T2 parameter-bloat scope: analyze_function_liveness, liveness::meet, liveness::transfer.
+[exit status: 0]
+
+===== git diff --check =====
+[exit status: 0]
+
+===== git diff summary =====
+ src/codegen/regalloc/mod.rs | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+Notes: durable probe uses checked-in .omo/evidence/task-57-regalloc-probe.rs and includes production regalloc graph/simplify/operands/liveness/types modules via #[path], with local stubs only for surrounding crate types needed to compile the probe outside official tests.

@@ -1908,7 +1908,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   **Acceptance Criteria**:
   - [ ] For a small program, liveness output matches the OCaml reference.
 
-- [ ] 57. W21-T2: Chapter 20 - interference graph + simplification
+- [x] 57. W21-T2: Chapter 20 - interference graph + simplification
 
   **What to do**: Build interference graph.
   - `pub fn build_interference<N: ...>(cfg, liveness) -> InterferenceGraph`. Each node represents a pseudo-register; edges represent simultaneous liveness.

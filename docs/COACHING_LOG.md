@@ -1303,3 +1303,38 @@ Implemented the Chapter 20 W21-T1 assembly liveness foundation for the later reg
 
 - W21-T2 must build the interference graph and simplification over this liveness foundation.
 - Strict repo-wide clippy remains red on pre-existing diagnostics and was recorded as a watch item, not a Task 56 blocker.
+
+## Wave 21 / Chapter 20 interference graph and simplification (task 57)
+
+Implemented the Chapter 20 W21-T2 interference graph and simplification foundation on top of the assembly liveness work. The regalloc module now builds class-specific interference graphs, suppresses move source/destination self-interference, preserves hard-register/precolored behavior, excludes configured static and address-taken pseudos, records spill costs, and produces a simplification stack with low-degree removal plus spill-candidate fallback. The actual select/color, spill rewrite loop, and coalescing remain later Wave 21 tasks.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `cargo fmt --all -- --check` | exit 0 |
+| `cargo check --release` | exit 0 |
+| `cargo build --release` | exit 0 |
+| `cargo test --release` | 10 passed, 0 failed |
+| chapter 19 default `--latest-only` | `Ran 120 tests ... OK` |
+| chapter 19 `--latest-only --eliminate-dead-stores` | `Ran 27 tests ... OK` |
+| chapter 18 `--latest-only --union` | `Ran 286 tests ... OK` |
+| durable regalloc probe | pseudo edges `{a-b,a-c,b-c,d-e}`; move edge suppressed; hard-reg pressure spill fallback; GP/XMM filtering; static/address-taken exclusion |
+| file-size/slop check | W21-T2 files all below 250 pure LOC; parameter bloat fixed with typed contexts |
+| scope scan | no coloring/select, spill rewrite loop, coalescing, new dependencies, unsafe, unwrap/expect, or bridge/system-C path added |
+| `git diff --check` | exit 0 |
+
+### Evidence
+
+- `.omo/evidence/task-57-interference-implementation.txt`
+- `.omo/evidence/task-57-interference-adversarial-verify.txt`
+- `.omo/evidence/task-57-interference-fix.txt`
+- `.omo/evidence/task-57-regalloc-probe.rs`
+- `.omo/evidence/task-57-interference-code-review-2.md`
+- `.omo/evidence/task-57-interference-adversarial-verify-2.txt`
+
+### Remaining scope
+
+- W21-T3 must implement select/coloring over the simplification stack.
+- `src/codegen/regalloc/graph.rs` is in the 200-250 pure LOC watch band; future regalloc growth should go into new modules rather than this file.
+- Strict repo-wide clippy remains red on pre-existing diagnostics outside the changed regalloc files and is recorded as a watch item.

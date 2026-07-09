@@ -1,0 +1,129 @@
+VERDICT: CONFIRMED
+
+Task: 57 / W21-T2 interference graph + simplification
+Gate rerun date: 2026-07-09
+Mode: adversarial read-only gate; only evidence files written by this gate.
+
+recommendation: APPROVE
+
+originalIntent
+- Implement Chapter 20 W21-T2 interference graph construction and graph simplification after W21-T1 liveness.
+- Match the OCaml regalloc reference for pseudo discovery, liveness interference edges, move-source suppression, hard-register/register-class handling, static/address-taken pseudo exclusion, low-degree simplification, and spill-candidate fallback.
+
+expectedOutcome / desiredOutcome
+- Prior blockers are resolved: a review result with remove-ai-slops/programming coverage exists, durable probe exists/runs, graph API parameter bloat is fixed, official task gates pass, scope/hygiene is acceptable, and clippy red is limited to pre-existing project-wide warnings outside the changed regalloc files.
+
+checked artifact paths
+- .omo/evidence/task-57-interference-fix.txt
+- .omo/evidence/task-57-regalloc-probe.rs
+- .omo/evidence/task-57-interference-adversarial-verify.txt
+- .omo/evidence/task-57-interference-gate-review.md (stale prior REJECT artifact; superseded by this rerun plus spawned review result)
+- .omo/plans/c-compiler-rust.md lines 1911-1924
+- .omx/notepad.md
+- .omo/start-work/ledger.jsonl
+- docs/stages/ch20-register-allocation.md
+- docs/book/ch20-register-allocation.md
+- docs/specs/optimization-and-regalloc-requirements.md
+- nqcc2/lib/backend/regalloc.ml lines 150-383, 470-516, 607-637
+- nqcc2/lib/optimizations/address_taken.ml lines 1-17
+- src/codegen/regalloc/mod.rs
+- src/codegen/regalloc/operands.rs
+- src/codegen/regalloc/graph.rs
+- src/codegen/regalloc/simplify.rs
+- Supporting inspected files: src/codegen/regalloc/liveness.rs, src/codegen/regalloc/types.rs, src/codegen/assembly.rs, src/ir/cfg.rs, src/ir/tacky.rs
+
+userOutcomeReview
+- The user can mark Task 57 complete for W21-T2. The implementation provides an internal interference graph and simplification stack, not coloring/spilling/allocation, which matches Task 57 scope; W21-T3+ remain out of scope.
+- Durable probe evidence is now present at .omo/evidence/task-57-regalloc-probe.rs and fresh-run successfully. It covers the Task 57 acceptance class: five-plus variables in different scopes produce only expected pseudo edges, move-source edges are suppressed, hard-register pressure yields spill fallback, GP/XMM class filtering works, and static/address-taken pseudos are excluded when configured.
+- Parameter-bloat blocker is resolved for W21-T2 graph code: public build context is InterferenceBuild, and helper contexts keep graph helpers at <=3 parameters.
+- Existing clippy failure is still red, but fresh output has no src/codegen/regalloc/* locations; this remains the documented pre-existing project-wide watch, not a Task 57 regression.
+
+fresh exact command evidence
+1. `cargo fmt --all -- --check`
+   - exit status: 0
+2. `cargo check --release`
+   - exit status: 0
+   - output: `Finished release profile [optimized] target(s) in 0.05s`
+3. `cargo build --release`
+   - exit status: 0
+   - output: `Finished release profile [optimized] target(s) in 0.01s`
+4. `cargo test --release`
+   - exit status: 0
+   - output: src/lib.rs `running 0 tests`; src/main.rs `running 10 tests`; `10 passed; 0 failed`; doc-tests `0 passed; 0 failed`
+5. `./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only`
+   - exit status: 0
+   - output: `Ran 120 tests ... OK`
+6. `./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-dead-stores`
+   - exit status: 0
+   - output: `Ran 27 tests ... OK`
+7. `./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union`
+   - exit status: 0
+   - output: `Ran 286 tests ... OK`; assembler truncation warnings repeated from prior evidence and are not Task 57 failures.
+8. `rustc --edition=2024 .omo/evidence/task-57-regalloc-probe.rs -o /tmp/task57-regalloc-probe-verify2`
+   - exit status: 0
+9. `/tmp/task57-regalloc-probe-verify2`
+   - exit status: 0
+   - output:
+     ```text
+     {
+         "gp_hardregs": "12",
+         "low_simplify": "[\"Pseudo(\\\"a\\\"):LowDegree:2\", \"Pseudo(\\\"b\\\"):LowDegree:1\", \"Pseudo(\\\"c\\\"):LowDegree:0\", \"Pseudo(\\\"d\\\"):LowDegree:1\", \"Pseudo(\\\"e\\\"):LowDegree:0\", \"Pseudo(\\\"h\\\"):LowDegree:1\", \"Pseudo(\\\"x\\\"):LowDegree:0\", \"Pseudo(\\\"y\\\"):LowDegree:0\"]",
+         "pressure_simplify": "SpillCandidate:12",
+         "pseudo_edges": "{\"a-b\", \"a-c\", \"b-c\", \"d-e\"}",
+         "xmm_hardregs": "14",
+     }
+     ```
+10. `cargo clippy --all-targets --all-features -- -D warnings`
+    - exit status: 101
+    - output summary: 31 project-wide errors, examples include src/ast/decl.rs doc indentation, src/ast/expr.rs enum_variant_names, src/codegen/assembly.rs XMM acronym, src/codegen/mod.rs module_inception, src/codegen/codegen/copy_prop_support.rs question_mark, src/ir/lower.rs style lints, src/parse/parser.rs useless_conversion, src/semantics/* collapsible/doc/ptr_arg lints.
+    - changed-file check: `grep -E -- '^  --> src/codegen/regalloc/' /tmp/task57_verify2_commands.log` produced no matches before cleanup. Clippy remains pre-existing watch only.
+11. `git diff --check`
+    - exit status: 0
+12. Scoped status command: `git status --short -- src/codegen/regalloc/mod.rs src/codegen/regalloc/operands.rs src/codegen/regalloc/graph.rs src/codegen/regalloc/simplify.rs .omo/evidence/task-57-regalloc-probe.rs .omo/evidence/task-57-interference-fix.txt .omo/evidence/task-57-interference-adversarial-verify-2.txt`
+    - output before writing this file: modified mod.rs/operands.rs; untracked fix evidence, durable probe, graph.rs, simplify.rs.
+13. Scoped pure LOC command: `awk '!/^[[:space:]]*$/ && !/^[[:space:]]*(\/\/|#|--)/' <file> | wc -l`
+    - src/codegen/regalloc/mod.rs: 54
+    - src/codegen/regalloc/operands.rs: 152
+    - src/codegen/regalloc/graph.rs: 235
+    - src/codegen/regalloc/simplify.rs: 87
+    - src/codegen/regalloc/types.rs: 93
+    - src/codegen/regalloc/liveness.rs: 106
+    - .omo/evidence/task-57-regalloc-probe.rs: 116
+14. Scoped debug/unsafe scan: `rg -n "unsafe|unwrap\(|expect\(|dbg!|println!|panic!|TODO|todo!|unimplemented!" src/codegen/regalloc .omo/evidence/task-57-regalloc-probe.rs`
+    - only match: `src/codegen/regalloc/mod.rs:73: unimplemented!("ch.20 regalloc wired in wave 21")`, pre-existing/future W21-T3+ allocate placeholder and out of W21-T2 scope.
+15. Cleanup command: `rm -f /tmp/task57-regalloc-probe-verify2 /tmp/task57-regalloc-probe /tmp/task57_verify.sh /tmp/task57_verify2_commands.log; rm -rf /tmp/task57_probe /tmp/task57_probe_* /tmp/task-57*`
+    - exit status: 0
+    - after-check: `find /tmp -maxdepth 1 \( -name 'task57*' -o -name 'task-57*' \) -print` produced no output.
+
+spawned code-review result observed by this gate
+- Agent: 019f4572-2cba-7730-8317-636877ecc0fc / lazycodex-code-reviewer, read-only, no report file written because this gate is read-only except evidence.
+- Recommendation: APPROVE; codeQualityStatus: WATCH; blockers: none.
+- It explicitly covered remove-ai-slops/programming criteria: no useless/deletion-only/tautological tests; probe is meaningful; no dead/debug leftovers; no oversized file violation; graph.rs in 200-250 LOC watch band; no unsafe/unwrap/expect; exhaustive matches; parameter bloat fixed with domain contexts; Vec allocation in instr_operands acceptable for this task.
+
+remove-ai-slops / programming direct pass
+- Excessive/useless/deletion-only tests: none found. The durable probe asserts behavioral graph outputs rather than deletion or existence.
+- Tautological / implementation-mirroring risk: acceptable for this task. The probe compiles production regalloc graph/simplify/operands/liveness/types via #[path] and asserts externally visible graph relationships and simplification choices; stubs are limited to surrounding crate types needed to compile the probe outside Cargo tests.
+- Missing durable probe blocker: resolved by .omo/evidence/task-57-regalloc-probe.rs and fresh rustc/run success.
+- Production slop: no unsafe/unwrap/expect/dbg/println/panic/TODO in W21-T2 graph/simplify/operands scope; allocate unimplemented remains out of W21-T2 scope.
+- Parameter bloat: resolved in graph.rs. Current W21-T2 graph helpers are <=3 parameters after InterferenceBuild/PseudoNodeContext/EdgeContext. Pre-existing analyze_function_liveness/liveness helpers are W21-T1 surfaces and not blockers for this rerun.
+- Oversized modules: no scoped Rust/evidence file exceeds 250 pure LOC; graph.rs is 235 pure LOC and should be split before substantial future growth.
+- Scope drift: no coloring/select/spill/coalescing implementation added; W21-T3+ remains untouched.
+
+ultraqa/adversarial notes
+- Stale-success defense: did not trust .omo/evidence/task-57-interference-fix.txt alone; reran official gates and durable probe.
+- Artifact absence defense: previous gate review artifact remains REJECT, but this gate observed a fresh spawned code-review result with required skill-perspective coverage.
+- Probe durability defense: source file exists and recompiled from current repo source; /tmp binary removed afterward.
+- Clippy defense: red gate examined; no changed regalloc-file locations, so red is pre-existing watch.
+- Hygiene defense: LOC under ceiling, parameter-bloat fixed, no debug/unsafe leftovers in scope.
+- Cleanup: removed /tmp task57 probe/log/script leftovers; final /tmp task57 find returned no output.
+
+blockers
+- None.
+
+exact evidence gaps / non-blocking watch
+- Cargo-integrated Rust unit tests for graph/simplify are still absent; the accepted durable probe provides current regression evidence for this internal W21-T2 gate.
+- graph.rs is in the 200-250 pure LOC watch band (235) and should be split before substantial future regalloc growth.
+- clippy remains red project-wide but not in changed regalloc files.
+- .omo/evidence/task-57-interference-gate-review.md is a stale prior REJECT artifact; this rerun supersedes it with direct verification and the observed spawned APPROVE review.
+
+Final verdict: CONFIRMED

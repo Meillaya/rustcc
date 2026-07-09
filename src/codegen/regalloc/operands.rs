@@ -31,6 +31,43 @@ pub fn regs_used_and_written(
     Ok(UseDef { used, written })
 }
 
+pub fn instr_operands(instr: &Instr) -> Vec<Operand> {
+    match instr {
+        Instr::Mov { src, dst }
+        | Instr::Movq { src, dst }
+        | Instr::MovByte { src, dst }
+        | Instr::Movsx { src, dst }
+        | Instr::MovZeroExtend { src, dst }
+        | Instr::MovSignExtendByte { src, dst }
+        | Instr::Movsd { src, dst }
+        | Instr::Lea { src, dst }
+        | Instr::Cvtsi2sd { src, dst }
+        | Instr::Cvttsd2si { src, dst } => vec![src.clone(), dst.clone()],
+        Instr::Movabsq { dst, .. } | Instr::MovsdLoad { dst, .. } => vec![dst.clone()],
+        Instr::BinaryOp { src, dst, .. } => vec![src.clone(), dst.clone()],
+        Instr::Unary { operand, .. } | Instr::UnaryQ { operand, .. } => vec![operand.clone()],
+        Instr::Cmp { left, right }
+        | Instr::Cmpq { left, right }
+        | Instr::CmpDouble { left, right } => vec![left.clone(), right.clone()],
+        Instr::Idiv(op) | Instr::Div(op) | Instr::Idivq(op) | Instr::Divq(op) | Instr::Push(op) => {
+            vec![op.clone()]
+        }
+        Instr::SetCC { dst, .. } => vec![dst.clone()],
+        Instr::Cdq
+        | Instr::Cqo
+        | Instr::Cltq
+        | Instr::Call(_)
+        | Instr::Ret
+        | Instr::Jmp(_)
+        | Instr::JmpCC { .. }
+        | Instr::Label(_)
+        | Instr::Pop(_)
+        | Instr::AllocateStack(_)
+        | Instr::DeallocateStack(_)
+        | Instr::Comment(_) => Vec::new(),
+    }
+}
+
 fn raw_operands(
     instr: &Instr,
     class: RegisterClass,

@@ -12,12 +12,20 @@ use std::fmt;
 use crate::codegen::assembly::{AsmProgram, Instr};
 use crate::ir::cfg::{self, CfgBuildError};
 
+mod graph;
 mod liveness;
 mod operands;
+mod simplify;
 mod types;
 
+pub use graph::{
+    InterferenceBuild, InterferenceConfig, InterferenceGraph, InterferenceNode,
+    NodeId as InterferenceNodeId, NodeSet as InterferenceNodeSet, build_interference, hardreg_node,
+    is_hardreg_node,
+};
 pub use liveness::{LiveBlock, LiveCfg, analyze as analyze_liveness, block_liveness};
-pub use operands::{UseDef, regs_used_and_written};
+pub use operands::{UseDef, instr_operands, regs_used_and_written};
+pub use simplify::{Simplification, SimplifyChoice, SimplifyStep, simplify};
 pub use types::{BlockLiveness, LiveMap, LiveSet, LivenessConfig, LivenessError, RegisterClass};
 
 #[derive(Debug)]
