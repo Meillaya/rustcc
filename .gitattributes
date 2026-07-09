@@ -1,1 +1,3 @@
 * text=auto
+# Keep the bundled official compiler tests out of source exports and language stats.
+tests/** export-ignore linguist-vendored
