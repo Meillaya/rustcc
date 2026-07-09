@@ -96,12 +96,9 @@ pub(super) fn lower_const_index_addptr(
     let Operand::Imm(index) = index else {
         return None;
     };
-    let Some(displacement) = index
+    let displacement = index
         .checked_mul(scale)
-        .and_then(|value| i32::try_from(value).ok())
-    else {
-        return None;
-    };
+        .and_then(|value| i32::try_from(value).ok())?;
     Some(vec![
         Instr::Movq {
             src: convert_val(ptr, ctx),

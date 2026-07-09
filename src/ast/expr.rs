@@ -7,6 +7,7 @@
 use super::operator::{AssignOp, BinaryOp, UnaryOp};
 use super::ty::Type;
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Expr {
     Constant(i64),

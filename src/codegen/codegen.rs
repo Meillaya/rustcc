@@ -1787,26 +1787,23 @@ fn lower_instruction(
             {
                 return lowered;
             }
-            match index_op {
-                op => {
-                    let index_ty = type_of_val(index, env);
-                    if index_ty.is_long_word() {
-                        out.push(Instr::Movq {
-                            src: op,
-                            dst: Operand::Reg(Reg::R11),
-                        });
-                    } else if is_byte_type(index_ty) {
-                        out.push(Instr::MovSignExtendByte {
-                            src: op,
-                            dst: Operand::Reg(Reg::R11),
-                        });
-                    } else {
-                        out.push(Instr::Movsx {
-                            src: op,
-                            dst: Operand::Reg(Reg::R11),
-                        });
-                    }
-                }
+            let op = index_op;
+            let index_ty = type_of_val(index, env);
+            if index_ty.is_long_word() {
+                out.push(Instr::Movq {
+                    src: op,
+                    dst: Operand::Reg(Reg::R11),
+                });
+            } else if is_byte_type(index_ty) {
+                out.push(Instr::MovSignExtendByte {
+                    src: op,
+                    dst: Operand::Reg(Reg::R11),
+                });
+            } else {
+                out.push(Instr::Movsx {
+                    src: op,
+                    dst: Operand::Reg(Reg::R11),
+                });
             }
             let sib_scale = if matches!(*scale, 1 | 2 | 4 | 8) {
                 *scale as i32

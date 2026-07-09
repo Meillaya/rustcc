@@ -438,10 +438,7 @@ fn mangle_user_label(
 /// `nqcc2/lib/tacky_gen.ml` which unconditionally appends the same
 /// synthetic return so `int main(void) {}` and friends still terminate.
 fn ensure_trailing_return(body: Vec<Instruction>) -> Vec<Instruction> {
-    let needs_synthetic = match body.last() {
-        Some(Instruction::Return(_)) => false,
-        _ => true,
-    };
+    let needs_synthetic = !matches!(body.last(), Some(Instruction::Return(_)));
     if needs_synthetic {
         let mut body = body;
         body.push(Instruction::Return(Val::Constant(0)));
@@ -945,7 +942,7 @@ fn lower_switch(
     label: &str,
     ctx: &mut LowerCtx,
 ) -> Result<Vec<Instruction>> {
-    let switch_end = break_label(&label);
+    let switch_end = break_label(label);
     let default_label = format!("default.{label}");
 
     // Phase 1: collect all case values (recursively) and the
@@ -1520,11 +1517,11 @@ fn initialize_aggregate_elements(
     } = ty
     {
         let Expr::InitializerList(items) = init else {
-            if let Expr::StringLiteral(value) = init {
-                if is_char_type(element) {
-                    initialize_string_bytes(base, value, *size, out, ctx);
-                    return Ok(());
-                }
+            if let Expr::StringLiteral(value) = init
+                && is_char_type(element)
+            {
+                initialize_string_bytes(base, value, *size, out, ctx);
+                return Ok(());
             }
             return Err(anyhow::anyhow!("type error: scalar initializer for array"));
         };
@@ -2211,8 +2208,7 @@ fn lower_prefix_incdec(
     let one = if target_ty == OperandType::Long {
         // Materialise `1` as a long-typed const so the codegen
         // emits `addq $1, slot` rather than `addl $1, slot`.
-        let v = ctx.materialize_long_constant(&mut instrs, 1);
-        v
+        ctx.materialize_long_constant(&mut instrs, 1)
     } else {
         Val::Constant(1)
     };
@@ -2591,9 +2587,9 @@ fn expr_type(expr: &Expr, ctx: &LowerCtx) -> Type {
         } => {
             let then_ty = expr_type(then_expr, ctx);
             let else_ty = expr_type(else_expr, ctx);
-            if matches!(then_ty, Type::Struct(_) | Type::Union(_)) && then_ty == else_ty {
-                then_ty
-            } else if matches!(then_ty, Type::Pointer(_)) {
+            if (matches!(then_ty, Type::Struct(_) | Type::Union(_)) && then_ty == else_ty)
+                || matches!(then_ty, Type::Pointer(_))
+            {
                 then_ty
             } else if matches!(else_ty, Type::Pointer(_)) {
                 else_ty

@@ -42,7 +42,7 @@ pub enum Type {
 
 impl Type {
     /// Returns true for integer types (signed + unsigned, all widths).
-    pub fn is_integer(self) -> bool {
+    pub fn is_integer(&self) -> bool {
         matches!(
             self,
             Type::Int
@@ -57,13 +57,13 @@ impl Type {
 
     /// Returns true for signed integer types.  Mirrors OCaml
     /// `Type_utils.is_signed` for the chapter-12 surface.
-    pub fn is_signed(self) -> bool {
+    pub fn is_signed(&self) -> bool {
         matches!(self, Type::Int | Type::Long | Type::Char | Type::SignedChar)
     }
 
     /// Returns true for unsigned integer types.  Mirrors OCaml
     /// `Type_utils.is_unsigned` for the chapter-12 surface.
-    pub fn is_unsigned(self) -> bool {
+    pub fn is_unsigned(&self) -> bool {
         matches!(
             self,
             Type::UnsignedInt | Type::UnsignedLong | Type::UnsignedChar
@@ -71,7 +71,7 @@ impl Type {
     }
 
     /// Returns true when the type is a pointer.
-    pub fn is_pointer(self) -> bool {
+    pub fn is_pointer(&self) -> bool {
         matches!(self, Type::Pointer(_))
     }
 
@@ -83,21 +83,21 @@ impl Type {
     }
 
     /// Returns true when the type is a (complete) array.
-    pub fn is_array(self) -> bool {
+    pub fn is_array(&self) -> bool {
         matches!(self, Type::Array { size: Some(_), .. })
     }
 
     /// Returns true when the type is a complete object (not a
     /// function / incomplete array / void).  Mirrors OCaml
     /// `Type_utils.is_complete` for the chapter-14 surface.
-    pub fn is_complete(self) -> bool {
+    pub fn is_complete(&self) -> bool {
         match self {
             Type::Array { size: None, .. } | Type::Void => false,
             Type::Array {
                 element,
                 size: Some(_),
             } => element.is_complete(),
-            Type::Struct(tag) | Type::Union(tag) => crate::codegen::type_table::is_complete(&tag),
+            Type::Struct(tag) | Type::Union(tag) => crate::codegen::type_table::is_complete(tag),
             Type::Pointer(_) => true,
             _ => true,
         }

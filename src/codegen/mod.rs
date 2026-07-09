@@ -25,6 +25,7 @@
 // Re-exports below are the scaffolded public API surface; silence the
 // "unused import" diagnostic until downstream wiring lands.
 #![allow(unused_imports)]
+#![allow(clippy::module_inception)]
 
 pub mod abi;
 pub mod assembly;

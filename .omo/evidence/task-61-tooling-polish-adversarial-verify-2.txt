@@ -1,0 +1,221 @@
+Task61 W22-T1 README/tooling polish adversarial verify 2
+=========================================================
+Date: 2026-07-09T06:22:48-04:00 through 2026-07-09T06:22:50-04:00 command evidence; supplemental probes completed before artifact write on 2026-07-09T06:29:00-04:00
+Repo: /home/mei/projects/rustcc
+HEAD inspected: 149b45f
+Mode: read-only adversarial gate except this artifact
+
+recommendation: APPROVE
+final verdict: confirmed
+blockers: none
+
+originalIntent
+--------------
+Task 61 (W22-T1) is README/tooling polish, not W22-T2 full regression:
+- Update README so user-facing binary usage is real `target/release/rustcc <input.c>` usage.
+- Ensure README does not imply `rustcc` itself accepts `--chapter`; chapter flags belong to `tests/test_compiler`.
+- Record chapter gate commands in docs/COACHING_LOG.md without claiming the Wave 22 full regression matrix was rerun.
+- Keep tests/harnesses unchanged.
+- Verify release build/test/clippy/fmt/help and README example paths after the prior missing `examples/hello.c` rejection.
+
+desiredOutcome
+--------------
+A user can copy the README examples against an existing `examples/hello.c`; the documented compiler flags match the current CLI; tests/harness files remain untouched; the evidence artifacts support Task61 completion without requiring W22-T2 full regression.
+
+Checked artifact paths
+----------------------
+- .omo/evidence/task-61-tooling-polish.txt
+- .omo/evidence/task-61-tooling-polish-code-review.md (APPROVE)
+- .omo/evidence/task-61-tooling-polish-adversarial-verify.txt (previous needs-fix)
+- .omo/evidence/task-61-readme-example-fix.txt
+- README.md
+- examples/hello.c
+- docs/COACHING_LOG.md
+- Rust diffs under src/ast, src/codegen, src/ir, src/parse, src/semantics
+- git diff/status for tests and harness-adjacent paths
+
+Required artifact inspection
+----------------------------
+- task-61-tooling-polish.txt: previous command gates passed; recorded no tests diff; evidence noted oversized Rust modules as pre-existing debt.
+- task-61-tooling-polish-code-review.md: verdict APPROVE; explicitly loaded/applied remove-ai-slops and programming; explicitly covered deletion-only, tautological, implementation-mirroring, brittle/overfit tests; found no blocking slop.
+- task-61-tooling-polish-adversarial-verify.txt: previous final verdict was needs-fix solely because README examples referenced missing examples/hello.c.
+- task-61-readme-example-fix.txt: documents adding examples/hello.c and successful README example commands.
+- README.md: common examples now reference examples/hello.c, which exists; README states chapter-selection flags are for tests/test_compiler and not rustcc.
+- examples/hello.c: exists and contains `int main(void) { return 0; }`.
+- docs/COACHING_LOG.md: Task61 entry records chapter gate commands and explicitly says W22-T2 full regression was not run/claimed.
+
+Fresh mandated command evidence
+-------------------------------
+Command batch started: 2026-07-09T06:22:48-04:00
+
+$ git diff -- tests
+(exit 0; empty output)
+
+$ cargo fmt --all -- --check
+(exit 0; empty output)
+
+$ cargo build --release
+    Finished `release` profile [optimized] target(s) in 0.03s
+(exit 0)
+
+$ cargo test --release
+    Finished `release` profile [optimized] target(s) in 0.01s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+running 10 tests
+all 10 tests ok
+   Doc-tests rustcc
+running 0 tests
+test result: ok
+(exit 0)
+
+$ cargo clippy --release -- -W clippy::all
+    Finished `release` profile [optimized] target(s) in 0.03s
+(exit 0; no warning text)
+
+README exact example commands
+-----------------------------
+Pre-cleaned generated outputs with `rm -f examples/hello examples/hello.s examples/hello.o`.
+
+$ target/release/rustcc examples/hello.c
+(exit 0)
+$ test -x examples/hello && file examples/hello | head -n 1
+examples/hello: ELF 64-bit LSB pie executable, x86-64, dynamically linked, not stripped
+(exit 0)
+
+$ target/release/rustcc -S examples/hello.c
+(exit 0)
+$ test -s examples/hello.s && sed -n "1,20p" examples/hello.s
+.text
+.globl main
+main:
+    pushq %rbp
+    movq %rsp, %rbp
+    movl $0, %eax
+    movq %rbp, %rsp
+    popq %rbp
+    ret
+(exit 0)
+
+$ target/release/rustcc -c examples/hello.c
+(exit 0)
+$ test -s examples/hello.o && file examples/hello.o | head -n 1
+examples/hello.o: ELF 64-bit LSB relocatable, x86-64, not stripped
+(exit 0)
+
+$ target/release/rustcc --lex examples/hello.c
+Int int
+Identifier main
+OpenParen (
+Void void
+CloseParen )
+OpenBrace {
+Return return
+Constant 0
+Semicolon ;
+CloseBrace }
+Eof
+(exit 0)
+
+$ target/release/rustcc --parse examples/hello.c
+stdout included `Program { ... Function { name: "main", ret_ty: Int, params: [], body: Some([... Return(Some(Constant(0))) ...]), storage: Auto } ... }`
+(exit 0)
+
+$ target/release/rustcc --validate examples/hello.c
+stdout included `validated: TypedProgram { ... Function { name: "main", ret_ty: Int, params: [], body: Some([... Return(Some(Constant(0))) ...]), storage: Auto } ... }`
+(exit 0)
+
+$ target/release/rustcc --tacky examples/hello.c
+stdout included `TackyProgram { functions: [TackyFunction { name: "main", global: true, params: [], body: [Return(Constant(0))], ... return_type: Int }] ... }`
+(exit 0)
+
+$ target/release/rustcc --codegen examples/hello.c
+.text
+.globl main
+main:
+    pushq %rbp
+    movq %rsp, %rbp
+    movl $0, %eax
+    movq %rbp, %rsp
+    popq %rbp
+    ret
+(exit 0)
+
+$ ./target/release/rustcc --help
+usage: rustcc [--lex|--parse|--validate|--tacky|--codegen|-S|-c] [options] <input.c>
+(exit 1; current driver reports help through the usage/error path, as README documents)
+
+Post-cleaned generated outputs with `rm -f examples/hello examples/hello.s examples/hello.o`.
+
+$ git diff --check
+(exit 0; empty output)
+
+Supplemental probes
+-------------------
+$ grep -n -- '--chapter' README.md
+83:./tests/test_compiler ./target/release/rustcc --chapter N
+86:./tests/test_compiler ./target/release/rustcc --chapter N --latest-only
+89:./tests/test_compiler ./target/release/rustcc --chapter N --skip-invalid
+92:./tests/test_compiler ./target/release/rustcc --chapter N -f
+95:./tests/test_compiler ./target/release/rustcc --chapter N --bitwise --compound --increment
+(exit 0; all README --chapter examples are harness commands)
+
+$ ! grep -nE '^(target/release/rustcc|\./target/release/rustcc|rustcc)[[:space:]].*--chapter' README.md
+(exit 0; no bare rustcc --chapter README command)
+
+$ test -x tests/test_compiler && test -f docs/book/test-map.md && test -f examples/hello.c && test -x target/release/rustcc
+(exit 0; README local paths exist after build)
+
+$ grep -n -- 'examples/hello.c' README.md && cat examples/hello.c
+README lines 24,25,28,29,32,33,34,35,36 reference examples/hello.c.
+examples/hello.c content:
+int main(void) {
+    return 0;
+}
+(exit 0)
+
+$ ! grep -nEi 'W22-T2.*(complete|completed|passed|green)|full (chapter )?regression.*(complete|completed|passed|green)|regression matrix.*(complete|completed|passed|green)' README.md docs/COACHING_LOG.md
+(exit 0; no W22-T2/full-regression completion claim)
+
+$ grep -nE 'W22-T2|full regression|full chapter regression|regression matrix|rerun|claim' README.md docs/COACHING_LOG.md | tail -n 20
+Relevant Task61 lines say the full regression matrix was not rerun/claimed and W22-T2 still owns it.
+(exit 0)
+
+$ ./target/release/rustcc --chapter 1
+unknown flag: --chapter
+(exit 1; confirms rustcc itself still rejects --chapter)
+
+$ git status --short -- tests docs/book/test-map.md .github Cargo.toml Cargo.lock && git diff --name-status -- tests docs/book/test-map.md .github Cargo.toml Cargo.lock
+(exit 0; empty output, tests/harness-adjacent files unchanged)
+
+Post-command cleanup check
+--------------------------
+$ find examples -maxdepth 1 -type f -printf '%p %s bytes\n' | sort
+examples/hello.c 33 bytes
+
+$ git status --short -- examples
+?? examples/
+Only the intended untracked examples/hello.c remains under examples/; generated executable/assembly/object files were removed after proof.
+
+Direct remove-ai-slops / programming pass
+-----------------------------------------
+- Loaded and applied omo:remove-ai-slops and omo:programming (including Rust reference) in read-only review mode.
+- Tests/harness: `git diff -- tests` and harness-adjacent status/diff are empty; no tests were added, deleted, or edited. Therefore no deletion-only, tautological, implementation-mirroring, overfit, or brittle tests were introduced.
+- README/docs: no missing local README path remains; no bare rustcc --chapter command; no W22-T2/full-regression completion claim.
+- Production Rust diff: inspected all changed Rust hunks. Changes are mechanical doc/comment formatting, borrow receiver cleanup, clippy-suggested expression simplifications, `?` conversion, slice parameter narrowing, and scoped naming/module clippy allowances. No new parser/normalization layer, dependency, extraction, public feature, validation branch, unsafe block, unwrap/expect/panic/dbg/TODO, or behavior-changing abstraction was introduced.
+- Scoped clippy allowances (`enum_variant_names`, `upper_case_acronyms`, `module_inception`) are accepted as non-blocking because they preserve existing compiler terminology/module layout and avoid broad renames/refactors outside Task61.
+- Existing oversized Rust modules remain pre-existing architectural debt already acknowledged in earlier evidence; Task61 did not add substantive feature logic to them.
+
+userOutcomeReview
+-----------------
+A user following README now has an actual checked-in `examples/hello.c` and all documented compiler example commands were rerun successfully. README correctly distinguishes harness-only `--chapter` flags from rustcc binary flags. Coaching log records chapter gate commands without claiming W22-T2 full regression completion. Tests/harnesses remain unchanged. From the user's perspective, the prior missing-example blocker is fixed and the Task61 tooling-polish outcome is satisfied.
+
+Evidence gaps
+-------------
+- No blocking evidence gaps for the requested gate.
+- W22-T2 full regression was intentionally not run, per explicit instruction.
+- Dirty worktree still contains unrelated prior evidence/start-work artifacts and workflow state, but they do not alter the requested Task61 source/docs/tests verdict and should be handled during later commit-scope cleanup.
+
+Final verdict: confirmed

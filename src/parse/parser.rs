@@ -690,7 +690,7 @@ impl Parser {
 
     fn expect_array_size(&mut self) -> Result<usize> {
         let raw = match &self.peek().kind {
-            TokenKind::Constant(value) => i64::from(*value),
+            TokenKind::Constant(value) => *value,
             TokenKind::LongConstant(value) | TokenKind::UIntConstant(value, _) => *value,
             TokenKind::CharLiteral(value) => i64::from(*value),
             _ => bail!("parse error: expected constant array size"),
@@ -1077,7 +1077,7 @@ impl Parser {
     fn parse_unary_expr(&mut self) -> Result<Expr> {
         let expr = match &self.peek().kind {
             TokenKind::Constant(value) => {
-                let value = i64::from(*value);
+                let value = *value;
                 self.current += 1;
                 Expr::Constant(value)
             }

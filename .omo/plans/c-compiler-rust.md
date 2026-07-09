@@ -1970,7 +1970,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   - [ ] `--chapter 20 --latest-only` (with coalescing) passes.
   - [ ] For program with many `Copy` instructions between unrelated variables, coalesced output uses fewer registers than non-coalesced.
 
-- [ ] 61. W22-T1: Wave 22 - README + invocation update + tooling polish
+- [x] 61. W22-T1: Wave 22 - README + invocation update + tooling polish
 
   **What to do**: Update documentation to reflect completed status.
   - Update `README.md` to remove stale `chapter N` claim on the binary (it doesn't take `--chapter`; only `test_compiler` does); show real usage.

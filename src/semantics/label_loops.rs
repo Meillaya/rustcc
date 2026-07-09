@@ -13,17 +13,17 @@
 //!
 //! 2. **Loop / switch IDs** (chapter 8).  Walk each body once,
 //!    maintaining two parallel stacks:
-//!       * `break_stack` — labels that catch a bare `break;`.  Every
-//!         `While` / `DoWhile` / `For` / `Switch` pushes its freshly
-//!         minted id onto this stack.  The innermost entry is the
-//!         one that handles `break;`.
-//!       * `continue_stack` — labels that catch `continue;`.  Only
-//!         `While` / `DoWhile` / `For` push here; a `Switch` does
-//!         not, because C's `continue` is invalid inside a `switch`
-//!         when no enclosing loop catches it.
-//!    While minting labels we also stamp the loop/switch AST node's
-//!    own `label` field so the lowerer can derive `break.<label>` and
-//!    `continue.<label>` assembly names.
+//!    - `break_stack` — labels that catch a bare `break;`. Every `While`,
+//!      `DoWhile`, `For`, and `Switch` pushes its freshly minted id onto this
+//!      stack. The innermost entry is the one that handles `break;`.
+//!    - `continue_stack` — labels that catch `continue;`. Only `While`,
+//!      `DoWhile`, and `For` push here; a `Switch` does not, because C's
+//!      `continue` is invalid inside a `switch` when no enclosing loop catches
+//!      it.
+//!
+//!    While minting labels we also stamp the loop/switch AST node's own `label`
+//!    field so the lowerer can derive `break.<label>` and `continue.<label>`
+//!    assembly names.
 //!
 //! 3. **Break / continue target resolution** (chapter 8).  A bare
 //!    `break;` resolves to `break_stack`'s top; a bare `continue;`
@@ -82,7 +82,7 @@ pub fn label_loops(program: &mut Program) -> Result<()> {
     Ok(())
 }
 
-fn label_loops_function(body: &mut Vec<BlockItem>) -> Result<()> {
+fn label_loops_function(body: &mut [BlockItem]) -> Result<()> {
     let mut user_labels = HashSet::new();
     collect_user_labels_block(body, &mut user_labels)?;
     check_user_gotos_block(body, &user_labels)?;

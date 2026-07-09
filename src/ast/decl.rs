@@ -57,12 +57,11 @@ pub(crate) struct GlobalDecl {
 ///
 /// Chapter 10 only needs to distinguish two outcomes:
 ///
-/// - `Static`   — internal linkage, no `.globl` directive emitted.
-/// - `Extern`   — external linkage (default for file-scope vars too),
-///                emits `.globl`.
-/// - `Auto`     — placeholder meaning *no storage class keyword* (the
-///                default for plain `int g = 5;`); behaves like `Extern`
-///                for linkage purposes.
+/// - `Static` — internal linkage, no `.globl` directive emitted.
+/// - `Extern` — external linkage (default for file-scope vars too), emits
+///   `.globl`.
+/// - `Auto` — placeholder meaning *no storage class keyword* (the default for
+///   plain `int g = 5;`); behaves like `Extern` for linkage purposes.
 ///
 /// Mirrors `nqcc2/lib/ast.ml` `storage_class = Static | Extern`, extended
 /// with an `Auto` arm so the Rust port can carry the "no keyword" case

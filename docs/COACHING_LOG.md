@@ -1461,3 +1461,90 @@ Implemented the W21-T5 conservative coalescing path for Chapter 20 register allo
 
 - Wave 22 must perform documentation/tooling polish and full chapter regression.
 - `src/codegen/codegen.rs` and `src/driver.rs` remain oversized pre-existing files; Task 60 reduced/split newly crossed backend files but did not attempt broad decomposition outside the coalescing scope.
+
+## Wave 22 / README invocation and tooling polish (task 61)
+
+Updated the public invocation docs to match the current driver contract: `rustcc`
+accepts stage/output/optimization flags plus one `.c` input path, while
+`--chapter` and related chapter-selection flags belong to the `tests/test_compiler`
+Python harness. The maintained chapter gate list now points readers to all 20
+chapter commands in `docs/book/test-map.md` without claiming the Wave 22 full
+regression matrix was rerun in this polish task.
+
+### Chapter gate command record
+
+| Chapter | Harness gate recorded |
+|---|---|
+| 1 | `./tests/test_compiler ./target/release/rustcc --chapter 1 --latest-only --expected-error-codes 1 2` |
+| 2 | `./tests/test_compiler ./target/release/rustcc --chapter 2 --latest-only` |
+| 3 | `./tests/test_compiler ./target/release/rustcc --chapter 3 --latest-only --bitwise` |
+| 4 | `./tests/test_compiler ./target/release/rustcc --chapter 4 --latest-only --bitwise` |
+| 5 | `./tests/test_compiler ./target/release/rustcc --chapter 5 --latest-only --bitwise --compound --increment` |
+| 6 | `./tests/test_compiler ./target/release/rustcc --chapter 6 --latest-only --bitwise --compound --increment --goto` |
+| 7 | `./tests/test_compiler ./target/release/rustcc --chapter 7 --latest-only --compound --goto` |
+| 8 | `./tests/test_compiler ./target/release/rustcc --chapter 8 --latest-only --compound --increment --goto --switch` |
+| 9 | `./tests/test_compiler ./target/release/rustcc --chapter 9 --latest-only --bitwise --compound --increment --goto --switch` |
+| 10 | `./tests/test_compiler ./target/release/rustcc --chapter 10 --latest-only` |
+| 11 | `./tests/test_compiler ./target/release/rustcc --chapter 11 --latest-only` |
+| 12 | `./tests/test_compiler ./target/release/rustcc --chapter 12 --latest-only` |
+| 13 | `./tests/test_compiler ./target/release/rustcc --chapter 13 --latest-only --nan` |
+| 14 | `./tests/test_compiler ./target/release/rustcc --chapter 14 --latest-only` |
+| 15 | `./tests/test_compiler ./target/release/rustcc --chapter 15 --latest-only` |
+| 16 | `./tests/test_compiler ./target/release/rustcc --chapter 16 --latest-only` |
+| 17 | `./tests/test_compiler ./target/release/rustcc --chapter 17 --latest-only` |
+| 18 | `./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union` |
+| 19 | `./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-dead-stores` |
+| 20 | `./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only --no-coalescing` |
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `git diff -- tests` | exit 0; empty official test/harness diff |
+| `cargo fmt --all -- --check` | exit 0 |
+| `cargo build --release` | exit 0; no warning text detected |
+| `cargo test --release` | exit 0; 10 passed, 0 failed |
+| `cargo clippy --release -- -W clippy::all` | exit 0; no warning text detected after narrow clippy cleanup |
+| `./target/release/rustcc --help` | exit 1 by current driver design; printed `usage: rustcc [--lex|--parse|--validate|--tacky|--codegen|-S|-c] [options] <input.c>` |
+| modified-file LSP diagnostics | no diagnostics found for modified Rust files; directory-level LSP request timed out, so cargo/clippy are the authoritative full-crate checks |
+| `git diff --check` | exit 0 |
+
+Tooling evidence for this task is recorded in `.omo/evidence/task-61-tooling-polish.txt`.
+This task intentionally did not run or claim the W22-T2 full regression matrix.
+
+### Remaining scope
+
+- W22-T2 still owns the full chapter regression matrix.
+- W22-T3 still owns final commit/cleanup.
+
+## Wave 22 / README invocation update and tooling polish (task 61)
+
+Updated the README to document the real `rustcc` CLI contract, including stage flags, artifact modes, optimization/register-allocation flags, and the distinction between compiler options and `tests/test_compiler --chapter` harness options. Added `examples/hello.c` so documented sample commands are executable. Task 61 also cleaned current clippy warnings without changing official tests or claiming the full W22 regression matrix.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `git diff -- tests` | empty; official harness unchanged |
+| `cargo fmt --all -- --check` | exit 0 |
+| `cargo build --release` | exit 0, no warnings |
+| `cargo test --release` | 10 passed, 0 failed |
+| `cargo clippy --release -- -W clippy::all` | exit 0, warning-clean |
+| README example commands | `target/release/rustcc examples/hello.c`, `-S`, `-c`, and stage flags all exit 0 |
+| `./target/release/rustcc --help` | exits 1 by current driver design and prints usage text |
+| final code review | APPROVE |
+| final adversarial gate | APPROVE/confirmed |
+| `git diff --check` | exit 0 |
+
+### Evidence
+
+- `.omo/evidence/task-61-tooling-polish.txt`
+- `.omo/evidence/task-61-tooling-polish-code-review.md`
+- `.omo/evidence/task-61-tooling-polish-adversarial-verify.txt`
+- `.omo/evidence/task-61-readme-example-fix.txt`
+- `.omo/evidence/task-61-tooling-polish-adversarial-verify-2.txt`
+
+### Remaining scope
+
+- W22-T2 must run the full regression matrix. Task 61 intentionally did not claim full regression completion.
+- W22-T3 and Final F1-F4 remain pending.

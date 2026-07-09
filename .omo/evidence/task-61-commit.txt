@@ -1,0 +1,19 @@
+Task 61 commit evidence
+
+Task: W22-T1 README + invocation update + tooling polish.
+
+Completion state:
+- Plan checkbox changed to [x].
+- docs/COACHING_LOG.md appended with Task 61 summary.
+- Code review artifact: .omo/evidence/task-61-tooling-polish-code-review.md (APPROVE).
+- Final adversarial gate artifact: .omo/evidence/task-61-tooling-polish-adversarial-verify-2.txt (APPROVE / confirmed).
+
+Verification evidence:
+- git diff -- tests: empty.
+- cargo fmt --all -- --check: exit 0.
+- cargo build --release: exit 0, no warnings.
+- cargo test --release: exit 0, 10 tests passed.
+- cargo clippy --release -- -W clippy::all: exit 0, warning-clean.
+- README example commands using examples/hello.c pass for executable, assembly, object, and stage modes.
+- ./target/release/rustcc --help prints usage and exits 1 by current driver design.
+- git diff --check: exit 0.

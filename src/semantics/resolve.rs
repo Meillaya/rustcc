@@ -584,13 +584,13 @@ fn resolve_block_item(
             if fd.storage == StorageClass::Static {
                 bail!("resolve error: static keyword not allowed on local function declaration");
             }
-            if let Some(entry) = globals.get(&fd.name) {
-                if !matches!(entry.kind, GlobalKind::Function { .. }) {
-                    bail!(
-                        "resolve error: conflicting declarations of '{name}' (function and variable)",
-                        name = fd.name
-                    );
-                }
+            if let Some(entry) = globals.get(&fd.name)
+                && !matches!(entry.kind, GlobalKind::Function { .. })
+            {
+                bail!(
+                    "resolve error: conflicting declarations of '{name}' (function and variable)",
+                    name = fd.name
+                );
             }
             scopes.declare_fun(&fd.name, fd.params.len())?;
             Ok(BlockItem::FunctionDecl(GlobalDecl {

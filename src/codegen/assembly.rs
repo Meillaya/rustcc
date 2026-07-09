@@ -14,6 +14,7 @@
 /// The order of unit variants is fixed by `Reg::encode` / `Reg::slot`
 /// requirements in later waves — do not reorder without checking the
 /// register allocator and frame layout assumptions.
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Reg {
     AX,

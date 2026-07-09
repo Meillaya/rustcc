@@ -105,10 +105,10 @@ fn validate_function_signature(
         validate_type(param_ty)?;
     }
     validate_type(ret_ty)?;
-    if let Some((existing_params, existing_ret)) = ctx.funcs.get(name) {
-        if existing_params.as_slice() != param_tys || existing_ret != ret_ty {
-            bail!("type error: conflicting declarations for function '{name}'");
-        }
+    if let Some((existing_params, existing_ret)) = ctx.funcs.get(name)
+        && (existing_params.as_slice() != param_tys || existing_ret != ret_ty)
+    {
+        bail!("type error: conflicting declarations for function '{name}'");
     }
     Ok(())
 }
@@ -119,10 +119,10 @@ fn validate_global_var(var: &GlobalVarDecl, ctx: &mut TypeCtx) -> Result<()> {
     } else {
         validate_object_type(&var.ty)?;
     }
-    if let Some(existing) = ctx.objects.get(&var.name) {
-        if existing != &var.ty {
-            bail!("type error: conflicting declarations for '{}'", var.name);
-        }
+    if let Some(existing) = ctx.objects.get(&var.name)
+        && existing != &var.ty
+    {
+        bail!("type error: conflicting declarations for '{}'", var.name);
     }
     if let Some(init) = &var.init {
         if matches!(
@@ -182,12 +182,11 @@ fn check_var_decl(decl: &VarDecl, ctx: &mut TypeCtx) -> Result<()> {
     } else {
         validate_object_type(&decl.ty)?;
     }
-    if decl.storage == StorageClass::Extern {
-        if let Some(existing) = ctx.objects.get(&decl.name) {
-            if existing != &decl.ty {
-                bail!("type error: conflicting declarations for '{}'", decl.name);
-            }
-        }
+    if decl.storage == StorageClass::Extern
+        && let Some(existing) = ctx.objects.get(&decl.name)
+        && existing != &decl.ty
+    {
+        bail!("type error: conflicting declarations for '{}'", decl.name);
     }
     ctx.objects.insert(decl.name.clone(), decl.ty.clone());
     if let Some(init) = &decl.init {
@@ -759,10 +758,11 @@ fn comparable(left: &Expr, left_ty: &Type, right: &Expr, right_ty: &Type) -> Res
     if left_ty.clone().is_integer() && right_ty.clone().is_integer() {
         return Ok(());
     }
-    if matches!(left_ty, Type::Double) || matches!(right_ty, Type::Double) {
-        if !matches!(left_ty, Type::Pointer(_)) && !matches!(right_ty, Type::Pointer(_)) {
-            return Ok(());
-        }
+    if (matches!(left_ty, Type::Double) || matches!(right_ty, Type::Double))
+        && !matches!(left_ty, Type::Pointer(_))
+        && !matches!(right_ty, Type::Pointer(_))
+    {
+        return Ok(());
     }
     bail!("type error: incompatible comparison operands")
 }
