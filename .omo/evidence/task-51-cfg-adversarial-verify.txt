@@ -1,0 +1,124 @@
+Task 51 / W20-T1 Chapter 19 CFG adversarial verification
+Repository: /home/mei/projects/rustcc
+HEAD inspected: 4c4d7b967da1437a10d412fefdca1151015cac5d
+Evidence artifact: .omo/evidence/task-51-cfg-adversarial-verify.txt
+
+VERDICT: APPROVE
+recommendation: APPROVE
+blockers: []
+
+originalIntent:
+- Task 51 / W20-T1 asks for the Chapter 19 CFG foundation before optimization work: generic CFG construction mirroring nqcc2/lib/cfg.ml, blocks/nodes, entry/exit, preds/succs, TACKY and assembly flavors, and helper seams sufficient for W20-T2..T5.
+
+desiredOutcome:
+- The diff should replace the placeholder CFG stub with a usable Rust CFG abstraction that compiles cleanly, does not implement optimization/regalloc/liveness work early, does not weaken tests or introduce bridge/interpreter/dependency risk, and can reasonably support later constant folding, UCE, copy propagation, DSE, and chapter-20 assembly liveness.
+
+userOutcomeReview:
+- APPROVE. From the user perspective, Task 51 can be checked off/committed if staging only the task paths. The implementation provides a generic instruction seam, block partitioning, label map, bidirectional edge maintenance, TACKY/assembly instruction classifiers, traversal/update helpers, annotation/reassembly helpers, and independent edge probing passed. Required build/test gates passed independently.
+
+checkedArtifactPaths:
+- .omo/plans/c-compiler-rust.md
+- .omo/evidence/task-51-cfg-implementation.txt
+- .omo/evidence/task-51-cfg-code-review.md
+- src/ir/cfg.rs
+- src/ir/cfg/build.rs
+- src/ir/cfg/instr.rs
+- src/ir/cfg/types.rs
+- nqcc2/lib/cfg.ml
+- src/ir/tacky.rs
+- src/codegen/assembly.rs
+- src/ir/opt.rs
+- src/codegen/regalloc/mod.rs
+- src/pipeline.rs
+- src/ir/mod.rs
+- Cargo.toml / Cargo.lock / tests/ via diff/fingerprint scans
+
+planReread:
+- .omo/plans/c-compiler-rust.md:1810-1828: Task 51 requires generic CFG construction, basic blocks, preds/succs, entry/exit, a minimal generic instruction interface, TACKY-CFG, assembly-CFG, cargo check --release, and usability for W20-T2..T5.
+
+sourceReviewAgainstOCaml:
+- nqcc2/lib/cfg.ml:6-19 defines simple_instr and INSTR.simplify; Rust mirrors this with SimpleInstr and CfgInstruction in src/ir/cfg/instr.rs:10-20.
+- nqcc2/lib/cfg.ml:21-80 defines node_id, basic_block, t with preds/succs/entry_succs/exit_preds/debug_label; Rust provides NodeId, BlockId, BasicBlock, Cfg, FunctionCfg in src/ir/cfg/types.rs:11-44.
+- nqcc2/lib/cfg.ml:84-131 provides get_succs, get_block_value, add_edge, remove_edge, update_basic_block; Rust provides get_succs/get_block_value/block/block_mut/update_basic_block/add_edge/remove_edge in src/ir/cfg/types.rs:47-124.
+- nqcc2/lib/cfg.ml:134-152 partitions at labels and terminators; Rust partition_into_basic_blocks does the same at src/ir/cfg/build.rs:91-117.
+- nqcc2/lib/cfg.ml:154-185 builds label_map and edges: entry->block0, return->exit, unconditional->target, conditional->fallthrough+target, ordinary->next. Rust add_all_edges/block_edges/label_target match this at src/ir/cfg/build.rs:120-203, with a safe extra empty-input Entry->Exit path.
+- nqcc2/lib/cfg.ml:213-230 has cfg_to_instructions/initialize_annotation/strip_annotations; Rust provides cfg_to_instructions/initialize_annotation/strip_annotations at src/ir/cfg/types.rs:145-179.
+- nqcc2/lib/cfg.ml:315-341 creates TackyCfg/AsmCfg classifiers; Rust implements TACKY and assembly CfgInstruction at src/ir/cfg/instr.rs:22-105 and type aliases at src/ir/cfg/types.rs:188-189.
+
+CFGRequirementChecklist:
+- blocks/nodes: PASS; NodeId::{Entry, Block, Exit}, BlockId, BasicBlock, Cfg present.
+- entry/exit: PASS; Cfg.entry/exit plus entry_succs/exit_preds present; non-empty CFG adds Entry -> Block(0), empty CFG adds Entry -> Exit.
+- preds/succs: PASS; each BasicBlock has preds/succs; add_edge/remove_edge maintain both sides.
+- label map: PASS; src/ir/cfg/build.rs:124-137 builds labels from block-leading Label instructions.
+- unconditional handling: PASS; SimpleInstr::UnconditionalJump resolves target label and adds only target edge.
+- conditional handling: PASS; ConditionalJump adds fallthrough next edge then target edge.
+- return handling: PASS; Return adds Exit edge.
+- fallthrough handling: PASS; Label/Other ended blocks flow to next block or Exit.
+- TACKY seam: PASS; labels, Jump, JumpIfZero, JumpIfNotZero, Return classified; all other TACKY variants exhaustively Other.
+- assembly seam: PASS; Label, Jmp, JmpCC, Ret classified; all other assembly variants exhaustively Other.
+- traversal/update helpers for W20-T2..T5: PASS; get_succs, block_ids, blocks, blocks_mut, reachable_block_ids, update_basic_block, add_edge, remove_edge, initialize_annotation, strip_annotations, cfg_to_instructions are available.
+
+IndependentEdgeProbe:
+- Feasible disposable Rust/source-level check was run outside the repo in /tmp using the actual cfg source files path-mounted into a stub crate.
+- First include!-based attempt failed with rustc E0753 because inner module docs cannot be include!d after generated module items; this was a harness limitation, not product code behavior.
+- Retried with #[path = "/home/mei/projects/rustcc/src/ir/cfg/{types,instr,build}.rs"] modules and a Toy instruction enum.
+- Probe sequence: Label("entry"), ConditionalJump("target"), Other("fall"), UnconditionalJump("end"), Label("target"), Return, Label("end"), Return.
+- Assertions checked: Entry -> Block(0); block count 4; conditional block succs [Block(1), Block(2)]; fallthrough block succ [Block(3)]; target/end returns to Exit; corresponding preds; exit_preds [Block(2), Block(3)]; reachable_block_ids all four blocks; cfg_to_instructions preserves original sequence; initialize_annotation/update_basic_block work; missing label returns Err.
+- Result: PASS. Output included `edge probe ok: blocks=[(BlockId(0), [Block(BlockId(1)), Block(BlockId(2))], [Entry]), (BlockId(1), [Block(BlockId(3))], [Block(BlockId(0))]), (BlockId(2), [Exit], [Block(BlockId(0))]), (BlockId(3), [Exit], [Block(BlockId(1))])] exit_preds=[Block(BlockId(2)), Block(BlockId(3))]`.
+
+SlopAndProgrammingReview:
+- Loaded and applied omo:programming and its Rust reference: /home/mei/.codex/plugins/cache/sisyphuslabs/omo/4.16.0/skills/programming/SKILL.md and references/rust/README.md.
+- Loaded and applied omo:remove-ai-slops: /home/mei/.codex/plugins/cache/sisyphuslabs/omo/4.16.0/skills/remove-ai-slops/SKILL.md.
+- Direct slop pass over diff/source/tests: no tests were added, so no deletion-only tests, requested-removal-only tests, tautological tests, or implementation-mirroring tests exist. Production CFG code is scoped to the required abstraction, reuses existing TACKY/assembly enums, adds no dependencies, no unsafe, no process bridge, and no optimization/regalloc implementations.
+- Code-review report coverage check: .omo/evidence/task-51-cfg-code-review.md lines 24-31 explicitly records remove-ai-slops overfit/slop and programming checks, including no deletion-only/tautological/implementation-mirroring/requested-removal-only tests, no new dependencies, no unsafe, no unwrap/expect, and LOC ceiling check. This supports but does not replace my direct pass.
+- Watch: src/ir/cfg.rs:7 has #![allow(dead_code)]. This is not a blocker because Task 51 intentionally lands a seam before W20 consumers, and the repo already uses staged dead_code allowances in comparable scaffold modules. Revisit when W20-T2..T5 consume CFG.
+
+ForbiddenScopeChecks:
+- Optimization passes: PASS. src/ir/opt.rs unchanged; run_opt remains the pre-existing unimplemented stub. CFG files mention optimization/liveness only in comments/seam naming and implement no optimization pass.
+- Regalloc/liveness/interference: PASS. src/codegen/regalloc/mod.rs unchanged; CFG diff implements no liveness/interference/coalescing/regalloc.
+- New dependencies: PASS. `git diff --quiet -- Cargo.toml Cargo.lock tests` reported no dependency or tests/ diffs.
+- Test harness weakening: PASS. No files under tests/ changed.
+- unsafe/unwrap/expect: PASS for changed CFG source; scan found only src/ir/cfg.rs:7 #![allow(dead_code)]. No unsafe, unwrap(), expect(), panic!, unimplemented!, todo!, dbg! in changed CFG files.
+- Forbidden bridge/interpreter fingerprints: PASS. Exact scan over src, tests, Cargo.toml, Cargo.lock for `evaluate_program|compile_with_system_cc_frontend|SystemAssemblySanitizerOptions|system_c_to_assembly|source_has_` returned no matches. Broader source scan for interpreter/bridge/shim/system-c terms returned only src/ir/mod.rs:15 comment `No runtime interpreter; the IR is consumed only by codegen and optimization.`
+
+DirtyWorktreeClassification:
+- Task 51 paths to stage: src/ir/cfg.rs (modified), src/ir/cfg/build.rs (new), src/ir/cfg/instr.rs (new), src/ir/cfg/types.rs (new), .omo/evidence/task-51-cfg-implementation.txt (new), .omo/evidence/task-51-cfg-code-review.md (new), and this verification artifact.
+- Unrelated dirty state: .omo/boulder.json modified; historical untracked task-18/task-37/task-38/task-39/task-40/task-41 evidence files; .omo/start-work/.
+- Classification: not a blocker. The task can be committed by staging only Task 51 source/evidence paths and excluding unrelated old/runtime .omo state.
+
+ExactCommandsRunOrInspected:
+- sed -n '1,260p' /home/mei/.codex/plugins/cache/sisyphuslabs/omo/4.16.0/skills/programming/SKILL.md; sed -n '261,620p' same file; sed -n '1,317p' programming/references/rust/README.md; sed -n '1,358p' remove-ai-slops/SKILL.md.
+- pwd; git rev-parse HEAD; git status --short.
+- python3 plan search for Task 51/W20-T1/CFG in .omo/plans/c-compiler-rust.md; nl -ba .omo/plans/c-compiler-rust.md | sed -n '1806,1830p'.
+- sed -n / rg / tail/head over .omo/evidence/task-51-cfg-implementation.txt and .omo/evidence/task-51-cfg-code-review.md.
+- git diff -- src/ir/cfg.rs; nl -ba src/ir/cfg.rs src/ir/cfg/build.rs src/ir/cfg/instr.rs src/ir/cfg/types.rs; nl -ba nqcc2/lib/cfg.ml | sed -n '1,380p'.
+- rg -n relevant TACKY/assembly enum and CFG references in src/ir/tacky.rs, src/codegen/assembly.rs, src/ir/opt.rs, src/codegen/regalloc/mod.rs, src/pipeline.rs, src/ir/mod.rs, Cargo.toml.
+- Disposable edge probe: first rustc include! harness (failed E0753 due harness include-doc limitation), then rustc --edition=2024 /tmp/rustcc-cfg-probe.../probe.rs -o /tmp/.../probe && /tmp/.../probe (PASS exit 0).
+- cargo fmt --all -- --check -> PASS exit 0.
+- cargo check --release -> PASS exit 0 (`Finished release profile`).
+- cargo test --release -> PASS exit 0; 10 binary tests passed, lib/doc tests 0.
+- ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union -> PASS exit 0; Ran 286 tests OK; assembler truncation warnings only.
+- ./tests/test_compiler ./target/release/rustcc --chapter 17 --latest-only -> PASS exit 0; Ran 70 tests OK.
+- git diff --check -> PASS exit 0.
+- git diff --no-index --check -- /dev/null for src/ir/cfg/build.rs, instr.rs, types.rs, task-51 implementation evidence, task-51 code-review evidence -> no whitespace-error output; status 1 expected because files differ from /dev/null.
+- git diff --name-status -- Cargo.toml Cargo.lock tests src/ir/opt.rs src/codegen/regalloc src/codegen/regalloc/mod.rs -> no output.
+- git diff --quiet -- Cargo.toml Cargo.lock tests && echo 'no dependency or tests/ diffs' -> no dependency or tests/ diffs.
+- rg -n exact stale fingerprints over src tests Cargo.toml Cargo.lock -> no output.
+- rg -n broad interpreter/bridge/shim/system-c scan over src Cargo.toml Cargo.lock -> only src/ir/mod.rs no-runtime-interpreter comment.
+
+RequiredGateResults:
+- cargo fmt --all -- --check: PASS exit 0.
+- cargo check --release: PASS exit 0.
+- cargo test --release: PASS exit 0, 10 tests passed.
+- ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union: PASS exit 0, 286 tests OK.
+- ./tests/test_compiler ./target/release/rustcc --chapter 17 --latest-only: PASS exit 0, 70 tests OK.
+- git diff --check: PASS exit 0.
+- fingerprint scans: PASS for source/tests/manifests; only historical docs/evidence mentions outside runtime source.
+
+exactEvidenceGaps:
+- No permanent in-repo CFG unit/regression tests were added. This is a watch item, not a blocker for Task 51, because the plan acceptance is cargo check plus a usable CFG seam; I compensated with source review against nqcc2/lib/cfg.ml and a disposable Rust edge probe over the actual CFG source.
+- FunctionCfg carries only name+cfg, not full TackyFunction metadata; W20 consumers must reassemble optimized instructions into the original TackyFunction to preserve global/params/type_env/return_type. This is documented in the code-review artifact and is not a Task 51 blocker.
+- Unrelated dirty .omo state exists and must be excluded when committing Task 51.
+
+FinalDecision:
+- APPROVE: Task 51 is FullyDone for the stated W20-T1 CFG construction scope and may be checked off/committed, staging only Task 51 paths.

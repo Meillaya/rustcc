@@ -1807,7 +1807,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
 
   **Acceptance Criteria**: Full chapter 18 gate (`--union` extra) green; large structs (>16 bytes) returned via hidden arg.
 
-- [ ] 51. W20-T1: Chapter 19 - CFG construction (foundational for all 4 optimization passes)
+- [x] 51. W20-T1: Chapter 19 - CFG construction (foundational for all 4 optimization passes)
 
   **What to do**: Build the CFG abstraction used by all 4 opt passes.
   - In `src/ir/cfg.rs::build<N>`: implement the generic CFG (functor in OCaml; generics in Rust).

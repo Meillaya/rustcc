@@ -1,0 +1,21 @@
+Task 51 W20-T1 Chapter 19 CFG construction commit evidence
+
+Verifier verdict: APPROVE (`.omo/evidence/task-51-cfg-adversarial-verify.txt`).
+
+Commands/evidence accepted for commit:
+- `cargo fmt --all -- --check` -> exit 0
+- `cargo check --release` -> exit 0
+- `cargo build --release` -> exit 0
+- `cargo test --release` -> exit 0, 10 tests passed
+- `./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union` -> `Ran 286 tests ... OK`
+- `./tests/test_compiler ./target/release/rustcc --chapter 17 --latest-only` -> `Ran 70 tests ... OK`
+- `git diff --check` -> exit 0
+
+Adversarial checks:
+- CFG edge probe passed for label + conditional jump + fallthrough + unconditional jump + return + missing-label error.
+- No optimization passes, regalloc, liveness, or interference were implemented in this foundation task.
+- No stale bridge/interpreter fingerprints in source/tests/manifests.
+- No tests or harness files were weakened.
+
+Follow-up:
+- W20-T2..T5 must preserve original `TackyFunction` metadata while reassembling optimized instruction bodies from CFGs.

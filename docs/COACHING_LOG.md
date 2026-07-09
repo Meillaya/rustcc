@@ -1095,3 +1095,32 @@ Implemented the Chapter 18 W19-T3 aggregate System V AMD64 ABI path: by-value st
 
 - Chapter 19 CFG and optimization passes begin at W20-T1.
 - Full repo-wide clippy is still red on pre-existing style findings outside the Task 50 blocker; do not treat that as a Chapter 18 ABI regression.
+
+## Wave 20 / Chapter 19 CFG foundation (task 51)
+
+Implemented the Chapter 19 W20-T1 control-flow graph foundation that mirrors `nqcc2/lib/cfg.ml`: linear TACKY and assembly instruction streams can now be split into basic blocks with entry/exit nodes, predecessor/successor edges, label resolution, conditional/unconditional jump handling, return-to-exit handling, fallthrough edges, and reusable annotation/reassembly helpers for the upcoming optimization and register-allocation work.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `cargo fmt --all -- --check` | exit 0 |
+| `cargo check --release` | exit 0 |
+| `cargo build --release` | exit 0 |
+| `cargo test --release` | 10 passed, 0 failed |
+| chapter 18 `--latest-only --union` | `Ran 286 tests ... OK` |
+| chapter 17 `--latest-only` | `Ran 70 tests ... OK` |
+| CFG disposable edge probe | PASS for conditional, fallthrough, unconditional, return, and missing-label behavior |
+| forbidden bridge/interpreter scan | no matches in source/tests/manifests |
+| `git diff --check` | exit 0 |
+
+### Evidence
+
+- `.omo/evidence/task-51-cfg-implementation.txt`
+- `.omo/evidence/task-51-cfg-code-review.md`
+- `.omo/evidence/task-51-cfg-adversarial-verify.txt`
+
+### Remaining scope
+
+- W20-T2 through W20-T5 must consume this CFG for constant folding, unreachable-code elimination, copy propagation, and dead-store elimination.
+- Chapter 20 regalloc/liveness can use the assembly CFG seam, but liveness/interference/coalescing remain intentionally unimplemented.
