@@ -141,6 +141,10 @@ fn format_operand(op: &Operand) -> Result<String> {
         )),
         Operand::Stack(offset) => Ok(format!("{}(%rbp)", offset)),
         Operand::Data(name) => Ok(format!("{name}(%rip)")),
+        Operand::DataOffset(name, offset) => Ok(format!("{}+{}(%rip)", name, offset)),
+        Operand::PseudoMem(name, offset) => Err(anyhow!(
+            "pseudomemory leaked past replace_pseudos: {name}+{offset}"
+        )),
         Operand::Pseudo(name) => Err(anyhow!(
             "pseudoregister leaked past replace_pseudos: {name}"
         )),
@@ -162,6 +166,10 @@ fn format_quad_operand(op: &Operand) -> Result<String> {
         )),
         Operand::Stack(offset) => Ok(format!("{}(%rbp)", offset)),
         Operand::Data(name) => Ok(format!("{name}(%rip)")),
+        Operand::DataOffset(name, offset) => Ok(format!("{}+{}(%rip)", name, offset)),
+        Operand::PseudoMem(name, offset) => Err(anyhow!(
+            "pseudomemory leaked past replace_pseudos: {name}+{offset}"
+        )),
         Operand::Pseudo(name) => Err(anyhow!(
             "pseudoregister leaked past replace_pseudos: {name}"
         )),
@@ -203,6 +211,10 @@ fn format_byte_operand(op: &Operand) -> Result<String> {
         )),
         Operand::Stack(offset) => Ok(format!("{}(%rbp)", offset)),
         Operand::Data(name) => Ok(format!("{name}(%rip)")),
+        Operand::DataOffset(name, offset) => Ok(format!("{}+{}(%rip)", name, offset)),
+        Operand::PseudoMem(name, offset) => Err(anyhow!(
+            "pseudomemory leaked past replace_pseudos: {name}+{offset}"
+        )),
         Operand::Pseudo(name) => Err(anyhow!(
             "pseudoregister leaked past replace_pseudos: {name}"
         )),

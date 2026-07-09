@@ -1789,7 +1789,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   **Acceptance Criteria**:
   - [ ] `./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union` green.
 
-- [ ] 50. W19-T3: Chapter 18 - System V ABI struct classification (Integer/SSE/Memory eightbytes, up to two eightbytes in registers)
+- [x] 50. W19-T3: Chapter 18 - System V ABI struct classification (Integer/SSE/Memory eightbytes, up to two eightbytes in registers)
 
   **What to do**: Implement struct-passing ABI.
   - `src/codegen/abi.rs::classify_struct_arg`: determine if struct fits in 2 eightbytes; if yes, assign register classes per eightbyte.

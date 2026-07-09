@@ -49,7 +49,8 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 
-use crate::codegen::abi::{self, ParamClass};
+use crate::ast::Type;
+use crate::codegen::abi;
 use crate::codegen::assembly::{
     AsmProgram, BinaryOpInstr, ConditionCode as AsmCC, Instr, Operand, Reg, StaticInit, TopLevel,
     UnaryOpInstr,
@@ -191,9 +192,16 @@ struct CodegenCtx {
     double_labels: HashMap<u64, String>,
     double_constants: Vec<(String, f64)>,
     label_counter: u32,
+    function_param_types: HashMap<String, Vec<Type>>,
+    function_return_types: HashMap<String, Type>,
+    current_return_on_stack: bool,
+    current_function_name: String,
 }
 
 impl CodegenCtx {
+    fn current_return_name(&self) -> &str {
+        &self.current_function_name
+    }
     fn double_label(&mut self, value: f64) -> String {
         let bits = value.to_bits();
         if let Some(label) = self.double_labels.get(&bits) {
@@ -241,55 +249,177 @@ fn abi_reg(reg: abi::Reg) -> Reg {
     }
 }
 
-/// Lower a `Call { name, args, dst }` instruction.
-///
-/// Mirrors `convert_function_call` in
-/// `nqcc2/lib/backend/codegen.ml:339-448`, simplified to the integer
-/// case (no SSE doubles, no struct returns, no struct args).
-///
-/// Steps:
-/// 1. Classify each argument via the ABI plan (first six in regs,
-///    rest on the stack).
-/// 2. Compute stack padding so the call site is 16-byte aligned
-///    *after* the pushes for stack arguments.
-/// 3. Emit `subq $pad, %rsp` if padding is needed.
-/// 4. Emit one `movl arg, %rdi/%rsi/...` per register argument.
-/// 5. Emit `pushq arg` per stack argument (in reverse source order
-///    so the first argument ends up at the lowest stack address).
-/// 6. Emit `call name`.
-/// 7. Emit `addq $total, %rsp` to undo the pushes + padding.
-/// 8. If `dst` is `Some`, emit `movl %eax, dst` so the call site
-///    sees the return value in a pseudo slot.
+fn slot_operand(val: &Val, offset: i64, ctx: &mut CodegenCtx) -> Operand {
+    match val {
+        Val::Var(name) => Operand::PseudoMem(name.clone(), offset as i32),
+        _ => convert_val(val, ctx),
+    }
+}
+
+fn copy_mem_to_reg(src: Operand, size: i64, reg: Reg) -> Vec<Instr> {
+    match size {
+        8 => vec![Instr::Movq {
+            src,
+            dst: Operand::Reg(reg),
+        }],
+        4 => vec![Instr::Mov {
+            src,
+            dst: Operand::Reg(reg),
+        }],
+        1 => vec![Instr::MovZeroExtend {
+            src,
+            dst: Operand::Reg(reg),
+        }],
+        _ => {
+            let mut out = vec![
+                Instr::AllocateStack(8),
+                Instr::Movq {
+                    src: Operand::Imm(0),
+                    dst: Operand::Memory(Reg::SP, 0),
+                },
+            ];
+            for offset in 0..size {
+                out.push(Instr::MovByte {
+                    src: add_offset(src.clone(), offset),
+                    dst: Operand::Reg(Reg::R10),
+                });
+                out.push(Instr::MovByte {
+                    src: Operand::Reg(Reg::R10),
+                    dst: Operand::Memory(Reg::SP, offset as i32),
+                });
+            }
+            out.push(Instr::Pop(reg));
+            out
+        }
+    }
+}
+
+fn copy_reg_to_mem(reg: Reg, dst: Operand, size: i64) -> Vec<Instr> {
+    match size {
+        8 => vec![Instr::Movq {
+            src: Operand::Reg(reg),
+            dst,
+        }],
+        4 => vec![Instr::Mov {
+            src: Operand::Reg(reg),
+            dst,
+        }],
+        1 => vec![Instr::MovByte {
+            src: Operand::Reg(reg),
+            dst,
+        }],
+        _ => {
+            let mut out = vec![Instr::Push(Operand::Reg(reg.clone()))];
+            for offset in 0..size {
+                out.push(Instr::MovByte {
+                    src: Operand::Memory(Reg::SP, offset as i32),
+                    dst: add_offset(dst.clone(), offset),
+                });
+            }
+            out.push(Instr::DeallocateStack(8));
+            out
+        }
+    }
+}
+
+fn add_offset(op: Operand, offset: i64) -> Operand {
+    match op {
+        Operand::PseudoMem(name, base) => Operand::PseudoMem(name, base + offset as i32),
+        Operand::Stack(base) => Operand::Stack(base + offset as i32),
+        Operand::Data(name) => Operand::DataOffset(name, offset as i32),
+        Operand::DataOffset(name, base) => Operand::DataOffset(name, base + offset as i32),
+        Operand::Memory(reg, base) => Operand::Memory(reg, base + offset as i32),
+        other => other,
+    }
+}
+
+fn copy_mem_to_stack(src: Operand, size: i64) -> Vec<Instr> {
+    let mut out = vec![
+        Instr::AllocateStack(8),
+        Instr::Movq {
+            src: Operand::Imm(0),
+            dst: Operand::Memory(Reg::SP, 0),
+        },
+    ];
+    for offset in 0..size {
+        out.push(Instr::MovByte {
+            src: add_offset(src.clone(), offset),
+            dst: Operand::Reg(Reg::R10),
+        });
+        out.push(Instr::MovByte {
+            src: Operand::Reg(Reg::R10),
+            dst: Operand::Memory(Reg::SP, offset as i32),
+        });
+    }
+    out
+}
+
+fn copy_bytes_to_address(src: Operand, dst: Operand, size: i64) -> Vec<Instr> {
+    let mut out = Vec::new();
+    let mut offset = 0;
+    while offset + 8 <= size {
+        out.push(Instr::Movq {
+            src: add_offset(src.clone(), offset),
+            dst: Operand::Reg(Reg::R10),
+        });
+        out.push(Instr::Movq {
+            src: Operand::Reg(Reg::R10),
+            dst: add_offset(dst.clone(), offset),
+        });
+        offset += 8;
+    }
+    while offset < size {
+        out.push(Instr::MovByte {
+            src: add_offset(src.clone(), offset),
+            dst: Operand::Reg(Reg::R10),
+        });
+        out.push(Instr::MovByte {
+            src: Operand::Reg(Reg::R10),
+            dst: add_offset(dst.clone(), offset),
+        });
+        offset += 1;
+    }
+    out
+}
+
+fn ast_type_of_val(val: &Val, ast_env: &HashMap<String, Type>) -> Type {
+    match val {
+        Val::Constant(_) => Type::Int,
+        Val::ConstantDouble(_) => Type::Double,
+        Val::Var(name) => ast_env.get(name).cloned().unwrap_or(Type::Int),
+    }
+}
+
 fn lower_call(
     name: &str,
     args: &[Val],
     dst: &Option<String>,
     type_env: &TypeEnv,
+    ast_env: &HashMap<String, Type>,
     ctx: &mut CodegenCtx,
 ) -> Vec<Instr> {
-    let arg_tys: Vec<OperandType> = args.iter().map(|v| type_of_val(v, type_env)).collect();
-    let plan = abi::classify_params(&arg_tys);
+    let param_types = ctx
+        .function_param_types
+        .get(name)
+        .cloned()
+        .unwrap_or_else(|| args.iter().map(|v| ast_type_of_val(v, ast_env)).collect());
+    let ret_type = dst
+        .as_ref()
+        .and_then(|_| ctx.function_return_types.get(name).cloned())
+        .unwrap_or(Type::Void);
+    let return_on_stack =
+        matches!(ret_type, Type::Struct(_) | Type::Union(_)) && abi::returns_on_stack(&ret_type);
+    let classified = abi::classify_typed_parameters(&param_types, return_on_stack);
     let mut out: Vec<Instr> = Vec::new();
 
-    // Compute stack padding: we need 16-byte alignment before the
-    // `call` instruction.  On entry to a function call site the
-    // stack is 8-byte aligned (after the `call` itself pushes an
-    // 8-byte return address, the called function sees a 16-byte
-    // aligned stack).  After we push N stack arguments (each 8
-    // bytes), the alignment depends on whether N is even or odd:
-    //   N=0: stack is 8-byte aligned, no padding needed.
-    //   N=2: stack is 24-byte aligned (8 + 16), still 8 mod 16,
-    //        need 8 bytes of padding so that after the call pushes
-    //        the return address, the called function sees 16-byte
-    //        alignment.
-    //   N=1: stack is 16-byte aligned (8 + 8), need 0 bytes of
-    //        padding — the next 8-byte slot is already 16 mod 16.
-    // In general: pad by 8 when N is even.
-    let stack_arg_count: usize = plan
-        .param_classes
-        .iter()
-        .filter(|c| matches!(c, ParamClass::Stack))
-        .count();
+    if return_on_stack && let Some(dst_name) = dst {
+        out.push(Instr::Lea {
+            src: Operand::Pseudo(dst_name.clone()),
+            dst: Operand::Reg(Reg::DI),
+        });
+    }
+
+    let stack_arg_count = classified.stack_slots.len();
     let padding = if stack_arg_count.is_multiple_of(2) {
         0
     } else {
@@ -299,108 +429,156 @@ fn lower_call(
         out.push(Instr::AllocateStack(padding));
     }
 
-    // Register-passed arguments: emit `mov arg, reg`.  Mirrors
-    // `pass_int_reg_arg` in OCaml `convert_function_call:371-381`.
-    // Chapter 11: pick `movl` vs `movq` from the argument's
-    // type so a long argument isn't silently truncated to 32 bits.
-    for (idx, val) in args.iter().enumerate() {
-        if let ParamClass::Int(reg_idx) = plan.param_classes[idx] {
-            let ty = type_of_val(val, type_env);
-            if ty.is_long_word() {
-                out.push(Instr::Movq {
-                    src: convert_val(val, ctx),
-                    dst: Operand::Reg(abi_reg(abi::int_param_reg(reg_idx))),
-                });
-            } else if ty == OperandType::Byte {
-                out.push(Instr::MovSignExtendByte {
-                    src: convert_val(val, ctx),
-                    dst: Operand::Reg(abi_reg(abi::int_param_reg(reg_idx))),
-                });
-            } else if ty == OperandType::UByte {
-                out.push(Instr::MovZeroExtend {
-                    src: convert_val(val, ctx),
-                    dst: Operand::Reg(abi_reg(abi::int_param_reg(reg_idx))),
-                });
-            } else if ty != OperandType::Double {
-                out.push(Instr::Mov {
-                    src: convert_val(val, ctx),
-                    dst: Operand::Reg(abi_reg(abi::int_param_reg(reg_idx))),
-                });
-            }
-        } else if let ParamClass::Sse(reg_idx) = plan.param_classes[idx] {
-            out.push(Instr::Movsd {
+    let first_int_reg = if return_on_stack { 1 } else { 0 };
+    for (idx, slot) in classified.int_slots.iter().enumerate() {
+        let reg = abi_reg(abi::int_param_reg(idx + first_int_reg));
+        let val = &args[slot.param_index];
+        let ty = type_of_val(val, type_env);
+        if matches!(
+            param_types.get(slot.param_index),
+            Some(Type::Struct(_) | Type::Union(_))
+        ) {
+            out.extend(copy_mem_to_reg(
+                slot_operand(val, slot.offset, ctx),
+                slot.size,
+                reg,
+            ));
+        } else if ty.is_long_word()
+            || matches!(param_types.get(slot.param_index), Some(Type::Pointer(_)))
+        {
+            out.push(Instr::Movq {
                 src: convert_val(val, ctx),
-                dst: Operand::Reg(Reg::XMM(reg_idx as u8)),
+                dst: Operand::Reg(reg),
+            });
+        } else if ty == OperandType::Byte {
+            out.push(Instr::MovSignExtendByte {
+                src: convert_val(val, ctx),
+                dst: Operand::Reg(reg),
+            });
+        } else if ty == OperandType::UByte {
+            out.push(Instr::MovZeroExtend {
+                src: convert_val(val, ctx),
+                dst: Operand::Reg(reg),
+            });
+        } else {
+            out.push(Instr::Mov {
+                src: convert_val(val, ctx),
+                dst: Operand::Reg(reg),
             });
         }
     }
 
-    // Stack-passed arguments: emit `push arg` in reverse source
-    // order so that arg[6] (the first stack arg) ends up at the
-    // lowest stack address.  Mirrors OCaml `pass_stack_arg` +
-    // `List.rev_map` at the bottom of `convert_function_call`.
-    let mut stack_instrs: Vec<Instr> = Vec::new();
-    for (idx, val) in args.iter().enumerate().rev() {
-        if matches!(plan.param_classes[idx], ParamClass::Stack) {
+    for (idx, slot) in classified.sse_slots.iter().enumerate() {
+        let val = &args[slot.param_index];
+        let src = if matches!(
+            param_types.get(slot.param_index),
+            Some(Type::Struct(_) | Type::Union(_))
+        ) {
+            slot_operand(val, slot.offset, ctx)
+        } else {
+            convert_val(val, ctx)
+        };
+        out.push(Instr::Movsd {
+            src,
+            dst: Operand::Reg(Reg::XMM(idx as u8)),
+        });
+    }
+
+    for slot in classified.stack_slots.iter().rev() {
+        let val = &args[slot.param_index];
+        if matches!(
+            param_types.get(slot.param_index),
+            Some(Type::Struct(_) | Type::Union(_))
+        ) {
+            out.extend(copy_mem_to_stack(
+                slot_operand(val, slot.offset, ctx),
+                slot.size,
+            ));
+        } else {
             let ty = type_of_val(val, type_env);
             if ty == OperandType::Byte {
-                stack_instrs.push(Instr::MovSignExtendByte {
+                out.push(Instr::MovSignExtendByte {
                     src: convert_val(val, ctx),
                     dst: Operand::Reg(Reg::R10),
                 });
-                stack_instrs.push(Instr::Push(Operand::Reg(Reg::R10)));
+                out.push(Instr::Push(Operand::Reg(Reg::R10)));
             } else if ty == OperandType::UByte {
-                stack_instrs.push(Instr::MovZeroExtend {
+                out.push(Instr::MovZeroExtend {
                     src: convert_val(val, ctx),
                     dst: Operand::Reg(Reg::R10),
                 });
-                stack_instrs.push(Instr::Push(Operand::Reg(Reg::R10)));
+                out.push(Instr::Push(Operand::Reg(Reg::R10)));
+            } else if ty == OperandType::Double {
+                out.push(Instr::AllocateStack(8));
+                out.push(Instr::Movsd {
+                    src: convert_val(val, ctx),
+                    dst: Operand::Memory(Reg::SP, 0),
+                });
             } else {
-                stack_instrs.push(Instr::Push(convert_val(val, ctx)));
+                out.push(Instr::Push(convert_val(val, ctx)));
             }
         }
     }
-    out.extend(stack_instrs);
 
-    // Emit the `call` itself.
     out.push(Instr::Call(name.to_string()));
 
-    // Restore the stack pointer: total bytes removed = padding +
-    // 8 * stack_arg_count.  Mirrors the `dealloc` block at OCaml
-    // `convert_function_call:411-424`.
     let bytes_to_remove = padding + 8 * (stack_arg_count as i32);
     if bytes_to_remove != 0 {
         out.push(Instr::DeallocateStack(bytes_to_remove));
     }
 
-    // Capture the return value if the call site expects one.
-    // Chapter 11: always use `movq` to copy the full 64-bit
-    // return register into the destination pseudo, so the upper
-    // 32 bits aren't left as garbage when the caller only meant
-    // to read the low 32 (e.g. `movl %eax, dst` only writes 4
-    // bytes and leaves the high half of the slot undefined).
     if let Some(dst_name) = dst {
-        let dst_ty = type_of_val(&Val::Var(dst_name.clone()), type_env);
-        if dst_ty == OperandType::Double {
-            out.push(Instr::Movsd {
+        if return_on_stack {
+            return out;
+        }
+        match &ret_type {
+            Type::Struct(_) | Type::Union(_) => {
+                let classes = abi::classify_aggregate(&ret_type);
+                let mut int_idx = 0usize;
+                let mut sse_idx = 0usize;
+                for (eight_idx, class) in classes.iter().enumerate() {
+                    let dst_op = Operand::PseudoMem(dst_name.clone(), (eight_idx as i32) * 8);
+                    let size = abi::eightbyte_size(ret_type.clone().size(), eight_idx);
+                    match class {
+                        abi::EightbyteClass::Integer => {
+                            let reg = if int_idx == 0 { Reg::AX } else { Reg::DX };
+                            out.extend(copy_reg_to_mem(reg, dst_op, size));
+                            int_idx += 1;
+                        }
+                        abi::EightbyteClass::Sse => {
+                            out.push(Instr::Movsd {
+                                src: Operand::Reg(Reg::XMM(sse_idx as u8)),
+                                dst: dst_op,
+                            });
+                            sse_idx += 1;
+                        }
+                        abi::EightbyteClass::Memory => {}
+                    }
+                }
+            }
+            Type::Double => out.push(Instr::Movsd {
                 src: Operand::Reg(Reg::XMM(0)),
                 dst: Operand::Pseudo(dst_name.clone()),
-            });
-        } else if is_byte_type(dst_ty) {
-            out.push(Instr::MovByte {
-                src: Operand::Reg(Reg::AX),
-                dst: Operand::Pseudo(dst_name.clone()),
-            });
-        } else if dst_ty.is_long_word() {
-            out.push(Instr::Movq {
-                src: Operand::Reg(Reg::AX),
-                dst: Operand::Pseudo(dst_name.clone()),
-            });
-        } else {
-            out.push(Instr::Mov {
-                src: Operand::Reg(Reg::AX),
-                dst: Operand::Pseudo(dst_name.clone()),
-            });
+            }),
+            _ => {
+                let dst_ty = type_of_val(&Val::Var(dst_name.clone()), type_env);
+                if is_byte_type(dst_ty) {
+                    out.push(Instr::MovByte {
+                        src: Operand::Reg(Reg::AX),
+                        dst: Operand::Pseudo(dst_name.clone()),
+                    });
+                } else if dst_ty.is_long_word() || matches!(ret_type, Type::Pointer(_)) {
+                    out.push(Instr::Movq {
+                        src: Operand::Reg(Reg::AX),
+                        dst: Operand::Pseudo(dst_name.clone()),
+                    });
+                } else {
+                    out.push(Instr::Mov {
+                        src: Operand::Reg(Reg::AX),
+                        dst: Operand::Pseudo(dst_name.clone()),
+                    });
+                }
+            }
         }
     }
     out
@@ -415,9 +593,58 @@ fn lower_call(
 /// instruction variants for every operand-width-sensitive op.  When
 /// the env records a variable as `Long`, the codegen emits the
 /// quadword form; otherwise it emits the longword form.
-fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -> Vec<Instr> {
+fn lower_instruction(
+    instr: &Instruction,
+    env: &TypeEnv,
+    ast_env: &HashMap<String, Type>,
+    ctx: &mut CodegenCtx,
+) -> Vec<Instr> {
     match instr {
         Instruction::Return(val) => {
+            let ast_ty = ast_type_of_val(val, ast_env);
+            if matches!(ast_ty, Type::Struct(_) | Type::Union(_)) {
+                let mut out = Vec::new();
+                if ctx.current_return_on_stack {
+                    out.push(Instr::Movq {
+                        src: Operand::Pseudo(format!("{}.return_ptr", ctx.current_return_name())),
+                        dst: Operand::Reg(Reg::R9),
+                    });
+                    out.extend(copy_bytes_to_address(
+                        slot_operand(val, 0, ctx),
+                        Operand::Memory(Reg::R9, 0),
+                        ast_ty.size(),
+                    ));
+                    out.push(Instr::Movq {
+                        src: Operand::Reg(Reg::R9),
+                        dst: Operand::Reg(Reg::AX),
+                    });
+                } else {
+                    let classes = abi::classify_aggregate(&ast_ty);
+                    let mut int_idx = 0usize;
+                    let mut sse_idx = 0usize;
+                    for (eight_idx, class) in classes.iter().enumerate() {
+                        let src = slot_operand(val, (eight_idx as i64) * 8, ctx);
+                        let size = abi::eightbyte_size(ast_ty.clone().size(), eight_idx);
+                        match class {
+                            abi::EightbyteClass::Integer => {
+                                let reg = if int_idx == 0 { Reg::AX } else { Reg::DX };
+                                out.extend(copy_mem_to_reg(src, size, reg));
+                                int_idx += 1;
+                            }
+                            abi::EightbyteClass::Sse => {
+                                out.push(Instr::Movsd {
+                                    src,
+                                    dst: Operand::Reg(Reg::XMM(sse_idx as u8)),
+                                });
+                                sse_idx += 1;
+                            }
+                            abi::EightbyteClass::Memory => {}
+                        }
+                    }
+                }
+                out.push(Instr::Ret);
+                return out;
+            }
             let val_ty = type_of_val(val, env);
             let is_long = val_ty.is_long_word();
             let mut out: Vec<Instr> = Vec::new();
@@ -432,18 +659,15 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
                     dst: Operand::Reg(Reg::AX),
                 });
             } else if is_long {
-                // A 64-bit immediate that doesn't fit in i32 needs
-                // `movabsq` to %rax (since `movq imm32, %rax` is
-                // the only form that takes a memory-ish immediate).
-                if let Val::Constant(n) = val {
-                    if immediate_too_wide(*n) {
-                        out.push(Instr::Movabsq {
-                            src: *n,
-                            dst: Operand::Reg(Reg::AX),
-                        });
-                        out.push(Instr::Ret);
-                        return out;
-                    }
+                if let Val::Constant(n) = val
+                    && immediate_too_wide(*n)
+                {
+                    out.push(Instr::Movabsq {
+                        src: *n,
+                        dst: Operand::Reg(Reg::AX),
+                    });
+                    out.push(Instr::Ret);
+                    return out;
                 }
                 out.push(Instr::Movq {
                     src: convert_val(val, ctx),
@@ -476,19 +700,19 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
                 // 64-bit immediates outside the i32 range need
                 // `movabsq` into a register first; `movq imm32, mem`
                 // is the only direct immediate form.
-                if let Val::Constant(n) = src {
-                    if immediate_too_wide(*n) {
-                        return vec![
-                            Instr::Movabsq {
-                                src: *n,
-                                dst: Operand::Reg(Reg::R10),
-                            },
-                            Instr::Movq {
-                                src: Operand::Reg(Reg::R10),
-                                dst: Operand::Pseudo(dst.clone()),
-                            },
-                        ];
-                    }
+                if let Val::Constant(n) = src
+                    && immediate_too_wide(*n)
+                {
+                    return vec![
+                        Instr::Movabsq {
+                            src: *n,
+                            dst: Operand::Reg(Reg::R10),
+                        },
+                        Instr::Movq {
+                            src: Operand::Reg(Reg::R10),
+                            dst: Operand::Pseudo(dst.clone()),
+                        },
+                    ];
                 }
                 vec![Instr::Movq {
                     src: convert_val(src, ctx),
@@ -1665,7 +1889,7 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
             });
             out
         }
-        Instruction::Call { name, args, dst } => lower_call(name, args, dst, env, ctx),
+        Instruction::Call { name, args, dst } => lower_call(name, args, dst, env, ast_env, ctx),
         _ => Vec::new(),
     }
 }
@@ -1683,74 +1907,116 @@ fn lower_instruction(instr: &Instruction, env: &TypeEnv, ctx: &mut CodegenCtx) -
 /// are copied from the caller-passed stack slot (`16(%rbp)`, `24(%rbp)`,
 /// ...) by `replace_pseudos` once the frame is laid out.
 fn generate_function(func: &TackyFunction, globals: &TypeEnv, ctx: &mut CodegenCtx) -> TopLevel {
-    let param_tys: Vec<OperandType> = func
+    ctx.current_function_name = func.name.clone();
+    ctx.current_return_on_stack = matches!(func.return_type, Type::Struct(_) | Type::Union(_))
+        && abi::returns_on_stack(&func.return_type);
+
+    let param_tys: Vec<Type> = func
         .params
         .iter()
-        .map(|p| func.type_env.get(p).copied().unwrap_or(OperandType::Int))
+        .map(|p| func.ast_type_env.get(p).cloned().unwrap_or(Type::Int))
         .collect();
-    let plan = abi::classify_params(&param_tys);
+    let classified = abi::classify_typed_parameters(&param_tys, ctx.current_return_on_stack);
     let mut prologue: Vec<Instr> = Vec::new();
-    let mut stack_param_idx = 0usize;
-    for (idx, param_name) in func.params.iter().enumerate() {
-        // Chapter 11: long parameters are passed in the same
-        // integer registers but occupy 8 bytes.  Emit a `Movq`
-        // for them so the stack slot is sized correctly.
-        let param_ty = func
-            .type_env
-            .get(param_name)
-            .copied()
-            .unwrap_or(OperandType::Int);
-        let is_long = param_ty.is_long_word();
-        let is_double = param_ty == OperandType::Double;
-        let is_byte = is_byte_type(param_ty);
-        match plan.param_classes[idx] {
-            ParamClass::Int(reg_idx) => {
-                let src = Operand::Reg(abi_reg(abi::int_param_reg(reg_idx)));
-                let dst = Operand::Pseudo(param_name.clone());
-                if is_double {
-                    prologue.push(Instr::Movsd { src, dst });
-                } else if is_byte {
-                    prologue.push(Instr::MovByte { src, dst });
-                } else if is_long {
-                    prologue.push(Instr::Movq { src, dst });
-                } else {
-                    prologue.push(Instr::Mov { src, dst });
-                }
-            }
-            ParamClass::Stack => {
-                // Caller-passed argument at `16(%rbp) + 8*(idx-6)`.
-                // We emit a `Mov` from a `Memory(BP, offset)` operand;
-                // `replace_pseudos` resolves the source `Memory`
-                // operand into the actual stack location once the
-                // frame is laid out.  The destination is a pseudo so
-                // the body can reference the parameter by name.
-                let offset = 16 + (8 * stack_param_idx) as i32;
-                stack_param_idx += 1;
-                let src = Operand::Memory(Reg::BP, offset);
-                let dst = Operand::Pseudo(param_name.clone());
-                if is_double {
-                    prologue.push(Instr::Movsd { src, dst });
-                } else if is_byte {
-                    prologue.push(Instr::MovByte { src, dst });
-                } else if is_long {
-                    prologue.push(Instr::Movq { src, dst });
-                } else {
-                    prologue.push(Instr::Mov { src, dst });
-                }
-            }
-            ParamClass::Sse(reg_idx) => {
+    if ctx.current_return_on_stack {
+        prologue.push(Instr::Movq {
+            src: Operand::Reg(Reg::DI),
+            dst: Operand::Pseudo(format!("{}.return_ptr", func.name)),
+        });
+    }
+
+    let first_int_reg = if ctx.current_return_on_stack { 1 } else { 0 };
+    for (idx, slot) in classified.int_slots.iter().enumerate() {
+        let param_name = &func.params[slot.param_index];
+        let dst = Operand::PseudoMem(param_name.clone(), slot.offset as i32);
+        if matches!(
+            param_tys.get(slot.param_index),
+            Some(Type::Struct(_) | Type::Union(_))
+        ) {
+            let reg = abi_reg(abi::int_param_reg(idx + first_int_reg));
+            prologue.extend(copy_reg_to_mem(reg, dst, slot.size));
+        } else {
+            let param_ty = func
+                .type_env
+                .get(param_name)
+                .copied()
+                .unwrap_or(OperandType::Int);
+            let src = Operand::Reg(abi_reg(abi::int_param_reg(idx + first_int_reg)));
+            if param_ty == OperandType::Double {
                 prologue.push(Instr::Movsd {
-                    src: Operand::Reg(Reg::XMM(reg_idx as u8)),
+                    src,
+                    dst: Operand::Pseudo(param_name.clone()),
+                });
+            } else if is_byte_type(param_ty) {
+                prologue.push(Instr::MovByte {
+                    src,
+                    dst: Operand::Pseudo(param_name.clone()),
+                });
+            } else if param_ty.is_long_word()
+                || matches!(param_tys.get(slot.param_index), Some(Type::Pointer(_)))
+            {
+                prologue.push(Instr::Movq {
+                    src,
+                    dst: Operand::Pseudo(param_name.clone()),
+                });
+            } else {
+                prologue.push(Instr::Mov {
+                    src,
                     dst: Operand::Pseudo(param_name.clone()),
                 });
             }
         }
     }
-    // Merge the function's local type env with the file-scope
-    // global type map so a `Copy` of a `long` global reads it
-    // with `movq` (not `movl`).  The function's own type_env
-    // already has every local / parameter / materialised long
-    // constant; we layer the globals underneath so locals win.
+
+    for (idx, slot) in classified.sse_slots.iter().enumerate() {
+        let param_name = &func.params[slot.param_index];
+        let dst = if matches!(
+            param_tys.get(slot.param_index),
+            Some(Type::Struct(_) | Type::Union(_))
+        ) {
+            Operand::PseudoMem(param_name.clone(), slot.offset as i32)
+        } else {
+            Operand::Pseudo(param_name.clone())
+        };
+        prologue.push(Instr::Movsd {
+            src: Operand::Reg(Reg::XMM(idx as u8)),
+            dst,
+        });
+    }
+
+    for (idx, slot) in classified.stack_slots.iter().enumerate() {
+        let param_name = &func.params[slot.param_index];
+        let src = Operand::Memory(Reg::BP, 16 + (idx as i32) * 8);
+        if matches!(
+            param_tys.get(slot.param_index),
+            Some(Type::Struct(_) | Type::Union(_))
+        ) {
+            prologue.extend(copy_bytes_to_address(
+                src,
+                Operand::PseudoMem(param_name.clone(), slot.offset as i32),
+                slot.size,
+            ));
+        } else {
+            let param_ty = func
+                .type_env
+                .get(param_name)
+                .copied()
+                .unwrap_or(OperandType::Int);
+            let dst = Operand::Pseudo(param_name.clone());
+            if param_ty == OperandType::Double {
+                prologue.push(Instr::Movsd { src, dst });
+            } else if is_byte_type(param_ty) {
+                prologue.push(Instr::MovByte { src, dst });
+            } else if param_ty.is_long_word()
+                || matches!(param_tys.get(slot.param_index), Some(Type::Pointer(_)))
+            {
+                prologue.push(Instr::Movq { src, dst });
+            } else {
+                prologue.push(Instr::Mov { src, dst });
+            }
+        }
+    }
+
     let mut merged = globals.clone();
     for (k, v) in &func.type_env {
         merged.insert(k.clone(), *v);
@@ -1758,8 +2024,12 @@ fn generate_function(func: &TackyFunction, globals: &TypeEnv, ctx: &mut CodegenC
     let body = func
         .body
         .iter()
-        .flat_map(|instr| lower_instruction(instr, &merged, ctx))
+        .flat_map(|instr| lower_instruction(instr, &merged, &func.ast_type_env, ctx))
         .collect::<Vec<_>>();
+    let mut type_env = func.type_env.clone();
+    if ctx.current_return_on_stack {
+        type_env.insert(format!("{}.return_ptr", func.name), OperandType::Long);
+    }
     let mut instructions = Vec::with_capacity(prologue.len() + body.len());
     instructions.extend(prologue);
     instructions.extend(body);
@@ -1767,7 +2037,7 @@ fn generate_function(func: &TackyFunction, globals: &TypeEnv, ctx: &mut CodegenC
         name: func.name.clone(),
         global: func.global,
         instructions,
-        type_env: func.type_env.clone(),
+        type_env,
     }
 }
 
@@ -1813,7 +2083,11 @@ fn convert_static_init(
 
 pub fn generate(tacky: &TackyProgram, _frames: &[Frame]) -> Result<AsmProgram> {
     let mut top_level: Vec<TopLevel> = Vec::new();
-    let mut ctx = CodegenCtx::default();
+    let mut ctx = CodegenCtx {
+        function_param_types: tacky.function_param_types.clone(),
+        function_return_types: tacky.function_return_types.clone(),
+        ..Default::default()
+    };
     for var in &tacky.static_variables {
         let init = convert_static_init(var.init.clone(), var.ty);
         let alignment = match var.ty {

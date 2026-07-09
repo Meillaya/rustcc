@@ -1063,3 +1063,35 @@ Implemented the Chapter 18 W19-T2 union extra on top of the already-landed struc
 
 - W19-T3 Chapter 18 ABI classification for by-value aggregate parameters and returns remains unchecked.
 - No broader `--union` claim should be made until that ABI work lands.
+
+## Wave 19 / Chapter 18 System V aggregate ABI (task 50)
+
+Implemented the Chapter 18 W19-T3 aggregate System V AMD64 ABI path: by-value struct/union parameters are classified into integer/SSE/memory locations, small aggregates can be returned through registers, and large aggregates return through the hidden caller-provided return pointer. This closes the full Chapter 18 gate including the union extra; restored page-boundary assembly fixtures remain ignored by the global `*.s` rule and were force-add staged for the chapter commit.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `cargo fmt --all -- --check` | exit 0 |
+| `cargo build --release` | exit 0 |
+| `cargo test --release` | 10 passed, 0 failed |
+| chapter 18 `--latest-only` | `Ran 192 tests ... OK` |
+| chapter 18 `--latest-only --union` | `Ran 286 tests ... OK` |
+| chapter 17 `--latest-only` | `Ran 70 tests ... OK` |
+| chapter 16 `--latest-only` | `Ran 72 tests ... OK` |
+| stale ABI scaffold scan | no matches in `src/` |
+| forbidden bridge/interpreter scan | no matches in `src/` |
+| manual ABI probes | matched GCC for mixed aggregate register return and hidden large-aggregate return pointer |
+| `cargo clippy --all-targets --all-features -- -D warnings` | repo-wide pre-existing warnings remain; Task 50 `CodegenCtx` `derivable_impls` blocker is gone |
+
+### Evidence
+
+- `.omo/evidence/task-50-ch18-abi-implementation.txt`
+- `.omo/evidence/task-50-ch18-code-review-4.md`
+- `.omo/evidence/task-50-derivable-default-fix.txt`
+- `.omo/evidence/task-50-adversarial-verify-4.txt`
+
+### Remaining scope
+
+- Chapter 19 CFG and optimization passes begin at W20-T1.
+- Full repo-wide clippy is still red on pre-existing style findings outside the Task 50 blocker; do not treat that as a Chapter 18 ABI regression.

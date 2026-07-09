@@ -1,0 +1,108 @@
+Task 50 W19-T3 Chapter 18 System V aggregate ABI implementation evidence
+Date: 2026-07-08
+
+Baseline before implementation:
+- cargo build --release: pass
+- cargo test --release: pass, 10 unit tests
+- ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only: failed with 25 failures and 5 errors. Errors were missing Linux fixtures:
+  * tests/tests/chapter_18/valid/parameters/data_on_page_boundary_linux.s
+  * tests/tests/chapter_18/valid/params_and_returns/data_on_page_boundary_linux.s
+  * tests/tests/chapter_18/valid/params_and_returns/big_data_on_page_boundary_linux.s
+  * tests/tests/chapter_18/valid/params_and_returns/validate_return_pointer_linux.s
+  * tests/tests/chapter_18/valid/params_and_returns/return_space_address_overlap_linux.s
+  Remaining failures were aggregate parameter/return ABI behavior.
+- Baseline combined command stopped before --union because latest-only failed.
+
+Implementation summary:
+- Added SysV aggregate classification in src/codegen/abi.rs for structs/unions up to two eightbytes, with INTEGER/SSE/MEMORY classes and conservative union merging.
+- Extended TACKY function/program metadata with AST parameter/return/local types so codegen can classify aggregate ABI from real C types, not only byte sizes.
+- Added pseudo-memory operands and data+offset operands so codegen can move individual aggregate eightbytes without treating objects as pointers.
+- Implemented aggregate argument passing for register and stack slots, including mixed INTEGER/SSE structs and exact byte copies for partial eightbytes.
+- Implemented aggregate parameter receive prologues, including hidden return pointer consumption of %rdi.
+- Implemented small aggregate register returns and large aggregate hidden-pointer returns, including required %rax return of the hidden pointer.
+- Fixed aggregate rvalue materialization for call results, conditional expressions, assignment expressions, and member access.
+- Restored minimal Linux assembly fixtures referenced by chapter 18 page-boundary/hidden-return tests.
+
+Verification commands and results:
+- cargo build --release: pass
+- cargo test --release: pass, 10 unit tests
+- ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only: pass, Ran 192 tests OK
+- ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union: pass, Ran 286 tests OK
+- ./tests/test_compiler ./target/release/rustcc --chapter 17 --latest-only: pass, Ran 70 tests OK
+- ./tests/test_compiler ./target/release/rustcc --chapter 16 --latest-only: pass, Ran 72 tests OK
+- LSP diagnostics on modified Rust files: no diagnostics found for src/codegen/abi.rs, src/codegen/codegen.rs, src/codegen/assembly.rs, src/codegen/emit.rs, src/codegen/replace_pseudos.rs, src/ir/lower.rs, src/ir/tacky.rs
+- git diff --check: pass
+- Manual QA /tmp/rustcc_abi_manual.c through ./target/release/rustcc: exit status 0. Covered small int struct param/return, mixed int/double struct return, large hidden-pointer struct return, and union param/return representative.
+- Targeted bridge/fallback scan: no source-content bridge or OCaml/frontend fallback found; only expected reference comments and normal gcc assembler/linker toolchain calls appeared.
+
+Notes:
+- Chapter 16 and 18 test runs emit pre-existing assembler truncation warnings in fixture-generated .s files; tests still pass.
+- No commits, staging, or plan checkboxes were changed.
+
+Post-review fixes and additional evidence:
+- Removed stale call-lowering doc comment that had drifted onto `slot_operand`.
+- Fixed aggregate conditional returns by preserving AST type metadata on aggregate conditional temporaries.
+- Fixed aggregate assignment/member rvalues by materializing object temporaries before ABI classification instead of passing pointer slots as aggregate storage.
+- Fixed aggregate conditional branches to accept rvalue aggregate expressions such as function-call results.
+- Adversarial repros after fix:
+  * /tmp/conditional_return.c: rustcc_run=61, gcc=61
+  * /tmp/pass_assign.c: rustcc_run=56, gcc=56
+  * /tmp/pass_member.c: rustcc_run=78, gcc=78
+- Re-run after post-review fixes:
+  * cargo build --release: pass
+  * ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only: pass, Ran 192 tests OK
+  * ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union: pass, Ran 286 tests OK
+  * cargo test --release: pass, 10 unit tests
+  * ./tests/test_compiler ./target/release/rustcc --chapter 17 --latest-only: pass, Ran 70 tests OK
+  * ./tests/test_compiler ./target/release/rustcc --chapter 16 --latest-only: pass, Ran 72 tests OK
+  * LSP diagnostics on touched files after fixes: no diagnostics for src/codegen/codegen.rs and src/ir/lower.rs
+  * git diff --check: pass
+- Review-work lanes:
+  * Context mining: PASS, no missed repo context.
+  * QA execution: PASS, manual aggregate ABI and chapter18 valid union surface passed.
+  * Security review: PASS, no high/critical issues and no fallback bridge found.
+  * Initial goal/code-quality reviews found aggregate-rvalue issues; those were fixed and re-review requested.
+
+Second re-review fix:
+- Fixed stack-passed scalar double arguments in the new stack-copy path by emitting an outgoing 8-byte stack slot with `movsd` instead of byte-copying an unoffsettable pseudo operand.
+- Adversarial repro after fix:
+  * /tmp/stack_double.c: rustcc=37, gcc=37
+- Re-run after scalar-double stack fix:
+  * cargo build --release: pass
+  * ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only: pass, Ran 192 tests OK
+  * ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union: pass, Ran 286 tests OK
+
+Final formatting/review closure:
+- cargo fmt --all: applied formatting
+- cargo fmt --all -- --check: pass
+- Final full gate after rustfmt:
+  * cargo build --release: pass
+  * ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only: pass, Ran 192 tests OK
+  * ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union: pass, Ran 286 tests OK
+  * cargo test --release: pass, 10 unit tests
+  * ./tests/test_compiler ./target/release/rustcc --chapter 17 --latest-only: pass, Ran 70 tests OK
+  * ./tests/test_compiler ./target/release/rustcc --chapter 16 --latest-only: pass, Ran 72 tests OK
+  * git diff --check: pass
+  * final LSP diagnostics: no diagnostics on modified Rust files
+- Final review-work closure:
+  * Goal gate re-review: APPROVE
+  * Final code-quality re-review after rustfmt: PASS / APPROVE, blockers: []
+
+Task 50 cleanup follow-up - stale ABI scaffolding removal:
+- Removed dead scalar-era ABI scaffolding from src/codegen/abi.rs: ParamClass, AbiPlan, classify_params, and XMM_PARAM_REGS.
+- Removed redundant PassingClass and ParamSlot.class; live parameter placement is now represented only by ClassifiedParams.{int_slots,sse_slots,stack_slots} plus each ParamSlot's parameter index, offset, and byte width.
+- Removed unused CodegenCtx.current_return_type from src/codegen/codegen.rs; return handling continues to use current_return_on_stack, current_function_name, and function_return_types.
+- No tests, harness code, fixtures, plan checkboxes, staging, or commits were changed by this cleanup.
+
+Cleanup verification results (2026-07-08):
+- LSP diagnostics: pass; no diagnostics found for src/codegen/abi.rs and src/codegen/codegen.rs.
+- cargo fmt --all -- --check: pass.
+- cargo build --release: pass.
+- cargo test --release: pass; 10 unit tests passed, doc tests passed.
+- ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only: pass; Ran 192 tests OK. Existing assembler truncation warnings appeared in chapter 18 fixture .s files.
+- ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union: pass; Ran 286 tests OK. Existing assembler truncation warnings appeared in chapter 18 fixture .s files.
+- ./tests/test_compiler ./target/release/rustcc --chapter 17 --latest-only: pass; Ran 70 tests OK.
+- ./tests/test_compiler ./target/release/rustcc --chapter 16 --latest-only: pass; Ran 72 tests OK. Existing assembler truncation warning appeared in chapter 16 explicit_casts.s fixture.
+- Targeted bridge scan (`grep -RInE 'Command::new\("(clang|nqcc|ocaml)|OCAMLRUN|frontend fallback|source bridge|fallback.*frontend' src tests/test_framework tests/test_compiler || true`): pass; no matches.
+- Stale ABI scaffolding scan (`ParamClass|AbiPlan|classify_params|PassingClass|current_return_type|XMM_PARAM_REGS` in src/codegen and src/ir): pass; no matches.
+- git diff --check: pass.

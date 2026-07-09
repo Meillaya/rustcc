@@ -53,10 +53,12 @@ pub enum Operand {
     Memory(Reg, i32),
     MemoryIndexed(Reg, Reg, i32),
     Pseudo(String),
+    PseudoMem(String, i32),
     Stack(i32),
     /// RIP-relative reference to a file-scope static variable;
     /// emitted as `name(%rip)` in AT&T syntax.
     Data(String),
+    DataOffset(String, i32),
 }
 
 /// The arithmetic / logical operator carried by `Instr::BinaryOp`. Naming

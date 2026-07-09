@@ -248,6 +248,8 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
             .map(|p| type_to_operand_type(p.ty.clone()))
             .collect();
         ctx.func_sigs.insert(name.clone(), param_tys);
+        ctx.func_param_types
+            .insert(name.clone(), params.iter().map(|p| p.ty.clone()).collect());
         let return_type = match item {
             TopLevelItem::Function(f) => f.ret_ty.clone(),
             TopLevelItem::Declaration(d) => d.ret_ty.clone(),
@@ -292,12 +294,15 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
                     ctx.current_function = None;
                     ctx.current_return_ty = OperandType::Int;
                     let type_env = std::mem::take(&mut ctx.type_env);
+                    let ast_type_env = std::mem::take(&mut ctx.ast_type_env);
                     functions.push(TackyFunction {
                         name: func.name.clone(),
                         global: true,
                         params,
                         body,
                         type_env,
+                        ast_type_env,
+                        return_type: func.ret_ty.clone(),
                     });
                 }
             }
@@ -346,6 +351,8 @@ pub fn lower_program(ast: &TypedProgram) -> Result<TackyProgram> {
         functions,
         static_variables,
         static_constants: ctx.static_constants,
+        function_param_types: ctx.func_param_types,
+        function_return_types: ctx.func_return_types,
     })
 }
 
@@ -496,6 +503,7 @@ struct LowerCtx {
     /// types used by `typecheck.ml::typecheck_fun_call`.
     func_sigs: HashMap<String, Vec<crate::ir::tacky::OperandType>>,
     func_returns: HashMap<String, crate::ir::tacky::OperandType>,
+    func_param_types: HashMap<String, Vec<Type>>,
     func_return_types: HashMap<String, Type>,
     local_statics: Vec<TackyStaticVariable>,
     static_constants: Vec<TackyStaticConstant>,
@@ -518,6 +526,7 @@ impl LowerCtx {
             const_counter: 0,
             func_sigs: HashMap::new(),
             func_returns: HashMap::new(),
+            func_param_types: HashMap::new(),
             func_return_types: HashMap::new(),
             local_statics: Vec::new(),
             static_constants: Vec::new(),
@@ -1254,6 +1263,9 @@ fn lower_call(name: &str, args: &[Expr], ctx: &mut LowerCtx) -> Result<(Vec<Inst
         return Ok((out, Val::Constant(0)));
     }
     let dst_name = ctx.fresh_typed_tmp(ret_ty);
+    if let Some(ast_ret_ty) = ctx.func_return_types.get(name).cloned() {
+        ctx.ast_type_env.insert(dst_name.clone(), ast_ret_ty);
+    }
     out.push(Instruction::Call {
         name: name.to_string(),
         args: arg_vals,
@@ -1546,10 +1558,7 @@ fn initialize_aggregate_elements(
         Ok(())
     } else if let Type::Struct(tag) = ty {
         if !matches!(init, Expr::InitializerList(_)) {
-            let (instrs, src_ptr) = match lower_lvalue_address(init, ctx) {
-                Ok((instrs, ptr, _)) => (instrs, ptr),
-                Err(_) => lower_expr(init, ctx)?,
-            };
+            let (instrs, src_ptr) = lower_aggregate_source_pointer(init, ctx)?;
             out.extend(instrs);
             out.push(Instruction::CopyBytes {
                 src_pointer: src_ptr,
@@ -1592,10 +1601,7 @@ fn initialize_aggregate_elements(
         Ok(())
     } else if let Type::Union(tag) = ty {
         if !matches!(init, Expr::InitializerList(_)) {
-            let (instrs, src_ptr) = match lower_lvalue_address(init, ctx) {
-                Ok((instrs, ptr, _)) => (instrs, ptr),
-                Err(_) => lower_expr(init, ctx)?,
-            };
+            let (instrs, src_ptr) = lower_aggregate_source_pointer(init, ctx)?;
             out.extend(instrs);
             out.push(Instruction::CopyBytes {
                 src_pointer: src_ptr,
@@ -1760,6 +1766,27 @@ fn lower_unary(op: UnaryOp, inner: &Expr, ctx: &mut LowerCtx) -> Result<(Vec<Ins
     }
 }
 
+fn lower_aggregate_source_pointer(
+    expr: &Expr,
+    ctx: &mut LowerCtx,
+) -> Result<(Vec<Instruction>, Val)> {
+    match lower_lvalue_address(expr, ctx) {
+        Ok((instrs, ptr, _)) => Ok((instrs, ptr)),
+        Err(_) => {
+            let (mut instrs, value) = lower_expr(expr, ctx)?;
+            let Val::Var(name) = value else {
+                return Ok((instrs, value));
+            };
+            let ptr = ctx.fresh_typed_tmp(OperandType::Long);
+            instrs.push(Instruction::GetAddress {
+                src: name,
+                dst: ptr.clone(),
+            });
+            Ok((instrs, Val::Var(ptr)))
+        }
+    }
+}
+
 fn lower_assign(
     op: AssignOp,
     target: &Expr,
@@ -1769,17 +1796,27 @@ fn lower_assign(
     let target_ast_ty = expr_type(target, ctx);
     if op == AssignOp::Assign && matches!(target_ast_ty, Type::Struct(_) | Type::Union(_)) {
         let (mut instrs, dst_pointer, _) = lower_lvalue_address(target, ctx)?;
-        let (src_instrs, src_pointer) = match lower_lvalue_address(value, ctx) {
-            Ok((src_instrs, src_pointer, _)) => (src_instrs, src_pointer),
-            Err(_) => lower_expr(value, ctx)?,
-        };
+        let (src_instrs, src_pointer) = lower_aggregate_source_pointer(value, ctx)?;
         instrs.extend(src_instrs);
         instrs.push(Instruction::CopyBytes {
             src_pointer: src_pointer.clone(),
-            dst_pointer,
-            size: target_ast_ty.size(),
+            dst_pointer: dst_pointer.clone(),
+            size: target_ast_ty.clone().size(),
         });
-        return Ok((instrs, src_pointer));
+        let result = ctx.fresh_typed_tmp(type_to_operand_type(target_ast_ty.clone()));
+        ctx.ast_type_env
+            .insert(result.clone(), target_ast_ty.clone());
+        let result_ptr = ctx.fresh_typed_tmp(OperandType::Long);
+        instrs.push(Instruction::GetAddress {
+            src: result.clone(),
+            dst: result_ptr.clone(),
+        });
+        instrs.push(Instruction::CopyBytes {
+            src_pointer: dst_pointer,
+            dst_pointer: Val::Var(result_ptr),
+            size: target_ast_ty.clone().size(),
+        });
+        return Ok((instrs, Val::Var(result)));
     }
     if let Some((mut instrs, dst_pointer, target_ty)) = lower_indirect_lvalue(target, ctx)? {
         if op != AssignOp::Assign {
@@ -1961,6 +1998,21 @@ fn lower_member_access(
         member_ty,
         Type::Array { .. } | Type::Struct(_) | Type::Union(_)
     ) {
+        if matches!(member_ty, Type::Struct(_) | Type::Union(_)) {
+            let result = ctx.fresh_typed_tmp(type_to_operand_type(member_ty.clone()));
+            ctx.ast_type_env.insert(result.clone(), member_ty.clone());
+            let result_ptr = ctx.fresh_typed_tmp(OperandType::Long);
+            instrs.push(Instruction::GetAddress {
+                src: result.clone(),
+                dst: result_ptr.clone(),
+            });
+            instrs.push(Instruction::CopyBytes {
+                src_pointer: ptr,
+                dst_pointer: Val::Var(result_ptr),
+                size: member_ty.size(),
+            });
+            return Ok((instrs, Val::Var(result)));
+        }
         return Ok((instrs, ptr));
     }
     let dst = ctx.fresh_typed_tmp(type_to_operand_type(member_ty));
@@ -2030,7 +2082,7 @@ fn lower_member_address(
             Ok(parts) => parts,
             Err(_) if matches!(expr_type(structure, ctx), Type::Struct(_) | Type::Union(_)) => {
                 let ty = expr_type(structure, ctx);
-                let (instrs, ptr) = lower_expr(structure, ctx)?;
+                let (instrs, ptr) = lower_aggregate_source_pointer(structure, ctx)?;
                 (instrs, ptr, ty)
             }
             Err(err) => return Err(err),
@@ -2230,9 +2282,11 @@ fn lower_conditional(
     let result_ast_ty = expr_type(then_expr, ctx);
     if matches!(result_ast_ty, Type::Struct(_) | Type::Union(_)) {
         let (cond_instrs, cond_val) = lower_expr(condition, ctx)?;
-        let (mut then_instrs, then_ptr, _) = lower_lvalue_address(then_expr, ctx)?;
-        let (mut else_instrs, else_ptr, _) = lower_lvalue_address(else_expr, ctx)?;
+        let (mut then_instrs, then_ptr) = lower_aggregate_source_pointer(then_expr, ctx)?;
+        let (mut else_instrs, else_ptr) = lower_aggregate_source_pointer(else_expr, ctx)?;
         let result = ctx.fresh_typed_tmp(type_to_operand_type(result_ast_ty.clone()));
+        ctx.ast_type_env
+            .insert(result.clone(), result_ast_ty.clone());
         let result_addr = ctx.fresh_typed_tmp(OperandType::Long);
         let mut out = cond_instrs;
         out.push(Instruction::GetAddress {
@@ -2260,7 +2314,7 @@ fn lower_conditional(
         });
         out.extend(else_instrs);
         out.push(Instruction::Label(end_label));
-        return Ok((out, Val::Var(result_addr)));
+        return Ok((out, Val::Var(result)));
     }
     let (cond_instrs, cond_val) = lower_expr(condition, ctx)?;
     let (mut then_instrs, then_val) = lower_expr(then_expr, ctx)?;

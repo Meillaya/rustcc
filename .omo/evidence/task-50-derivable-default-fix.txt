@@ -1,0 +1,107 @@
+Task 50 W19-T3 Chapter 18 aggregate ABI: derivable Default clippy fix
+Date: 2026-07-08
+Workspace: /home/mei/projects/rustcc
+
+Changed files in this default-fix turn:
+- src/codegen/codegen.rs
+  - Replaced the manual `impl Default for CodegenCtx` with `#[derive(Default)]` on `CodegenCtx`.
+- .omo/evidence/task-50-derivable-default-fix.txt
+  - This verification/evidence artifact.
+
+Scope notes:
+- Preserved the current Chapter 18 System V aggregate ABI implementation.
+- Did not edit plan checkboxes, docs/COACHING_LOG.md, test harness behavior, dependencies, or Chapter 18 `.s` fixtures.
+- Did not stage or commit.
+
+Exact commands run and results:
+
+1. Required Rust instruction reads:
+   Command: `cat /home/mei/.codex/plugins/cache/sisyphuslabs/omo/4.16.0/skills/programming/SKILL.md && printf '\\n---RUST README---\\n' && cat /home/mei/.codex/plugins/cache/sisyphuslabs/omo/4.16.0/skills/programming/references/rust/README.md`
+   Result: PASS (files read; terminal output truncated by tool after confirming content and line counts)
+
+   Command: `python3 - <<'PY' ... Path('/home/mei/.codex/plugins/cache/sisyphuslabs/omo/4.16.0/skills/programming/SKILL.md').read_text() ... Path('/home/mei/.codex/plugins/cache/sisyphuslabs/omo/4.16.0/skills/programming/references/rust/README.md').read_text() ... PY`
+   Result: PASS
+   Observed: programming/SKILL.md = 378 lines / 35270 bytes; references/rust/README.md = 317 lines / 14158 bytes.
+
+2. Inspection:
+   Command: `git status --short`
+   Result: PASS (showed existing Task 50 worktree modifications and untracked evidence files)
+
+   Command: `sed -n '160,230p' src/codegen/codegen.rs`
+   Result: PASS (confirmed manual `impl Default for CodegenCtx` before the edit)
+
+3. Formatting:
+   Command: `cargo fmt --all -- --check`
+   Result: PASS (exit 0)
+
+4. Build:
+   Command: `cargo build --release`
+   Result: PASS (exit 0)
+   Summary: `Finished release profile [optimized] target(s) in 2.18s`
+
+5. Unit/doc tests:
+   Command: `cargo test --release`
+   Result: PASS (exit 0)
+   Summary: 10 binary tests passed; lib/doc tests had 0 tests and passed.
+
+6. Manual QA / Chapter 18 compiler surface:
+   Command: `./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only`
+   Result: PASS (exit 0)
+   Summary: `Ran 192 tests ... OK`
+   Notes: assembler emitted the existing truncation warnings for static struct initializer client `.s` files; tests still passed.
+
+   Command: `./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union`
+   Result: PASS (exit 0)
+   Summary: `Ran 286 tests ... OK`
+   Notes: same assembler truncation warnings; tests still passed.
+
+7. Clippy:
+   Command: `cargo clippy --all-targets --all-features -- -D warnings`
+   Result: FAIL repo-wide (exit 101)
+   Task-introduced blocker status: PASS for this fix. The previous `clippy::derivable_impls` finding for manual `impl Default for CodegenCtx` is gone.
+   Evidence from the clippy output captured in this turn: no `clippy::derivable_impls`, `derivable-impls`, or `CodegenCtx` finding appeared; only the repo-wide findings listed below appeared.
+
+   Known remaining clippy findings from the repo-wide run, not introduced by this default-fix edit:
+   - src/ast/decl.rs:62,64,65 `clippy::doc_overindented_list_items`
+   - src/ast/expr.rs:35 `clippy::enum_variant_names`
+   - src/ast/ty.rs:45,60,66,74,86,93 `clippy::wrong_self_convention`
+   - src/codegen/assembly.rs:36 `clippy::upper_case_acronyms`
+   - src/codegen/mod.rs:32 `clippy::module_inception`
+   - src/ir/lower.rs:441 `clippy::match_like_matches_macro`
+   - src/ir/lower.rs:948 `clippy::needless_borrow`
+   - src/ir/lower.rs:1523 `clippy::collapsible_if`
+   - src/ir/lower.rs:2215 `clippy::let_and_return`
+   - src/ir/lower.rs:2594 `clippy::if_same_then_else`
+   - src/parse/parser.rs:693,1080 `clippy::useless_conversion`
+   - src/semantics/label_loops.rs:24,25,26 `clippy::doc_lazy_continuation`
+   - src/semantics/label_loops.rs:85 `clippy::ptr_arg`
+   - src/semantics/resolve.rs:587 `clippy::collapsible_if`
+   - src/semantics/typecheck.rs:108,122,185,186,762 `clippy::collapsible_if`
+
+8. Whitespace diff check:
+   Command: `git diff --check`
+   Result: PASS (exit 0)
+
+9. LSP diagnostics on modified Rust file:
+   Command/tool: `mcp__lsp.diagnostics({"filePath":"/home/mei/projects/rustcc/src/codegen/codegen.rs","severity":"all"})`
+   Result: PASS
+   Output: `No diagnostics found`
+
+10. Fixture preservation check:
+    Command: `git status --short tests/tests/chapter_18 | cat`
+    Result: PASS (no Chapter 18 fixture changes shown)
+
+Pass/fail summary:
+- PASS: `cargo fmt --all -- --check`
+- PASS: `cargo build --release`
+- PASS: `cargo test --release`
+- PASS: `./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only`
+- PASS: `./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union`
+- FAIL repo-wide: `cargo clippy --all-targets --all-features -- -D warnings`, but the Task 50 default-fix blocker `clippy::derivable_impls` for `CodegenCtx` is gone and this edit introduced no new clippy finding.
+- PASS: `git diff --check`
+- PASS: LSP diagnostics for `src/codegen/codegen.rs`
+
+Conclusion:
+- `CodegenCtx` now uses derived Default.
+- The manual Default implementation that triggered `clippy::derivable_impls` has been removed.
+- Existing Chapter 18 aggregate ABI functionality remains intact under the required release build and latest-only Chapter 18 compiler tests.

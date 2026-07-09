@@ -10,7 +10,9 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
+use std::collections::HashMap;
 
+use crate::ast::Type;
 use crate::semantics::typecheck::TypedProgram;
 
 /// A TACKY value: either an inline integer/double constant or a named variable.
@@ -294,6 +296,8 @@ pub struct TackyFunction {
     pub params: Vec<String>,
     pub body: Vec<Instruction>,
     pub type_env: TypeEnv,
+    pub ast_type_env: HashMap<String, Type>,
+    pub return_type: Type,
 }
 
 /// A TACKY program: a list of functions.
@@ -308,6 +312,8 @@ pub struct TackyProgram {
     pub functions: Vec<TackyFunction>,
     pub static_variables: Vec<TackyStaticVariable>,
     pub static_constants: Vec<TackyStaticConstant>,
+    pub function_param_types: HashMap<String, Vec<Type>>,
+    pub function_return_types: HashMap<String, Type>,
 }
 
 /// Static initializer carried by a file-scope variable declaration.

@@ -58,6 +58,16 @@ fn replace_operand(state: &mut ReplaceState, op: Operand, globals: &HashSet<Stri
                 state.resolve(&name)
             }
         }
+        Operand::PseudoMem(name, offset) => {
+            if globals.contains(&name) {
+                Operand::DataOffset(name, offset)
+            } else {
+                match state.resolve(&name) {
+                    Operand::Stack(base) => Operand::Stack(base + offset),
+                    other => other,
+                }
+            }
+        }
         other => other,
     }
 }
@@ -68,8 +78,8 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
         // `%r10d` so `mov src, dst` works when both operands are
         // stack slots or RIP-relative data references.
         Instr::Mov {
-            src: src @ (Operand::Stack(_) | Operand::Data(_)),
-            dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
+            src: src @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _)),
+            dst: dst @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _)),
         } => vec![
             Instr::Mov {
                 src,
@@ -82,10 +92,11 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
         ],
         // Chapter 11: same split for the 64-bit `movq`.
         Instr::Movq {
-            src: src @ (Operand::Stack(_) | Operand::Data(_)),
+            src: src @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _)),
             dst:
                 dst @ (Operand::Stack(_)
                 | Operand::Data(_)
+                | Operand::DataOffset(_, _)
                 | Operand::Memory(_, _)
                 | Operand::MemoryIndexed(_, _, _)),
         } => vec![
@@ -102,11 +113,13 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
             src:
                 src @ (Operand::Stack(_)
                 | Operand::Data(_)
+                | Operand::DataOffset(_, _)
                 | Operand::Memory(_, _)
                 | Operand::MemoryIndexed(_, _, _)),
             dst:
                 dst @ (Operand::Stack(_)
                 | Operand::Data(_)
+                | Operand::DataOffset(_, _)
                 | Operand::Memory(_, _)
                 | Operand::MemoryIndexed(_, _, _)),
         } => vec![
@@ -120,8 +133,8 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
             },
         ],
         Instr::Movsd {
-            src: src @ (Operand::Stack(_) | Operand::Data(_)),
-            dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
+            src: src @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _)),
+            dst: dst @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _)),
         } => vec![
             Instr::Movsd {
                 src,
@@ -138,7 +151,7 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
         // a stack slot or a RIP-relative data reference.
         Instr::Movsx {
             src,
-            dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
+            dst: dst @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _)),
         } => vec![
             Instr::Movsx {
                 src,
@@ -151,7 +164,7 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
         ],
         Instr::MovZeroExtend {
             src,
-            dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
+            dst: dst @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _)),
         } => vec![
             Instr::MovZeroExtend {
                 src,
@@ -164,7 +177,7 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
         ],
         Instr::MovSignExtendByte {
             src,
-            dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
+            dst: dst @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _)),
         } => vec![
             Instr::MovSignExtendByte {
                 src,
@@ -177,7 +190,7 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
         ],
         Instr::Lea {
             src,
-            dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
+            dst: dst @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _)),
         } => vec![
             Instr::Lea {
                 src,
@@ -190,8 +203,8 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
         ],
         Instr::BinaryOp {
             op,
-            src: src @ (Operand::Stack(_) | Operand::Data(_)),
-            dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
+            src: src @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _)),
+            dst: dst @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _)),
         } => {
             // Chapter 11: 64-bit binary ops (AddQ, SubQ, MultQ,
             // BitAnd as longword, etc.) need a 64-bit move to the
@@ -235,39 +248,47 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
             };
             vec![pre_mov, post_op]
         }
-        Instr::Idiv(src @ (Operand::Stack(_) | Operand::Data(_))) => vec![
-            Instr::Mov {
-                src,
-                dst: Operand::Reg(Reg::R10),
-            },
-            Instr::Idiv(Operand::Reg(Reg::R10)),
-        ],
-        Instr::Div(src @ (Operand::Stack(_) | Operand::Data(_))) => vec![
-            Instr::Mov {
-                src,
-                dst: Operand::Reg(Reg::R10),
-            },
-            Instr::Div(Operand::Reg(Reg::R10)),
-        ],
-        Instr::Idivq(src @ (Operand::Stack(_) | Operand::Data(_))) => vec![
-            Instr::Movq {
-                src,
-                dst: Operand::Reg(Reg::R10),
-            },
-            Instr::Idivq(Operand::Reg(Reg::R10)),
-        ],
-        Instr::Divq(src @ (Operand::Stack(_) | Operand::Data(_))) => vec![
-            Instr::Movq {
-                src,
-                dst: Operand::Reg(Reg::R10),
-            },
-            Instr::Divq(Operand::Reg(Reg::R10)),
-        ],
+        Instr::Idiv(src @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _))) => {
+            vec![
+                Instr::Mov {
+                    src,
+                    dst: Operand::Reg(Reg::R10),
+                },
+                Instr::Idiv(Operand::Reg(Reg::R10)),
+            ]
+        }
+        Instr::Div(src @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _))) => {
+            vec![
+                Instr::Mov {
+                    src,
+                    dst: Operand::Reg(Reg::R10),
+                },
+                Instr::Div(Operand::Reg(Reg::R10)),
+            ]
+        }
+        Instr::Idivq(src @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _))) => {
+            vec![
+                Instr::Movq {
+                    src,
+                    dst: Operand::Reg(Reg::R10),
+                },
+                Instr::Idivq(Operand::Reg(Reg::R10)),
+            ]
+        }
+        Instr::Divq(src @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _))) => {
+            vec![
+                Instr::Movq {
+                    src,
+                    dst: Operand::Reg(Reg::R10),
+                },
+                Instr::Divq(Operand::Reg(Reg::R10)),
+            ]
+        }
         // Chapter 4 + 10: `cmpl mem, mem` is invalid; route the
         // right operand through a scratch register.
         Instr::Cmp {
             left,
-            right: right @ (Operand::Stack(_) | Operand::Data(_)),
+            right: right @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _)),
         } => vec![
             Instr::Mov {
                 src: right,
@@ -281,7 +302,7 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
         // Chapter 11: same split for the 64-bit `cmpq`.
         Instr::Cmpq {
             left,
-            right: right @ (Operand::Stack(_) | Operand::Data(_)),
+            right: right @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _)),
         } => vec![
             Instr::Movq {
                 src: right,
@@ -294,7 +315,7 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
         ],
         Instr::CmpDouble {
             left,
-            right: right @ (Operand::Stack(_) | Operand::Data(_)),
+            right: right @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _)),
         } => vec![
             Instr::Movsd {
                 src: right,
@@ -307,7 +328,7 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
         ],
         Instr::Cvttsd2si {
             src,
-            dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
+            dst: dst @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _)),
         } => vec![
             Instr::Cvttsd2si {
                 src,
@@ -333,7 +354,7 @@ fn split_memory_to_memory(instr: Instr) -> Vec<Instr> {
         ],
         Instr::Cvtsi2sd {
             src,
-            dst: dst @ (Operand::Stack(_) | Operand::Data(_)),
+            dst: dst @ (Operand::Stack(_) | Operand::Data(_) | Operand::DataOffset(_, _)),
         } => vec![
             Instr::Cvtsi2sd {
                 src,
@@ -475,7 +496,7 @@ pub fn replace_pseudos(asm: AsmProgram, globals: &HashSet<String>) -> Result<Asm
                 } else {
                     ((raw_size + 15) / 16) * 16
                 };
-                let prologue = (aligned_size > 0).then(|| Instr::AllocateStack(aligned_size));
+                let prologue = (aligned_size > 0).then_some(Instr::AllocateStack(aligned_size));
                 let mut ordered = Vec::with_capacity(fixed.len() + 1);
                 if let Some(alloc) = prologue {
                     ordered.push(alloc);

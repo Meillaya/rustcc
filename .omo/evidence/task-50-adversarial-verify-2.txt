@@ -1,0 +1,80 @@
+recommendation: REJECT
+verdict: REJECT (functional gates pass; fixture force-add is explicit commit requirement, but final anti-slop/source gate found unresolved dead/needless ABI scaffolding)
+
+goal: task 50 verify 2 - W19-T3 Chapter 18 aggregate System V ABI with fixture force-add requirement
+originalIntent: Implement Chapter 18 System V AMD64 aggregate ABI for structs/unions, including INTEGER/SSE/MEMORY eightbyte classification, register/stack aggregate arguments, small aggregate register returns, large aggregate hidden-pointer returns, union support, no source-content bridge fallback, and prior chapter gates staying green.
+desiredOutcome: Approve only if current worktree independently passes cargo build/test, Chapter 18 latest-only and latest-only --union, Chapter 17/16 latest-only, forbidden bridge scan, git diff --check, harness source diff remains zero, code-review-2 is PASS, fixture tracking is an explicit git add -f commit requirement rather than a blocker, and direct remove-ai-slops/programming review finds no unresolved slop.
+userOutcomeReview: The user-visible compiler behavior is supported by fresh gates and two fresh ABI probes. The previous missing-code-review blocker is resolved: .omo/evidence/task-50-ch18-code-review-2.md exists and says Verdict: PASS, and the five ignored Linux .s fixtures are an explicit force-add commit requirement. However, from the user's perspective this is not yet a clean final artifact because direct final-gate source review found newly obsolete/redundant ABI scaffolding left in production code; approving would ship avoidable maintenance burden and the code-review artifact did not catch this dead/needless abstraction class.
+
+blockers:
+- Unresolved production slop/dead scaffold in src/codegen/abi.rs and src/codegen/codegen.rs:
+  - src/codegen/codegen.rs still imports ParamClass, but the task diff removed all codegen uses of ParamClass/classify_params. rg shows ParamClass only at src/codegen/codegen.rs:53 and definitions/construction in src/codegen/abi.rs.
+  - src/codegen/abi.rs leaves the old ParamClass, AbiPlan, and classify_params scalar ABI surface with no remaining callers after the new classify_typed_parameters flow replaced it. This is stale dead code under the direct remove-ai-slops dead-code/needless-abstraction pass.
+  - New PassingClass plus ParamSlot.class are constructed but never read; int_slots/sse_slots/stack_slots already encode the class, so the field/enum are redundant.
+  - src/codegen/codegen.rs CodegenCtx.current_return_type is defaulted and assigned in generate_function but never read.
+- Code-review-2 verdict is PASS, but report coverage is incomplete for the final-gate slop criterion above: it covers fixture tracking, no bridge/test dispatch/debug leftovers, ast-grep unsafe/unwrap/panic, and prior ABI findings, but it does not identify the stale ParamClass/AbiPlan/classify_params path, redundant PassingClass/ParamSlot.class, or unused current_return_type. Direct final-gate coverage therefore found unresolved slop.
+
+nonBlockers / disposition:
+- Fixture tracking: PASS as explicit commit requirement, not a blocker. The five required ignored assembly dependencies exist and must be force-added at commit with git add -f:
+  - tests/tests/chapter_18/valid/parameters/data_on_page_boundary_linux.s
+  - tests/tests/chapter_18/valid/params_and_returns/data_on_page_boundary_linux.s
+  - tests/tests/chapter_18/valid/params_and_returns/big_data_on_page_boundary_linux.s
+  - tests/tests/chapter_18/valid/params_and_returns/validate_return_pointer_linux.s
+  - tests/tests/chapter_18/valid/params_and_returns/return_space_address_overlap_linux.s
+- Harness/source tests diff: PASS. git diff --name-status -- tests produced no output; git status --short -- tests produced no output. The .s fixtures are ignored assembly dependencies, not tracked harness edits yet.
+- Code-review-2: PASS confirmed at .omo/evidence/task-50-ch18-code-review-2.md:3 and final recommendation says PASS with required git add -f fixture action.
+
+freshCommandEvidence:
+- cargo build --release: PASS, exit 0, Finished release profile.
+- cargo test --release: PASS, exit 0, 10 main tests passed, lib/doc 0 tests.
+- ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only: PASS, exit 0, Ran 192 tests OK; assembler truncation warnings only from existing fixture-generated .s files.
+- ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union: PASS, exit 0, Ran 286 tests OK; same existing assembler truncation warnings only.
+- ./tests/test_compiler ./target/release/rustcc --chapter 17 --latest-only: PASS, exit 0, Ran 70 tests OK.
+- ./tests/test_compiler ./target/release/rustcc --chapter 16 --latest-only: PASS, exit 0, Ran 72 tests OK; existing explicit_casts.s truncation warning only.
+- forbidden bridge scan: PASS on corrected source-content/system-cc frontend fallback patterns: evaluate_with_system_cc, system_c_syntax_check, system_c_to_assembly, compile_with_system_cc_frontend, should_defer_parse_to_system_frontend, source_has_, likely_parse_error, semantic_error_that_should_parse, evaluate_program. No matches in src. A first broader scan intentionally included normal fs::read_to_string/usage-string patterns and produced false positives; corrected forbidden-pattern scan passed.
+- added-line escape hatch scan: PASS; no added unsafe, unwrap(), expect(), panic!, todo!, unimplemented!, dbg!, println!, eprintln!, std::fs, read_to_string, include_str!, system_cc/gcc/clang/source_has/evaluate_with_system matches in src diff.
+- git diff --check: PASS, exit 0.
+- cargo check: PASS, exit 0.
+
+manualAbiProbeEvidence:
+- Reran /tmp/task50_probe_mixed.c (mixed int/double aggregate return and aggregate parameter): gcc_compile=0 gcc_run=34; rustcc_compile=0 rustcc_run=34.
+- Reran /tmp/task50_probe_hidden.c (large 24-byte aggregate hidden return): gcc_compile=0 gcc_run=126; rustcc_compile=0 rustcc_run=126.
+
+fixtureEvidence:
+- All five fixture paths exist on disk.
+- git check-ignore -v reports .gitignore:17:*.s for each fixture.
+- git status --short --ignored=matching reports all five as !! ignored.
+- tests/test_properties.json references corresponding assembly_libs entries for data_on_page_boundary, big_data_on_page_boundary, return_space_address_overlap, and validate_return_pointer; tests/test_framework/basic.py resolves platform-specific _linux.s dependencies.
+
+checkedArtifactPaths:
+- .omo/evidence/task-50-ch18-abi-implementation.txt
+- .omo/evidence/task-50-ch18-code-review-2.md
+- .omo/evidence/task-50-adversarial-verify.txt
+- .omo/evidence/task-50-ch18-code-review.md
+- .gitignore
+- tests/test_properties.json
+- tests/test_framework/basic.py
+- tests/tests/chapter_18/valid/parameters/data_on_page_boundary_linux.s
+- tests/tests/chapter_18/valid/params_and_returns/data_on_page_boundary_linux.s
+- tests/tests/chapter_18/valid/params_and_returns/big_data_on_page_boundary_linux.s
+- tests/tests/chapter_18/valid/params_and_returns/validate_return_pointer_linux.s
+- tests/tests/chapter_18/valid/params_and_returns/return_space_address_overlap_linux.s
+- src/codegen/abi.rs
+- src/codegen/assembly.rs
+- src/codegen/codegen.rs
+- src/codegen/emit.rs
+- src/codegen/replace_pseudos.rs
+- src/ir/lower.rs
+- src/ir/tacky.rs
+
+slopAndProgrammingReview:
+- Loaded and applied omo:programming Rust criteria plus omo:remove-ai-slops criteria.
+- Direct test-overfit pass: PASS/N/A because tracked tests and harness have zero diff; no added excessive/useless tests, deletion-only tests, requested-removal-only tests, tautological tests, implementation-mirroring tests, or harness weakening are present.
+- Direct bridge/security pass: PASS; no forbidden source-content bridge, test-name dispatch, unsafe, panic/unwrap/expect additions, or debug leftovers found in added source lines.
+- Direct production slop pass: FAIL due the dead/needless ABI scaffolding listed in blockers. Existing oversized compiler modules remain a maintainability risk, but the concrete new blocker is stale/redundant task-50 scaffolding.
+
+exactEvidenceGaps:
+- No reviewed artifact explicitly closes the dead-code/needless-abstraction slop on ParamClass/AbiPlan/classify_params, PassingClass/ParamSlot.class, or current_return_type.
+- No clean final source artifact yet demonstrates the same passing gates after deleting that stale/redundant scaffolding.
+
+final: REJECT
