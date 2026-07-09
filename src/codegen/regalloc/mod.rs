@@ -2,7 +2,7 @@
 //
 // Chapter 20 builds register allocation incrementally: liveness, interference,
 // simplification, select/color, and no-coalescing allocation are wired here.
-// Coalescing and iterative spill rewriting remain later wave work.
+// Coalescing remains later wave work; spill rewriting is handled by a bounded reallocation loop.
 #![allow(dead_code)]
 
 use anyhow::Result;
@@ -22,6 +22,7 @@ mod operands;
 mod rewrite;
 mod scratch;
 mod simplify;
+mod spill;
 mod types;
 
 pub use color::{ColorMap, SelectResult, select};

@@ -49,6 +49,12 @@ impl fmt::Display for LivenessError {
 impl Error for LivenessError {}
 
 impl RegisterClass {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Gp => "general-purpose",
+            Self::Xmm => "xmm",
+        }
+    }
     pub fn all_hardregs(self) -> Vec<Reg> {
         match self {
             Self::Gp => vec![

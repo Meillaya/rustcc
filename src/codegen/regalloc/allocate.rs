@@ -6,6 +6,7 @@ use crate::codegen::assembly::{AsmProgram, Instr, Operand, Reg, TopLevel};
 
 use super::rewrite::{cleanup_redundant_moves, replace_colored_pseudos};
 use super::scratch::use_reserved_address_scratch;
+use super::spill::{SpillState, max_reallocation_passes};
 use crate::ir::tacky::TypeEnv;
 
 use super::graph::{InterferenceBuild, InterferenceConfig, build_interference};
@@ -71,6 +72,37 @@ fn allocate_top_level(item: TopLevel, globals: &HashSet<String>) -> Result<TopLe
 }
 
 fn allocate_class(input: AllocationInput<'_>) -> Result<FunctionAllocation> {
+    let mut spill_state = SpillState::from_stack_only(input.instructions);
+    let max_passes = max_reallocation_passes(input.instructions);
+
+    // Mirrors nqcc2/lib/backend/regalloc.ml:595-620: build the graph, color it,
+    // leave spilled pseudos for stack replacement, and retry with those pseudos
+    // forced out of the graph so allocation reaches a spill-free fixed point.
+    for _ in 1..=max_passes {
+        let selected = select_class_pass(&input, &spill_state)?;
+        let new_spills = spill_state.add_coloring_spills(&selected.assignments);
+        if new_spills == 0 {
+            return Ok(FunctionAllocation {
+                instructions: replace_colored_pseudos(
+                    input.instructions,
+                    &selected.assignments,
+                    input.class,
+                ),
+                used_callee_saved: selected.used_callee_saved_regs,
+            });
+        }
+    }
+
+    anyhow::bail!(
+        "register allocation for {} exceeded {max_passes} spill passes",
+        input.class.name()
+    )
+}
+
+fn select_class_pass(
+    input: &AllocationInput<'_>,
+    spill_state: &SpillState,
+) -> Result<super::SelectResult> {
     let liveness_config = conservative_liveness_config(input.instructions);
     let liveness = analyze_function_liveness(
         input.fn_name,
@@ -79,7 +111,7 @@ fn allocate_class(input: AllocationInput<'_>) -> Result<FunctionAllocation> {
         &liveness_config,
     )?;
     let interference = InterferenceConfig {
-        aliased_pseudos: stack_only_pseudos(input.instructions),
+        aliased_pseudos: spill_state.pseudos().clone(),
         static_symbols: input.globals.iter().cloned().collect(),
     };
     let graph = build_interference(InterferenceBuild {
@@ -90,43 +122,7 @@ fn allocate_class(input: AllocationInput<'_>) -> Result<FunctionAllocation> {
         interference: &interference,
         liveness: &liveness_config,
     })?;
-    let selected = select(&graph, &simplify(&graph));
-    Ok(FunctionAllocation {
-        instructions: replace_colored_pseudos(
-            input.instructions,
-            &selected.assignments,
-            input.class,
-        ),
-        used_callee_saved: selected.used_callee_saved_regs,
-    })
-}
-
-fn stack_only_pseudos(instructions: &[Instr]) -> BTreeSet<String> {
-    let mut pseudos = BTreeSet::new();
-    for instr in instructions {
-        match instr {
-            Instr::Lea {
-                src: Operand::Pseudo(name),
-                ..
-            }
-            | Instr::Lea {
-                src: Operand::PseudoMem(name, _),
-                ..
-            } => {
-                pseudos.insert(name.clone());
-            }
-            _ => collect_pseudomem(instr, &mut pseudos),
-        }
-    }
-    pseudos
-}
-
-fn collect_pseudomem(instr: &Instr, pseudos: &mut BTreeSet<String>) {
-    for operand in super::instr_operands(instr) {
-        if let Operand::PseudoMem(name, _) = operand {
-            pseudos.insert(name);
-        }
-    }
+    Ok(select(&graph, &simplify(&graph)))
 }
 
 fn conservative_liveness_config(instructions: &[Instr]) -> LivenessConfig {

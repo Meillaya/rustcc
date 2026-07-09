@@ -1,0 +1,589 @@
+Task59 W21-T4 spill/reallocation loop adversarial verification
+Generated: 2026-07-09T04:40:29-04:00
+HEAD: 98ad1703de235aedbf5b1fd970bc22346206c30e
+Mode: read-only gate; production/tests/docs/plan untouched. Only this evidence artifact and gate-review artifact were written.
+
+FINAL VERDICT: needs-human-review
+Recommendation mapping: REJECT for final gate approval.
+
+Why not confirmed:
+- Functional and scope probes are green: fresh release build/check/test, chapter 20 no-coalescing, chapter 19, chapter 18 union, GP and XMM pressure probes all passed with explicit exit-code checks and stack-slot evidence.
+- However the final-gate input set lacks a Task59 code-review report, manual QA matrix, and notepad path. The gate contract requires those artifacts and requires the code-review report to explicitly cover programming/remove-ai-slops criteria. No Task59 review/QA artifacts were found under .omo/evidence (only task-59-spill-loop-implementation.txt, task-59-spill-loop-probe.c, and ignored task-59-spill-loop-probe.s). Therefore I cannot mark Task59 complete as confirmed.
+
+Original intent inferred:
+- Implement Chapter 20 no-coalescing spill handling so many live pseudo-registers can exceed available GP/XMM registers, spill to stack slots, re-run allocation until fixed point or bounded failure, and preserve Task58 coloring/liveness invariants.
+
+Desired user-visible outcome:
+- ./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only --no-coalescing remains green.
+- Programs with enough temporaries to force stack spills compile, link, and execute correctly without an infinite allocation loop.
+- No test/harness bridge, no test modifications, no premature coalescing, and R10/R11/XMM14/XMM15 remain non-allocatable reserved/scratch registers.
+
+Checked required artifacts/paths:
+- .omo/evidence/task-59-spill-loop-implementation.txt
+- .omo/evidence/task-59-spill-loop-probe.c
+- .omo/plans/c-compiler-rust.md task 59 lines around W21-T4
+- nqcc2/lib/backend/regalloc.ml lines 595-660
+- nqcc2/lib/backend/replace_pseudos.ml lines 1-137
+- src/codegen/regalloc/allocate.rs
+- src/codegen/regalloc/spill.rs
+- src/codegen/regalloc/types.rs
+- src/codegen/regalloc/mod.rs
+- src/codegen/regalloc/graph.rs
+- src/codegen/regalloc/color.rs
+- src/codegen/regalloc/rewrite.rs
+- src/codegen/regalloc/scratch.rs
+- src/codegen/regalloc/operands.rs
+
+Dirty worktree assessment:
+Task59 source files:
+- M src/codegen/regalloc/allocate.rs
+- M src/codegen/regalloc/mod.rs
+- M src/codegen/regalloc/types.rs
+- ?? src/codegen/regalloc/spill.rs
+Task59 evidence/artifacts:
+- ?? .omo/evidence/task-59-spill-loop-implementation.txt
+- ?? .omo/evidence/task-59-spill-loop-probe.c
+- !! .omo/evidence/task-59-spill-loop-probe.s (ignored generated assembly already present before my probe; not committed)
+State/unrelated artifacts:
+- M .omo/boulder.json
+- ?? .omo/start-work/
+- Prior unrelated .omo evidence: task-18, task-37, task-38, task-39, task-40, task-41 adversarial/review files listed in raw log.
+
+Implementation review summary:
+- allocate.rs now builds a SpillState, repeats select/build-interference until no new uncolored pseudos are discovered, bails after all_pseudos+1 passes, and leaves spilled pseudos for replace_pseudos to map to stack slots.
+- spill.rs tracks stack-only/address-taken pseudos plus coloring spills and excludes them from later interference graphs through InterferenceConfig.aliased_pseudos.
+- types.rs adds RegisterClass::name for bounded-loop error text.
+- mod.rs wires mod spill; no coalescing module/function was added.
+- replace_pseudos remains responsible for assigning concrete stack slots to leftover Pseudo/PseudoMem operands after register allocation.
+
+Scope-fidelity assessment:
+- tests/ diff: empty (git diff -- tests exit 0, no output).
+- Path/test-name bridge search in src: no source_path_hint/chapter_20/test(_|-)?name/test_compiler hits.
+- Reserved allocatable search in src/codegen/regalloc/types.rs: no Reg::R10, Reg::R11, XMM(14), XMM(15), 0..=14, or 0..=15 hits.
+- R11 appears only in src/codegen/regalloc/scratch.rs as reserved address scratch, not in RegisterClass::all_hardregs/caller_saved_regs.
+- XMM all_hardregs/caller_saved_regs remain 0..=13. XMM14/XMM15 appear in generated double-pressure assembly as fixup/scratch registers, not allocator colors.
+- Coalescing implementation search found only the existing comment in mod.rs referencing the OCaml source; no fn/mod/struct coalesce, rewrite_coalesced, or Briggs/George implementation was added.
+- No unwrap/expect/panic/todo/dbg/allow escape hatch hits in changed Task59 Rust files.
+- Pure LOC check: allocate.rs 239, spill.rs 71, types.rs 99, mod.rs 61, graph.rs 237, color.rs 118, rewrite.rs 143, scratch.rs 74, operands.rs 152; all under the 250 pure-LOC ceiling.
+
+Remove-ai-slops / programming direct pass:
+- No tests changed and no deletion-only/tautological test additions exist.
+- No path-specific success bridge exists in src.
+- Production extraction into spill.rs is bounded and single-responsibility (spill-state tracking) rather than speculative layering; no dependency added.
+- New loop is bounded by pseudo count, avoiding infinite-loop risk.
+- No public API or dependency expansion.
+- Evidence gap: no Task59 code-review report is available to independently show the same skill-perspective / overfit-slop coverage required by the final-gate contract.
+
+Fresh command results after current edits:
+- rustc --version => exit 0; rustc 1.95.0 (59807616e 2026-04-14).
+- git diff -- tests => exit 0; empty.
+- cargo fmt --all -- --check => exit 0.
+- cargo check --release => exit 0.
+- cargo build --release => exit 0.
+- cargo test --release => exit 0; 10 main tests OK, lib/doc tests 0 OK.
+- ./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only --no-coalescing => exit 0; Ran 66 tests; OK.
+- ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only => exit 0; Ran 120 tests; OK.
+- ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union => exit 0; Ran 286 tests; OK; assembler truncation warnings observed in existing chapter 18 fixtures.
+- git diff --check => exit 0.
+All long commands completed under the 300s timeout wrapper; no timeout exit (124) occurred.
+
+UltraQA/manual probes:
+1) Provided probe copied to /tmp, compiled with --no-coalescing, linked by gcc, executed:
+   - command exit 0 with explicit program_exit=16 expected=16.
+   - stack spill evidence: -4(%rbp) through -80(%rbp) loads/stores; 40 stack references shown in raw log.
+   - /tmp probe .c/.s/binary removed after run.
+2) Independent GP high-pressure probe with 48 int temporaries:
+   - generated /tmp/task59_pressure_independent.c, compiled --no-coalescing, linked, executed.
+   - command exit 0 with explicit program_exit=0 expected=0 (sum == 1176 predicate).
+   - stack_ref_count=72 from negative %rbp stack slots.
+   - /tmp artifacts removed.
+3) Independent XMM high-pressure probe with 32 double temporaries:
+   - generated /tmp/task59_pressure_double.c, compiled --no-coalescing, linked, executed.
+   - command exit 0 with explicit program_exit=0 expected=0 (sum == 528.0 predicate).
+   - stack_ref_count=37; movsd/addsd stack slots observed. Generated assembly used %xmm14/%xmm15 as scratch, not allocator hardregs.
+   - /tmp artifacts removed.
+
+Misleading-success-output check:
+- Fresh manual probes used explicit shell tests on process exit codes, not a wrapper that always exits 0 after printing an expected value.
+- Harness summaries include both exit codes and OK/Ran counts.
+- The implementation evidence's earlier command '/tmp/task59_spill_probe; printf exit=...' was re-run in stricter form against /tmp copies.
+
+Generated artifact check:
+- Existing ignored generated assembly: .omo/evidence/task-59-spill-loop-probe.s (ignored by git; present before this gate). I did not regenerate it; I compiled copied/independent probes under /tmp and cleaned their outputs.
+- No committed .s evidence was found for Task59.
+
+Exact evidence gaps/blockers:
+1) Missing Task59 code-review report artifact. Required final-gate criterion says the report must explicitly show programming/remove-ai-slops overfit/slop coverage; no such Task59 report exists.
+2) Missing Task59 manual QA matrix artifact/notepad path in gate input. This gate performed fresh manual QA, but the final-gate role requires inspecting the executor-provided artifacts too.
+3) Because of 1-2, final gate cannot return confirmed even though functional probes are green.
+
+RAW FRESH COMMAND LOG follows.
+
+## tool version
+$ rustc --version
+rustc 1.95.0 (59807616e 2026-04-14)
+[exit 0] completed in 0s (no timeout): rustc --version
+
+## dirty worktree
+$ git status --short
+ M .omo/boulder.json
+ M src/codegen/regalloc/allocate.rs
+ M src/codegen/regalloc/mod.rs
+ M src/codegen/regalloc/types.rs
+?? .omo/evidence/task-18-adversarial-verify-2.txt
+?? .omo/evidence/task-18-adversarial-verify-3.txt
+?? .omo/evidence/task-18-adversarial-verify-4.txt
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/evidence/task-37-adversarial-verify-2.txt
+?? .omo/evidence/task-37-adversarial-verify.txt
+?? .omo/evidence/task-38-adversarial-verify.txt
+?? .omo/evidence/task-39-adversarial-verify.txt
+?? .omo/evidence/task-40-adversarial-verify-2.txt
+?? .omo/evidence/task-40-adversarial-verify.txt
+?? .omo/evidence/task-41-adversarial-verify.txt
+?? .omo/evidence/task-59-spill-loop-implementation.txt
+?? .omo/evidence/task-59-spill-loop-probe.c
+?? .omo/start-work/
+?? src/codegen/regalloc/spill.rs
+[exit 0] completed in 0s (no timeout): git status --short
+
+## tests diff
+$ git diff -- tests
+[exit 0] completed in 0s (no timeout): git diff -- tests
+
+## format
+$ cargo fmt --all -- --check
+[exit 0] completed in 0s (no timeout): cargo fmt --all -- --check
+
+## release check
+$ cargo check --release
+    Finished `release` profile [optimized] target(s) in 0.01s
+[exit 0] completed in 0s (no timeout): cargo check --release
+
+## release build
+$ cargo build --release
+    Finished `release` profile [optimized] target(s) in 0.01s
+[exit 0] completed in 1s (no timeout): cargo build --release
+
+## release tests
+$ cargo test --release
+    Finished `release` profile [optimized] target(s) in 0.01s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 10 tests
+test compiler::tests::rejects_bad_lexeme ... ok
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test compiler::tests::compiles_constant_return ... ok
+test driver::tests::derives_all_output_paths ... ok
+test compiler::tests::parses_sizeof_expression_without_evaluating_it ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test driver::tests::parses_default_run_stage ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[exit 0] completed in 0s (no timeout): cargo test --release
+
+## chapter20 no coalescing latest
+$ ./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only --no-coalescing
+----------------------------------------------------------------------
+Ran 66 tests in 3.102s
+
+OK
+[exit 0] completed in 3s (no timeout): ./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only --no-coalescing
+
+## chapter19 latest
+$ ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only
+----------------------------------------------------------------------
+Ran 120 tests in 2.817s
+
+OK
+[exit 0] completed in 3s (no timeout): ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only
+
+## chapter18 union latest
+$ ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union
+----------------------------------------------------------------------
+Ran 286 tests in 5.362s
+
+OK
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s:17: Warning: value 0x1000000080000000 truncated to 0x80000000
+
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s:9: Warning: value 0x400000005 truncated to 0x5
+
+[exit 0] completed in 5s (no timeout): ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union
+
+## scope bridge search
+$ rg -n 'source_path_hint|chapter_20|test(_|-)?name|test_compiler' src || true
+[exit 0] completed in 0s (no timeout): rg -n 'source_path_hint|chapter_20|test(_|-)?name|test_compiler' src || true
+
+## allocatable reserved register search
+$ rg -n 'Reg::R(10|11)|XMM\(1[45]\)|0\.\.=1[45]' src/codegen/regalloc/types.rs || true
+[exit 0] completed in 1s (no timeout): rg -n 'Reg::R(10|11)|XMM\(1[45]\)|0\.\.=1[45]' src/codegen/regalloc/types.rs || true
+
+## all regalloc R11 uses
+$ rg -n 'Reg::R11' src/codegen/regalloc || true
+src/codegen/regalloc/scratch.rs:33:            dst: Operand::Reg(Reg::R11),
+src/codegen/regalloc/scratch.rs:41:    let reserved = Operand::Memory(Reg::R11, 0);
+[exit 0] completed in 0s (no timeout): rg -n 'Reg::R11' src/codegen/regalloc || true
+
+## coalescing implementation search
+$ rg -n 'fn coalesce|struct Coalesc|mod coalesc|rewrite_coalesced|coalesced_regs|Briggs|George' src/codegen/regalloc src/compiler.rs src/pipeline.rs || true
+src/codegen/regalloc/mod.rs:1:// Mirrors nqcc2/lib/backend/regalloc.ml (651 LOC; uses Briggs/George coalescing).
+[exit 0] completed in 0s (no timeout): rg -n 'fn coalesce|struct Coalesc|mod coalesc|rewrite_coalesced|coalesced_regs|Briggs|George' src/codegen/regalloc src/compiler.rs src/pipeline.rs || true
+
+## git whitespace check
+$ git diff --check
+[exit 0] completed in 0s (no timeout): git diff --check
+
+## manual provided probe copy
+$ cp .omo/evidence/task-59-spill-loop-probe.c /tmp/task59_spill_loop_probe.c && ./target/release/rustcc --no-coalescing -S /tmp/task59_spill_loop_probe.c && gcc /tmp/task59_spill_loop_probe.s -o /tmp/task59_spill_loop_probe && /tmp/task59_spill_loop_probe; code=$?; echo program_exit=$code expected=16; test $code -eq 16
+program_exit=16 expected=16
+[exit 0] completed in 0s (no timeout): cp .omo/evidence/task-59-spill-loop-probe.c /tmp/task59_spill_loop_probe.c && ./target/release/rustcc --no-coalescing -S /tmp/task59_spill_loop_probe.c && gcc /tmp/task59_spill_loop_probe.s -o /tmp/task59_spill_loop_probe && /tmp/task59_spill_loop_probe; code=$?; echo program_exit=$code expected=16; test $code -eq 16
+
+## manual provided probe stack slots
+$ rg -n -- '-[0-9]+\(%rbp\)' /tmp/task59_spill_loop_probe.s | head -60
+14:    movl $2, -4(%rbp)
+15:    movl $3, -8(%rbp)
+16:    movl $4, -12(%rbp)
+17:    movl $5, -16(%rbp)
+18:    movl $6, -20(%rbp)
+19:    movl $7, -24(%rbp)
+20:    movl $8, -28(%rbp)
+21:    movl $9, -32(%rbp)
+22:    movl $10, -36(%rbp)
+23:    movl $11, -40(%rbp)
+24:    movl $12, -44(%rbp)
+25:    movl $13, -48(%rbp)
+26:    movl $14, -52(%rbp)
+27:    movl $15, -56(%rbp)
+28:    movl $16, -60(%rbp)
+29:    movl $17, -64(%rbp)
+30:    movl $18, -68(%rbp)
+31:    movl $19, -72(%rbp)
+32:    movl $20, -76(%rbp)
+33:    movl $21, -80(%rbp)
+45:    addl -4(%rbp), %r9d
+46:    addl -8(%rbp), %r9d
+47:    addl -12(%rbp), %r9d
+48:    addl -16(%rbp), %r9d
+49:    addl -20(%rbp), %r9d
+50:    addl -24(%rbp), %r9d
+51:    addl -28(%rbp), %r9d
+52:    addl -32(%rbp), %r9d
+53:    addl -36(%rbp), %r9d
+54:    addl -40(%rbp), %r9d
+55:    addl -44(%rbp), %r9d
+56:    addl -48(%rbp), %r9d
+57:    addl -52(%rbp), %r9d
+58:    addl -56(%rbp), %r9d
+59:    addl -60(%rbp), %r9d
+60:    addl -64(%rbp), %r9d
+61:    addl -68(%rbp), %r9d
+62:    addl -72(%rbp), %r9d
+63:    addl -76(%rbp), %r9d
+64:    addl -80(%rbp), %r9d
+[exit 0] completed in 0s (no timeout): rg -n -- '-[0-9]+\(%rbp\)' /tmp/task59_spill_loop_probe.s | head -60
+
+## create independent high pressure C
+$ rm -f /tmp/task59_pressure_independent.c /tmp/task59_pressure_independent.s /tmp/task59_pressure_independent; { echo 'int main(void) {'; for raw in $(seq -w 0 47); do n=$((10#$raw + 1)); echo "    int a$raw = $n;"; done; printf '    int sum = '; sep=''; for raw in $(seq -w 0 47); do printf '%sa%s' "$sep" "$raw"; sep=' + '; done; echo ';'; echo '    return sum == 1176 ? 0 : 1;'; echo '}'; } > /tmp/task59_pressure_independent.c; wc -l /tmp/task59_pressure_independent.c; sed -n '1,12p' /tmp/task59_pressure_independent.c; tail -5 /tmp/task59_pressure_independent.c
+52 /tmp/task59_pressure_independent.c
+int main(void) {
+    int a00 = 1;
+    int a01 = 2;
+    int a02 = 3;
+    int a03 = 4;
+    int a04 = 5;
+    int a05 = 6;
+    int a06 = 7;
+    int a07 = 8;
+    int a08 = 9;
+    int a09 = 10;
+    int a10 = 11;
+    int a46 = 47;
+    int a47 = 48;
+    int sum = a00 + a01 + a02 + a03 + a04 + a05 + a06 + a07 + a08 + a09 + a10 + a11 + a12 + a13 + a14 + a15 + a16 + a17 + a18 + a19 + a20 + a21 + a22 + a23 + a24 + a25 + a26 + a27 + a28 + a29 + a30 + a31 + a32 + a33 + a34 + a35 + a36 + a37 + a38 + a39 + a40 + a41 + a42 + a43 + a44 + a45 + a46 + a47;
+    return sum == 1176 ? 0 : 1;
+}
+[exit 0] completed in 0s (no timeout): rm -f /tmp/task59_pressure_independent.c /tmp/task59_pressure_independent.s /tmp/task59_pressure_independent; { echo 'int main(void) {'; for raw in $(seq -w 0 47); do n=$((10#$raw + 1)); echo "    int a$raw = $n;"; done; printf '    int sum = '; sep=''; for raw in $(seq -w 0 47); do printf '%sa%s' "$sep" "$raw"; sep=' + '; done; echo ';'; echo '    return sum == 1176 ? 0 : 1;'; echo '}'; } > /tmp/task59_pressure_independent.c; wc -l /tmp/task59_pressure_independent.c; sed -n '1,12p' /tmp/task59_pressure_independent.c; tail -5 /tmp/task59_pressure_independent.c
+
+## independent high pressure compile/link/run
+$ ./target/release/rustcc --no-coalescing -S /tmp/task59_pressure_independent.c && gcc /tmp/task59_pressure_independent.s -o /tmp/task59_pressure_independent && /tmp/task59_pressure_independent; code=$?; echo program_exit=$code expected=0; test $code -eq 0
+program_exit=0 expected=0
+[exit 0] completed in 0s (no timeout): ./target/release/rustcc --no-coalescing -S /tmp/task59_pressure_independent.c && gcc /tmp/task59_pressure_independent.s -o /tmp/task59_pressure_independent && /tmp/task59_pressure_independent; code=$?; echo program_exit=$code expected=0; test $code -eq 0
+
+## independent high pressure stack slots
+$ rg -n -- '-[0-9]+\(%rbp\)' /tmp/task59_pressure_independent.s | head -80; echo stack_ref_count=$(rg -o -- '-[0-9]+\(%rbp\)' /tmp/task59_pressure_independent.s | wc -l)
+14:    movl $2, -4(%rbp)
+15:    movl $3, -8(%rbp)
+16:    movl $4, -12(%rbp)
+17:    movl $5, -16(%rbp)
+18:    movl $6, -20(%rbp)
+19:    movl $7, -24(%rbp)
+20:    movl $8, -28(%rbp)
+21:    movl $9, -32(%rbp)
+22:    movl $10, -36(%rbp)
+23:    movl $11, -40(%rbp)
+24:    movl $12, -44(%rbp)
+25:    movl $13, -48(%rbp)
+26:    movl $14, -52(%rbp)
+27:    movl $15, -56(%rbp)
+28:    movl $16, -60(%rbp)
+29:    movl $17, -64(%rbp)
+30:    movl $18, -68(%rbp)
+31:    movl $19, -72(%rbp)
+32:    movl $20, -76(%rbp)
+33:    movl $21, -80(%rbp)
+34:    movl $22, -84(%rbp)
+35:    movl $23, -88(%rbp)
+36:    movl $24, -92(%rbp)
+37:    movl $25, -96(%rbp)
+38:    movl $26, -100(%rbp)
+39:    movl $27, -104(%rbp)
+40:    movl $28, -108(%rbp)
+41:    movl $29, -112(%rbp)
+42:    movl $30, -116(%rbp)
+43:    movl $31, -120(%rbp)
+44:    movl $32, -124(%rbp)
+45:    movl $33, -128(%rbp)
+46:    movl $34, -132(%rbp)
+47:    movl $35, -136(%rbp)
+48:    movl $36, -140(%rbp)
+49:    movl $37, -144(%rbp)
+61:    addl -4(%rbp), %r9d
+62:    addl -8(%rbp), %r9d
+63:    addl -12(%rbp), %r9d
+64:    addl -16(%rbp), %r9d
+65:    addl -20(%rbp), %r9d
+66:    addl -24(%rbp), %r9d
+67:    addl -28(%rbp), %r9d
+68:    addl -32(%rbp), %r9d
+69:    addl -36(%rbp), %r9d
+70:    addl -40(%rbp), %r9d
+71:    addl -44(%rbp), %r9d
+72:    addl -48(%rbp), %r9d
+73:    addl -52(%rbp), %r9d
+74:    addl -56(%rbp), %r9d
+75:    addl -60(%rbp), %r9d
+76:    addl -64(%rbp), %r9d
+77:    addl -68(%rbp), %r9d
+78:    addl -72(%rbp), %r9d
+79:    addl -76(%rbp), %r9d
+80:    addl -80(%rbp), %r9d
+81:    addl -84(%rbp), %r9d
+82:    addl -88(%rbp), %r9d
+83:    addl -92(%rbp), %r9d
+84:    addl -96(%rbp), %r9d
+85:    addl -100(%rbp), %r9d
+86:    addl -104(%rbp), %r9d
+87:    addl -108(%rbp), %r9d
+88:    addl -112(%rbp), %r9d
+89:    addl -116(%rbp), %r9d
+90:    addl -120(%rbp), %r9d
+91:    addl -124(%rbp), %r9d
+92:    addl -128(%rbp), %r9d
+93:    addl -132(%rbp), %r9d
+94:    addl -136(%rbp), %r9d
+95:    addl -140(%rbp), %r9d
+96:    addl -144(%rbp), %r9d
+stack_ref_count=72
+[exit 0] completed in 0s (no timeout): rg -n -- '-[0-9]+\(%rbp\)' /tmp/task59_pressure_independent.s | head -80; echo stack_ref_count=$(rg -o -- '-[0-9]+\(%rbp\)' /tmp/task59_pressure_independent.s | wc -l)
+
+## cleanup tmp outputs
+$ rm -f /tmp/task59_spill_loop_probe.c /tmp/task59_spill_loop_probe.s /tmp/task59_spill_loop_probe /tmp/task59_pressure_independent.c /tmp/task59_pressure_independent.s /tmp/task59_pressure_independent; test ! -e /tmp/task59_spill_loop_probe && test ! -e /tmp/task59_pressure_independent
+[exit 0] completed in 0s (no timeout): rm -f /tmp/task59_spill_loop_probe.c /tmp/task59_spill_loop_probe.s /tmp/task59_spill_loop_probe /tmp/task59_pressure_independent.c /tmp/task59_pressure_independent.s /tmp/task59_pressure_independent; test ! -e /tmp/task59_spill_loop_probe && test ! -e /tmp/task59_pressure_independent
+
+## final dirty worktree
+$ git status --short --ignored .omo/evidence src/codegen/regalloc .omo/boulder.json | sed -n '1,220p'
+ M .omo/boulder.json
+ M src/codegen/regalloc/allocate.rs
+ M src/codegen/regalloc/mod.rs
+ M src/codegen/regalloc/types.rs
+?? .omo/evidence/task-18-adversarial-verify-2.txt
+?? .omo/evidence/task-18-adversarial-verify-3.txt
+?? .omo/evidence/task-18-adversarial-verify-4.txt
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/evidence/task-37-adversarial-verify-2.txt
+?? .omo/evidence/task-37-adversarial-verify.txt
+?? .omo/evidence/task-38-adversarial-verify.txt
+?? .omo/evidence/task-39-adversarial-verify.txt
+?? .omo/evidence/task-40-adversarial-verify-2.txt
+?? .omo/evidence/task-40-adversarial-verify.txt
+?? .omo/evidence/task-41-adversarial-verify.txt
+?? .omo/evidence/task-59-spill-loop-implementation.txt
+?? .omo/evidence/task-59-spill-loop-probe.c
+?? src/codegen/regalloc/spill.rs
+!! .omo/evidence/review-union-core/
+!! .omo/evidence/task-59-spill-loop-probe.s
+[exit 0] completed in 0s (no timeout): git status --short --ignored .omo/evidence src/codegen/regalloc .omo/boulder.json | sed -n '1,220p'
+
+## create independent double high pressure C
+$ rm -f /tmp/task59_pressure_double.c /tmp/task59_pressure_double.s /tmp/task59_pressure_double; { echo 'int main(void) {'; for raw in $(seq -w 0 31); do n=$((10#$raw + 1)); echo "    double d$raw = $n.0;"; done; printf '    double sum = '; sep=''; for raw in $(seq -w 0 31); do printf '%sd%s' "$sep" "$raw"; sep=' + '; done; echo ';'; echo '    return sum == 528.0 ? 0 : 1;'; echo '}'; } > /tmp/task59_pressure_double.c; wc -l /tmp/task59_pressure_double.c; sed -n '1,10p' /tmp/task59_pressure_double.c; tail -5 /tmp/task59_pressure_double.c
+36 /tmp/task59_pressure_double.c
+int main(void) {
+    double d00 = 1.0;
+    double d01 = 2.0;
+    double d02 = 3.0;
+    double d03 = 4.0;
+    double d04 = 5.0;
+    double d05 = 6.0;
+    double d06 = 7.0;
+    double d07 = 8.0;
+    double d08 = 9.0;
+    double d30 = 31.0;
+    double d31 = 32.0;
+    double sum = d00 + d01 + d02 + d03 + d04 + d05 + d06 + d07 + d08 + d09 + d10 + d11 + d12 + d13 + d14 + d15 + d16 + d17 + d18 + d19 + d20 + d21 + d22 + d23 + d24 + d25 + d26 + d27 + d28 + d29 + d30 + d31;
+    return sum == 528.0 ? 0 : 1;
+}
+[exit 0] completed in 0s (no timeout): rm -f /tmp/task59_pressure_double.c /tmp/task59_pressure_double.s /tmp/task59_pressure_double; { echo 'int main(void) {'; for raw in $(seq -w 0 31); do n=$((10#$raw + 1)); echo "    double d$raw = $n.0;"; done; printf '    double sum = '; sep=''; for raw in $(seq -w 0 31); do printf '%sd%s' "$sep" "$raw"; sep=' + '; done; echo ';'; echo '    return sum == 528.0 ? 0 : 1;'; echo '}'; } > /tmp/task59_pressure_double.c; wc -l /tmp/task59_pressure_double.c; sed -n '1,10p' /tmp/task59_pressure_double.c; tail -5 /tmp/task59_pressure_double.c
+
+## independent double high pressure compile/link/run
+$ ./target/release/rustcc --no-coalescing -S /tmp/task59_pressure_double.c && gcc /tmp/task59_pressure_double.s -o /tmp/task59_pressure_double && /tmp/task59_pressure_double; code=$?; echo program_exit=$code expected=0; test $code -eq 0
+program_exit=0 expected=0
+[exit 0] completed in 0s (no timeout): ./target/release/rustcc --no-coalescing -S /tmp/task59_pressure_double.c && gcc /tmp/task59_pressure_double.s -o /tmp/task59_pressure_double && /tmp/task59_pressure_double; code=$?; echo program_exit=$code expected=0; test $code -eq 0
+
+## independent double high pressure stack slots
+$ rg -n -- '-[0-9]+\(%rbp\)' /tmp/task59_pressure_double.s | head -80; echo stack_ref_count=$(rg -o -- '-[0-9]+\(%rbp\)' /tmp/task59_pressure_double.s | wc -l); rg -n 'movsd|addsd|xmm' /tmp/task59_pressure_double.s | head -80
+9:    movsd %xmm15, -8(%rbp)
+11:    movsd %xmm15, -16(%rbp)
+13:    movsd %xmm15, -24(%rbp)
+15:    movsd %xmm15, -32(%rbp)
+17:    movsd %xmm15, -40(%rbp)
+19:    movsd %xmm15, -48(%rbp)
+21:    movsd %xmm15, -56(%rbp)
+23:    movsd %xmm15, -64(%rbp)
+25:    movsd %xmm15, -72(%rbp)
+27:    movsd %xmm15, -80(%rbp)
+29:    movsd %xmm15, -88(%rbp)
+31:    movsd %xmm15, -96(%rbp)
+33:    movsd %xmm15, -104(%rbp)
+35:    movsd %xmm15, -112(%rbp)
+37:    movsd %xmm15, -120(%rbp)
+39:    movsd %xmm15, -128(%rbp)
+41:    movsd %xmm15, -136(%rbp)
+43:    movsd %xmm15, -144(%rbp)
+58:    addsd -8(%rbp), %xmm14
+61:    addsd -16(%rbp), %xmm14
+64:    addsd -24(%rbp), %xmm14
+67:    addsd -32(%rbp), %xmm14
+70:    addsd -40(%rbp), %xmm14
+73:    addsd -48(%rbp), %xmm14
+76:    addsd -56(%rbp), %xmm14
+79:    addsd -64(%rbp), %xmm14
+82:    addsd -72(%rbp), %xmm14
+85:    addsd -80(%rbp), %xmm14
+88:    addsd -88(%rbp), %xmm14
+91:    addsd -96(%rbp), %xmm14
+94:    addsd -104(%rbp), %xmm14
+97:    addsd -112(%rbp), %xmm14
+100:    addsd -120(%rbp), %xmm14
+103:    addsd -128(%rbp), %xmm14
+106:    addsd -136(%rbp), %xmm14
+109:    addsd -144(%rbp), %xmm14
+150:    movl -152(%rbp), %r9d
+stack_ref_count=37
+7:    movsd dbl.0(%rip), %xmm13
+8:    movsd dbl.1(%rip), %xmm15
+9:    movsd %xmm15, -8(%rbp)
+10:    movsd dbl.2(%rip), %xmm15
+11:    movsd %xmm15, -16(%rbp)
+12:    movsd dbl.3(%rip), %xmm15
+13:    movsd %xmm15, -24(%rbp)
+14:    movsd dbl.4(%rip), %xmm15
+15:    movsd %xmm15, -32(%rbp)
+16:    movsd dbl.5(%rip), %xmm15
+17:    movsd %xmm15, -40(%rbp)
+18:    movsd dbl.6(%rip), %xmm15
+19:    movsd %xmm15, -48(%rbp)
+20:    movsd dbl.7(%rip), %xmm15
+21:    movsd %xmm15, -56(%rbp)
+22:    movsd dbl.8(%rip), %xmm15
+23:    movsd %xmm15, -64(%rbp)
+24:    movsd dbl.9(%rip), %xmm15
+25:    movsd %xmm15, -72(%rbp)
+26:    movsd dbl.10(%rip), %xmm15
+27:    movsd %xmm15, -80(%rbp)
+28:    movsd dbl.11(%rip), %xmm15
+29:    movsd %xmm15, -88(%rbp)
+30:    movsd dbl.12(%rip), %xmm15
+31:    movsd %xmm15, -96(%rbp)
+32:    movsd dbl.13(%rip), %xmm15
+33:    movsd %xmm15, -104(%rbp)
+34:    movsd dbl.14(%rip), %xmm15
+35:    movsd %xmm15, -112(%rbp)
+36:    movsd dbl.15(%rip), %xmm15
+37:    movsd %xmm15, -120(%rbp)
+38:    movsd dbl.16(%rip), %xmm15
+39:    movsd %xmm15, -128(%rbp)
+40:    movsd dbl.17(%rip), %xmm15
+41:    movsd %xmm15, -136(%rbp)
+42:    movsd dbl.18(%rip), %xmm15
+43:    movsd %xmm15, -144(%rbp)
+44:    movsd dbl.19(%rip), %xmm0
+45:    movsd dbl.20(%rip), %xmm1
+46:    movsd dbl.21(%rip), %xmm2
+47:    movsd dbl.22(%rip), %xmm3
+48:    movsd dbl.23(%rip), %xmm4
+49:    movsd dbl.24(%rip), %xmm5
+50:    movsd dbl.25(%rip), %xmm6
+51:    movsd dbl.26(%rip), %xmm7
+52:    movsd dbl.27(%rip), %xmm8
+53:    movsd dbl.28(%rip), %xmm9
+54:    movsd dbl.29(%rip), %xmm10
+55:    movsd dbl.30(%rip), %xmm11
+56:    movsd dbl.31(%rip), %xmm12
+57:    movsd %xmm13, %xmm14
+58:    addsd -8(%rbp), %xmm14
+59:    movsd %xmm14, %xmm13
+60:    movsd %xmm13, %xmm14
+61:    addsd -16(%rbp), %xmm14
+62:    movsd %xmm14, %xmm13
+63:    movsd %xmm13, %xmm14
+64:    addsd -24(%rbp), %xmm14
+65:    movsd %xmm14, %xmm13
+66:    movsd %xmm13, %xmm14
+67:    addsd -32(%rbp), %xmm14
+68:    movsd %xmm14, %xmm13
+69:    movsd %xmm13, %xmm14
+70:    addsd -40(%rbp), %xmm14
+71:    movsd %xmm14, %xmm13
+72:    movsd %xmm13, %xmm14
+73:    addsd -48(%rbp), %xmm14
+74:    movsd %xmm14, %xmm13
+75:    movsd %xmm13, %xmm14
+76:    addsd -56(%rbp), %xmm14
+77:    movsd %xmm14, %xmm13
+78:    movsd %xmm13, %xmm14
+79:    addsd -64(%rbp), %xmm14
+80:    movsd %xmm14, %xmm13
+81:    movsd %xmm13, %xmm14
+82:    addsd -72(%rbp), %xmm14
+83:    movsd %xmm14, %xmm13
+84:    movsd %xmm13, %xmm14
+85:    addsd -80(%rbp), %xmm14
+86:    movsd %xmm14, %xmm13
+[exit 0] completed in 0s (no timeout): rg -n -- '-[0-9]+\(%rbp\)' /tmp/task59_pressure_double.s | head -80; echo stack_ref_count=$(rg -o -- '-[0-9]+\(%rbp\)' /tmp/task59_pressure_double.s | wc -l); rg -n 'movsd|addsd|xmm' /tmp/task59_pressure_double.s | head -80
+
+## cleanup double tmp outputs
+$ rm -f /tmp/task59_pressure_double.c /tmp/task59_pressure_double.s /tmp/task59_pressure_double; test ! -e /tmp/task59_pressure_double
+[exit 0] completed in 0s (no timeout): rm -f /tmp/task59_pressure_double.c /tmp/task59_pressure_double.s /tmp/task59_pressure_double; test ! -e /tmp/task59_pressure_double
+
+Post-artifact cleanup note:
+- Removed pre-existing /tmp/task59_verify.sh from the executor run after inspecting it; final check found no /tmp/task59_* remnants.

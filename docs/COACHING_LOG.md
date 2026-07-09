@@ -1382,3 +1382,40 @@ Implemented the Chapter 20 W21-T3 select/coloring phase and wired the no-coalesc
 - W21-T5 must implement conservative coalescing and revisit the Chapter 20 default mode.
 - `src/codegen/regalloc/allocate.rs` remains in the 200-250 pure LOC warning band; future growth should split into focused helpers.
 - Chapter 20 helper `.s` fixtures are required by the official harness and were restored as force-added ignored files.
+
+## Wave 21 / Chapter 20 spill and re-allocation loop (task 59)
+
+Implemented the W21-T4 bounded spill/re-allocation loop for Chapter 20 no-coalescing register allocation. The allocator now records uncolored pseudos as stack-only spill candidates, excludes them from subsequent interference/color passes, and repeats class allocation until no new spills are discovered or the safe pseudo-count bound would be exceeded. Concrete stack slots remain assigned by the existing pseudo replacement/fixup path, matching the current Rust backend pipeline while preserving the OCaml regalloc structure and Task 58 reserved-register invariants.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `git diff -- tests` | empty; official harness unchanged |
+| `cargo fmt --all -- --check` | exit 0 |
+| `cargo check --release` | exit 0 |
+| `cargo build --release` | exit 0 |
+| `cargo test --release` | 10 passed, 0 failed |
+| chapter 20 `--latest-only --no-coalescing` | `Ran 66 tests ... OK` |
+| chapter 19 default `--latest-only` | `Ran 120 tests ... OK` |
+| chapter 18 `--latest-only --union` | `Ran 286 tests ... OK` |
+| durable spill probe | high-pressure int program exits 16 with stack slots observed |
+| independent manual QA | high-pressure int and double programs both exit 0 with stack-slot evidence |
+| scope scan | no source-path/chapter/test bridge; no tests diff; R10/R11/XMM14/XMM15 not allocatable; no coalescing implementation |
+| code review | APPROVE with WATCH items only |
+| final adversarial gate | confirmed |
+| `git diff --check` | exit 0 |
+
+### Evidence
+
+- `.omo/evidence/task-59-spill-loop-implementation.txt`
+- `.omo/evidence/task-59-spill-loop-probe.c`
+- `.omo/evidence/task-59-spill-loop-code-review.md`
+- `.omo/evidence/task-59-spill-loop-manual-qa.md`
+- `.omo/evidence/task-59-spill-loop-adversarial-verify.txt`
+- `.omo/evidence/task-59-spill-loop-adversarial-verify-2.txt`
+
+### Remaining scope
+
+- W21-T5 must implement conservative coalescing and the default coalescing gate.
+- `src/codegen/regalloc/allocate.rs` remains in the 200-250 pure LOC warning band; future coalescing work should split rather than grow it.

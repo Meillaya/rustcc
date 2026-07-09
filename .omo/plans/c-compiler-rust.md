@@ -1937,7 +1937,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   **Acceptance Criteria**:
   - [ ] `--chapter 20 --latest-only --no-coalescing` passes.
 
-- [ ] 59. W21-T4: Chapter 20 - spilling + re-allocation loop
+- [x] 59. W21-T4: Chapter 20 - spilling + re-allocation loop
 
   **What to do**: Handle spills.
   - For each spilled pseudo, assign a stack slot. Re-run allocation until no spills remain (or limit iterations).
