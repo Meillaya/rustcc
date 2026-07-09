@@ -1,4 +1,0 @@
-# Build release
-Surface: shell
-Invocation: cargo build --release
-    Finished `release` profile [optimized] target(s) in 0.05s

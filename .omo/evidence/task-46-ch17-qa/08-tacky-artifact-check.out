@@ -1,6 +1,0 @@
-$ python3 - <<PY # inspect tacky artifact
-contains_Assign=False
-contains_value_line_3=False
-contains_value_line_4=True
-contains_return_main_i=True
-python_check_exit_code=0

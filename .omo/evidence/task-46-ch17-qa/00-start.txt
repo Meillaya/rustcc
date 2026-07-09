@@ -1,3 +1,0 @@
-QA rerun start: 2026-07-08T16:43:33-04:00
-repo: /home/mei/projects/rustcc
-scratch: /tmp/rustcc-ch17-qa

@@ -1,4 +1,0 @@
-$ ./target/release/rustcc /tmp/rustcc-ch17-qa/sizeof-int.c
-compile_exit_code=0
-$ /tmp/rustcc-ch17-qa/sizeof-int
-program_exit_code=4

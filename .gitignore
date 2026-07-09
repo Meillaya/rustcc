@@ -29,3 +29,7 @@ Cargo.lock
 nqcc2/
 scripts/
 .omx/
+
+# Local orchestration state
+.omo/
+.omc/

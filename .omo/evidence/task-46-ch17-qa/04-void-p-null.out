@@ -1,4 +1,0 @@
-$ ./target/release/rustcc /tmp/rustcc-ch17-qa/void-p-null.c
-compile_exit_code=0
-$ /tmp/rustcc-ch17-qa/void-p-null
-program_exit_code=1

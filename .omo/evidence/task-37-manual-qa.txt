@@ -1,9 +1,0 @@
-=== manual core double program ===
-int main(void) { double x = 3.5; return x > 1.0; }
-compile_status=0
-run_status=1 (expected 1)
-=== malformed double literal should fail ===
-lex error: malformed floating constant 1e
-malformed_status=1 (expected nonzero)
-=== cleanup ===
-removed .omo/tmp/task37 temporary C files, assembly, binaries, and directory

@@ -1,2 +1,0 @@
-qa3_int_g=5
-qa4_static_g=5

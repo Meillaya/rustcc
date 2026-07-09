@@ -1,6 +1,0 @@
-=== QA1: shadow x (expected 1) ===
-exit code: 1
-=== QA2: inner block doesn't pollute (expected 1) ===
-exit code: 1
-=== QA3: nested return (expected 3) ===
-exit code: 3
