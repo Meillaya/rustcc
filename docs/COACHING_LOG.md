@@ -1419,3 +1419,45 @@ Implemented the W21-T4 bounded spill/re-allocation loop for Chapter 20 no-coales
 
 - W21-T5 must implement conservative coalescing and the default coalescing gate.
 - `src/codegen/regalloc/allocate.rs` remains in the 200-250 pure LOC warning band; future coalescing work should split rather than grow it.
+
+## Wave 21 / Chapter 20 conservative coalescing and both-modes gate (task 60)
+
+Implemented the W21-T5 conservative coalescing path for Chapter 20 register allocation. The default compiler mode now runs register allocation with coalescing enabled, while `--no-coalescing` preserves the Task 58/59 path. The coalescer collects copy-related pseudo moves, applies conservative Briggs/George-style safety checks before merging, rewrites coalesced pseudos, and then runs the existing coloring/spill loop. Cleanup after review split oversized modules, centralized the XMM binary classifier, and kept the late division-copy legality fix isolated and guarded.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `git diff -- tests` | empty; official harness unchanged |
+| `cargo fmt --all -- --check` | exit 0 |
+| `cargo check --release` | exit 0 |
+| `cargo build --release` | exit 0 |
+| `cargo test --release` | 10 passed, 0 failed |
+| chapter 20 `--latest-only --no-coalescing` | `Ran 66 tests ... OK` |
+| chapter 20 default `--latest-only` | `Ran 66 tests ... OK` |
+| chapter 19 default `--latest-only` | `Ran 120 tests ... OK` |
+| chapter 18 `--latest-only --union` | `Ran 286 tests ... OK` |
+| copy-heavy manual QA | allocator-relevant moves reduced from 1 (`--no-coalescing`) to 0 (default) |
+| scope scan | no source-path/chapter/test bridge; no tests diff; R10/R11/XMM14/XMM15 not allocatable |
+| file-size cleanup | newly crossed files split back below 250 pure LOC; remaining warning-band files documented |
+| post-fix code review | APPROVE with WATCH items only |
+| final adversarial gate | APPROVE/confirmed |
+| `git diff --check` | exit 0 |
+
+### Evidence
+
+- `.omo/evidence/task-60-coalescing-implementation.txt`
+- `.omo/evidence/task-60-coalescing-move-count.txt`
+- `.omo/evidence/task-60-copy-heavy.c`
+- `.omo/evidence/task-60-coalescing-code-review.md`
+- `.omo/evidence/task-60-coalescing-adversarial-verify.txt`
+- `.omo/evidence/task-60-coalescing-fix.txt`
+- `.omo/evidence/task-60-coalescing-code-review-2.md`
+- `.omo/evidence/task-60-coalescing-adversarial-verify-2.txt`
+- `.omo/evidence/task-60-coalescing-manual-qa.md`
+- `.omo/evidence/task-60-coalescing-adversarial-verify-3.txt`
+
+### Remaining scope
+
+- Wave 22 must perform documentation/tooling polish and full chapter regression.
+- `src/codegen/codegen.rs` and `src/driver.rs` remain oversized pre-existing files; Task 60 reduced/split newly crossed backend files but did not attempt broad decomposition outside the coalescing scope.

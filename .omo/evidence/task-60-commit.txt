@@ -1,0 +1,23 @@
+Task 60 commit evidence
+
+Task: W21-T5 Chapter 20 conservative coalescing + both-modes gate.
+
+Completion state:
+- Plan checkbox changed to [x].
+- docs/COACHING_LOG.md appended with Task 60 gate summary.
+- Post-fix code review artifact: .omo/evidence/task-60-coalescing-code-review-2.md (APPROVE / WATCH).
+- Manual QA artifact: .omo/evidence/task-60-coalescing-manual-qa.md (PASS).
+- Final adversarial gate artifact: .omo/evidence/task-60-coalescing-adversarial-verify-3.txt (APPROVE / confirmed).
+
+Final verification evidence from approved gate:
+- git diff -- tests: empty; official harness unchanged.
+- cargo fmt --all -- --check: exit 0.
+- cargo check --release: exit 0.
+- cargo build --release: exit 0.
+- cargo test --release: exit 0, 10 tests passed.
+- ./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only --no-coalescing: exit 0, 66 OK.
+- ./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only: exit 0, 66 OK.
+- ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only: exit 0, 120 OK.
+- ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union: exit 0, 286 OK.
+- Copy-heavy manual QA showed allocator-relevant move count 1 -> 0 under default coalescing.
+- git diff --check: exit 0.

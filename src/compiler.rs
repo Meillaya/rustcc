@@ -121,12 +121,7 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompilerArtifact
         }
     }
     let asm_program = convert_tacky_to_asm(&optimized_tacky, &typed_program)?;
-    let should_allocate = !options.regalloc_options.coalescing_enabled;
-    let asm_program = if should_allocate {
-        allocate_registers(asm_program, &global_names, options.regalloc_options)?
-    } else {
-        asm_program
-    };
+    let asm_program = allocate_registers(asm_program, &global_names, options.regalloc_options)?;
     let asm_program = replace_pseudos(asm_program, &global_names)?;
     let asm_program = fixup_asm(asm_program)?;
     let assembly_text = emit(&asm_program)?;

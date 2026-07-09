@@ -1,8 +1,8 @@
 // Mirrors nqcc2/lib/backend/regalloc.ml (651 LOC; uses Briggs/George coalescing).
 //
 // Chapter 20 builds register allocation incrementally: liveness, interference,
-// simplification, select/color, and no-coalescing allocation are wired here.
-// Coalescing remains later wave work; spill rewriting is handled by a bounded reallocation loop.
+// conservative coalescing, simplification, select/color, and bounded spill
+// reallocation.
 #![allow(dead_code)]
 
 use anyhow::Result;
@@ -12,11 +12,16 @@ use std::fmt;
 use std::collections::HashSet;
 
 use crate::codegen::assembly::{AsmProgram, Instr};
+use crate::driver::RegallocOptions;
 use crate::ir::cfg::{self, CfgBuildError};
 
+mod abi_liveness;
 mod allocate;
+mod coalesce;
 mod color;
+mod division_copy;
 mod graph;
+mod graph_pseudos;
 mod liveness;
 mod operands;
 mod rewrite;
@@ -77,6 +82,10 @@ pub fn analyze_function_liveness(
 
 /// Assign physical registers where coloring succeeds; uncolored pseudos stay
 /// as spill markers for `replace_pseudos` to place on the stack.
-pub fn allocate(asm: AsmProgram, globals: &HashSet<String>) -> Result<AsmProgram> {
-    allocate::allocate(asm, globals)
+pub fn allocate(
+    asm: AsmProgram,
+    globals: &HashSet<String>,
+    options: RegallocOptions,
+) -> Result<AsmProgram> {
+    allocate::allocate(asm, globals, options)
 }

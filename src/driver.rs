@@ -53,11 +53,8 @@ pub struct RegallocOptions {
 
 impl Default for RegallocOptions {
     fn default() -> Self {
-        // Chapter 20a has coloring/select without W21-T5 coalescing. Keep the
-        // compiler's default allocation mode no-coalescing until coalescing is
-        // implemented and can be enabled deliberately.
         Self {
-            coalescing_enabled: false,
+            coalescing_enabled: true,
         }
     }
 }

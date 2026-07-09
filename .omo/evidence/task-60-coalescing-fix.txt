@@ -1,0 +1,298 @@
+TASK60 COALESCING CLEANUP FIX EVIDENCE
+======================================
+workspace: /home/mei/projects/rustcc
+recorded_at: 2026-07-09
+scope: current uncommitted Task60 diff, in-place; tests/ unchanged
+
+Summary
+-------
+- Removed the broad dividend setup peephole from src/codegen/regalloc/rewrite.rs: the old cleanup_dividend_setup/dividend_setup_replacement functions are gone.
+- Removing that behavior entirely caused the optimized chapter20 default coalescing gate to fail on briggs_dont_coalesce (8 register moves, max 7). To preserve the required gate without hiding the old broad peephole in rewrite.rs, the required destructive-division copy collapse is isolated in src/codegen/regalloc/division_copy.rs with a narrower safety guard: it refuses to move the saved dividend write across the intervening divisor-setup instruction if that instruction mentions the saved register.
+- Split Task60 size regressions into focused modules:
+  * src/codegen/regalloc/abi_liveness.rs owns call/return liveness metadata helpers extracted from allocate.rs.
+  * src/codegen/regalloc/graph_pseudos.rs owns pseudo-node discovery extracted from graph.rs.
+  * src/codegen/fixup/split.rs owns fixup split rules extracted from fixup.rs.
+  * src/codegen/replace_pseudos/split.rs and src/codegen/replace_pseudos/move_split.rs own replace-pseudos split rules extracted from replace_pseudos.rs.
+  * src/codegen/xmm.rs owns the shared XMM binary classifier used by fixup, replace_pseudos, regalloc rewrite, and coalescing.
+- No test/harness edits: git diff -- tests is empty.
+- No source path/test-name/system-C/interpreter bridge hits in src.
+- R10/R11 and XMM14/XMM15 remain reserved/non-allocatable; scans still route allocation through RegisterClass::all_hardregs/contains, with R11 only in scratch reservation.
+
+Pure LOC before/after
+---------------------
+Command form used for counts:
+for f in <files>; do [ -f "$f" ] && printf "%s " "$f" && awk '!/^[[:space:]]*$/ && !/^[[:space:]]*(\/\/|#|--)/' "$f" | wc -l; done
+
+Before is HEAD (pre-Task60 worktree baseline for tracked files); after is current worktree.
+
+file before_HEAD after_worktree
+src/codegen/regalloc/allocate.rs 239 180
+src/codegen/regalloc/abi_liveness.rs 0 103
+src/codegen/regalloc/coalesce.rs 0 236
+src/codegen/regalloc/division_copy.rs 0 157
+src/codegen/regalloc/graph.rs 237 231
+src/codegen/regalloc/graph_pseudos.rs 0 37
+src/codegen/regalloc/rewrite.rs 143 135
+src/codegen/fixup.rs 235 33
+src/codegen/fixup/split.rs 0 238
+src/codegen/replace_pseudos.rs 474 197
+src/codegen/replace_pseudos/split.rs 0 199
+src/codegen/replace_pseudos/move_split.rs 0 125
+src/codegen/xmm.rs 0 11
+src/codegen/mod.rs 19 20
+src/codegen/codegen.rs 2006 1958
+src/driver.rs 278 278
+src/compiler.rs 169 164
+src/pipeline.rs 108 108
+
+Notes on files still over 250 pure LOC:
+- src/codegen/codegen.rs: 2006 -> 1958 pure LOC. This was already far over budget before Task60 and was reduced by Task60; splitting it further would be a broad compiler-lowering refactor outside this blocker fix.
+- src/driver.rs: 278 -> 278 pure LOC. Pre-existing oversize; Task60 did not grow it.
+- Newly crossed files were brought under 250: allocate.rs 180, graph.rs 231, fixup.rs 33 with split.rs 238, replace_pseudos.rs 197 with split modules 199/125. coalesce.rs remains warning-band but under 250 at 236 and was not grown further during this cleanup.
+
+Required command results
+------------------------
+The following block is copied from the fresh gate run after the final cleanup edits. Each command block includes exact command, exit code, and duration.
+
+\n### pure LOC counts
+COMMAND: for f in src/codegen/regalloc/allocate.rs src/codegen/regalloc/abi_liveness.rs src/codegen/regalloc/coalesce.rs src/codegen/regalloc/graph.rs src/codegen/regalloc/graph_pseudos.rs src/codegen/regalloc/rewrite.rs src/codegen/fixup.rs src/codegen/fixup/split.rs src/codegen/replace_pseudos.rs src/codegen/replace_pseudos/split.rs src/codegen/replace_pseudos/move_split.rs src/codegen/xmm.rs src/codegen/mod.rs src/codegen/codegen.rs src/driver.rs src/compiler.rs src/pipeline.rs; do [ -f "$f" ] && printf "%s " "$f" && awk '!/^[[:space:]]*$/ && !/^[[:space:]]*(\/\/|#|--)/' "$f" | wc -l; done
+src/codegen/regalloc/allocate.rs 180
+src/codegen/regalloc/abi_liveness.rs 103
+src/codegen/regalloc/coalesce.rs 236
+src/codegen/regalloc/graph.rs 231
+src/codegen/regalloc/graph_pseudos.rs 37
+src/codegen/regalloc/rewrite.rs 135
+src/codegen/fixup.rs 33
+src/codegen/fixup/split.rs 238
+src/codegen/replace_pseudos.rs 197
+src/codegen/replace_pseudos/split.rs 199
+src/codegen/replace_pseudos/move_split.rs 125
+src/codegen/xmm.rs 11
+src/codegen/mod.rs 20
+src/codegen/codegen.rs 1958
+src/driver.rs 278
+src/compiler.rs 164
+src/pipeline.rs 108
+EXIT: 0
+DURATION_SECONDS: 0
+\n### git diff -- tests
+COMMAND: git diff -- tests
+EXIT: 0
+DURATION_SECONDS: 0
+\n### cargo fmt --all -- --check
+COMMAND: cargo fmt --all -- --check
+EXIT: 0
+DURATION_SECONDS: 1
+\n### cargo check --release
+COMMAND: cargo check --release
+    Finished `release` profile [optimized] target(s) in 0.01s
+EXIT: 0
+DURATION_SECONDS: 0
+\n### cargo build --release
+COMMAND: cargo build --release
+    Finished `release` profile [optimized] target(s) in 0.01s
+EXIT: 0
+DURATION_SECONDS: 0
+\n### cargo test --release
+COMMAND: cargo test --release
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 3.27s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 10 tests
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test compiler::tests::parses_sizeof_expression_without_evaluating_it ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test driver::tests::derives_all_output_paths ... ok
+test driver::tests::parses_default_run_stage ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+EXIT: 0
+DURATION_SECONDS: 3
+\n### chapter20 no-coalescing
+COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only --no-coalescing
+----------------------------------------------------------------------
+Ran 66 tests in 3.099s
+
+OK
+EXIT: 0
+DURATION_SECONDS: 3
+\n### chapter20 default
+COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only
+----------------------------------------------------------------------
+Ran 66 tests in 3.118s
+
+OK
+EXIT: 0
+DURATION_SECONDS: 3
+\n### chapter19 latest
+COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only
+----------------------------------------------------------------------
+Ran 120 tests in 2.852s
+
+OK
+EXIT: 0
+DURATION_SECONDS: 3
+\n### chapter18 union
+COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union
+----------------------------------------------------------------------
+Ran 286 tests in 5.566s
+
+OK
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s:17: Warning: value 0x1000000080000000 truncated to 0x80000000
+
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s:9: Warning: value 0x400000005 truncated to 0x5
+
+EXIT: 0
+DURATION_SECONDS: 6
+\n### copy-heavy move-count evidence
+COMMAND:
+set +e
+tmp=$(mktemp -d /tmp/rustcc-task60-fix.XXXXXX)
+mkdir -p "$tmp/no-coalescing" "$tmp/default-coalescing"
+cp .omo/evidence/task-60-copy-heavy.c "$tmp/no-coalescing/copy-heavy.c"
+cp .omo/evidence/task-60-copy-heavy.c "$tmp/default-coalescing/copy-heavy.c"
+./target/release/rustcc --no-coalescing -S "$tmp/no-coalescing/copy-heavy.c"; c1=$?
+./target/release/rustcc -S "$tmp/default-coalescing/copy-heavy.c"; c2=$?
+gcc "$tmp/no-coalescing/copy-heavy.s" -o "$tmp/no-coalescing/copy-heavy"; g1=$?
+gcc "$tmp/default-coalescing/copy-heavy.s" -o "$tmp/default-coalescing/copy-heavy"; g2=$?
+"$tmp/no-coalescing/copy-heavy"; r1=$?
+"$tmp/default-coalescing/copy-heavy"; r2=$?
+count_raw() { awk '/^[[:space:]]+mov[a-z]*[[:space:]]+%[^,]+,[[:space:]]*%/ { c++ } END { print c+0 }' "$1"; }
+count_alloc() { awk '/^[[:space:]]+mov[a-z]*[[:space:]]+%[^,]+,[[:space:]]*%/ && $0 !~ /%rbp|%rsp/ { c++ } END { print c+0 }' "$1"; }
+no_raw=$(count_raw "$tmp/no-coalescing/copy-heavy.s")
+def_raw=$(count_raw "$tmp/default-coalescing/copy-heavy.s")
+no_alloc=$(count_alloc "$tmp/no-coalescing/copy-heavy.s")
+def_alloc=$(count_alloc "$tmp/default-coalescing/copy-heavy.s")
+printf "tmp=%s\ncompile_no=%s compile_default=%s gcc_no=%s gcc_default=%s run_no=%s run_default=%s\n" "$tmp" "$c1" "$c2" "$g1" "$g2" "$r1" "$r2"
+printf "raw_reg_to_reg_moves no-coalescing=%s default=%s\n" "$no_raw" "$def_raw"
+printf "allocator_relevant_reg_to_reg_moves no-coalescing=%s default=%s\n" "$no_alloc" "$def_alloc"
+printf "%s\n" "--- no-coalescing assembly ---"; cat "$tmp/no-coalescing/copy-heavy.s"
+printf "%s\n" "--- default coalescing assembly ---"; cat "$tmp/default-coalescing/copy-heavy.s"
+rm -rf "$tmp"; cleanup=$?
+printf "tmp_cleanup=%s\n" "$cleanup"
+[ "$c1" -eq 0 ] && [ "$c2" -eq 0 ] && [ "$g1" -eq 0 ] && [ "$g2" -eq 0 ] && [ "$r1" -eq 1 ] && [ "$r2" -eq 1 ] && [ "$def_alloc" -lt "$no_alloc" ]
+
+tmp=/tmp/rustcc-task60-fix.O4Yn7w
+compile_no=0 compile_default=0 gcc_no=0 gcc_default=0 run_no=1 run_default=1
+raw_reg_to_reg_moves no-coalescing=3 default=2
+allocator_relevant_reg_to_reg_moves no-coalescing=1 default=0
+--- no-coalescing assembly ---
+.text
+.globl main
+main:
+    pushq %rbp
+    movq %rsp, %rbp
+    movl $1, %r9d
+    movl %r9d, %eax
+    movq %rbp, %rsp
+    popq %rbp
+    ret
+--- default coalescing assembly ---
+.text
+.globl main
+main:
+    pushq %rbp
+    movq %rsp, %rbp
+    movl $1, %eax
+    movq %rbp, %rsp
+    popq %rbp
+    ret
+tmp_cleanup=0
+EXIT: 0
+DURATION_SECONDS: 0
+\n### git diff --check
+COMMAND: git diff --check
+EXIT: 0
+DURATION_SECONDS: 0
+
+Final scans
+-----------
+--- status ---
+ M .omo/boulder.json
+ M src/codegen/codegen.rs
+ M src/codegen/fixup.rs
+ M src/codegen/mod.rs
+ M src/codegen/regalloc/allocate.rs
+ M src/codegen/regalloc/graph.rs
+ M src/codegen/regalloc/mod.rs
+ M src/codegen/regalloc/rewrite.rs
+ M src/codegen/replace_pseudos.rs
+ M src/compiler.rs
+ M src/driver.rs
+ M src/pipeline.rs
+?? .omo/evidence/task-18-adversarial-verify-2.txt
+?? .omo/evidence/task-18-adversarial-verify-3.txt
+?? .omo/evidence/task-18-adversarial-verify-4.txt
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/evidence/task-37-adversarial-verify-2.txt
+?? .omo/evidence/task-37-adversarial-verify.txt
+?? .omo/evidence/task-38-adversarial-verify.txt
+?? .omo/evidence/task-39-adversarial-verify.txt
+?? .omo/evidence/task-40-adversarial-verify-2.txt
+?? .omo/evidence/task-40-adversarial-verify.txt
+?? .omo/evidence/task-41-adversarial-verify.txt
+?? .omo/evidence/task-60-coalescing-adversarial-verify.txt
+?? .omo/evidence/task-60-coalescing-code-review.md
+?? .omo/evidence/task-60-coalescing-implementation.txt
+?? .omo/evidence/task-60-coalescing-move-count.txt
+?? .omo/evidence/task-60-copy-heavy.c
+?? .omo/start-work/
+?? src/codegen/fixup/
+?? src/codegen/regalloc/abi_liveness.rs
+?? src/codegen/regalloc/coalesce.rs
+?? src/codegen/regalloc/division_copy.rs
+?? src/codegen/regalloc/graph_pseudos.rs
+?? src/codegen/replace_pseudos/
+?? src/codegen/xmm.rs
+--- source bridge scan ---
+--- reserved register scan ---
+src/codegen/regalloc/color.rs:26:        graph.class().all_hardregs(),
+src/codegen/regalloc/color.rs:27:        graph.class().caller_saved_regs(),
+src/codegen/regalloc/simplify.rs:28:    let k = graph.class().all_hardregs().len();
+src/codegen/regalloc/graph.rs:55:        for reg in class.all_hardregs() {
+src/codegen/regalloc/liveness.rs:78:    let all_hardregs = regs_to_operands(&class.all_hardregs());
+src/codegen/regalloc/liveness.rs:80:        .intersection(&all_hardregs)
+src/codegen/regalloc/operands.rs:106:            let all_hardregs = class.all_hardregs();
+src/codegen/regalloc/operands.rs:114:                .filter(|reg| all_hardregs.contains(reg))
+src/codegen/regalloc/operands.rs:118:            let written = regs_to_operands(&class.caller_saved_regs())
+src/codegen/regalloc/types.rs:58:    pub fn all_hardregs(self) -> Vec<Reg> {
+src/codegen/regalloc/types.rs:78:    pub fn caller_saved_regs(self) -> Vec<Reg> {
+src/codegen/regalloc/types.rs:93:    pub fn contains(self, reg: &Reg) -> bool {
+src/codegen/regalloc/scratch.rs:33:            dst: Operand::Reg(Reg::R11),
+src/codegen/regalloc/scratch.rs:41:    let reserved = Operand::Memory(Reg::R11, 0);
+src/codegen/regalloc/coalesce.rs:68:    let k = graph.class().all_hardregs().len();
+src/codegen/regalloc/coalesce.rs:75:    let k = graph.class().all_hardregs().len();
+--- helper scan ---
+src/codegen/xmm.rs:3:pub(crate) const fn is_xmm_binary(op: BinaryOpInstr) -> bool {
+src/codegen/regalloc/rewrite.rs:6:use super::division_copy::cleanup_destructive_dividend_copies;
+src/codegen/regalloc/rewrite.rs:22:    cleanup_destructive_dividend_copies(instructions)
+src/codegen/regalloc/division_copy.rs:3:pub(super) fn cleanup_destructive_dividend_copies(instructions: Vec<Instr>) -> Vec<Instr> {
+
+Cleanup notes
+-------------
+- Dividend setup scope drift: rewrite.rs no longer contains cleanup_dividend_setup or dividend_setup_replacement. The only remaining division-copy cleanup is isolated and named as destructive division copy cleanup in regalloc/division_copy.rs, with an explicit safety predicate for the previously ignored intervening instruction.
+- XMM binary classifier duplication: local is_xmm_binary implementations were removed; only src/codegen/xmm.rs defines is_xmm_binary.
+- Size regression: newly crossed allocate.rs, graph.rs, and fixup.rs are all under 250 pure LOC after focused splits; replace_pseudos.rs is no longer grown further and is itself under 250 after extracting split rules.
+- Behavior: chapter20 no-coalescing and default coalescing both pass; chapter19 and chapter18 union invariants pass; copy-heavy evidence shows default coalescing reduces allocator-relevant reg-to-reg moves from 1 to 0.

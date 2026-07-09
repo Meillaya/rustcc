@@ -1,0 +1,225 @@
+TASK60 W21-T5 ADVERSARIAL VERIFY #3
+====================================
+recommendation: APPROVE
+finalVerdict: confirmed
+reviewedAt: 2026-07-09T06:01:00-04:00
+workspace: /home/mei/projects/rustcc
+mode: read-only final gate; wrote only this artifact under repo evidence
+
+originalIntent:
+  Implement Task 60 / W21-T5: Chapter 20 conservative register coalescing (Briggs/George), enabled by default, while `--no-coalescing` preserves the non-coalescing allocator mode.
+
+desiredOutcome:
+  - Chapter 20 latest-only passes with `--no-coalescing`.
+  - Chapter 20 latest-only passes in default coalescing mode.
+  - Chapter 19 and Chapter 18 union regression gates remain green.
+  - A copy-heavy program produces fewer allocator-relevant register-to-register moves under default coalescing than under `--no-coalescing`.
+  - tests/ and harness remain unchanged; no source-path/chapter/test bridge; no system-C/interpreter bridge resurrection; R10/R11 remain non-allocatable.
+  - Prior gate #2 evidence gaps are closed by post-fix code review, manual QA, and notepad coverage.
+
+userOutcomeReview:
+  The shipped uncommitted Task60 work now satisfies the user-visible outcome. Fresh build/test/harness commands are green, both Chapter 20 modes work, copy-heavy output has a real coalescing delta (allocator-relevant moves 1 -> 0), tests/ is unchanged, and post-fix review/manual-QA/notepad artifacts now exist. The plan checkbox is still unchecked and Boulder is still running, but the prompt explicitly says not to reject for those pre-completion states.
+
+blockers:
+  - None.
+
+checkedArtifactPaths:
+  - `.omo/evidence/task-60-coalescing-implementation.txt` — present; SHA256 02a4aad2881dbcb47d9c68291478108a383b9b4f30c506bd95607c0d06c20f72; treated as stale/untrusted and commands rerun.
+  - `.omo/evidence/task-60-coalescing-fix.txt` — present; SHA256 2383a73771233f0947bc1c311f6a52a010d2c6f9300a0fcc82a83a142c46379b; documents removal of broad dividend peephole, narrow `division_copy.rs`, and LOC split cleanup.
+  - `.omo/evidence/task-60-coalescing-code-review.md` — present; old REJECT; superseded by post-fix review.
+  - `.omo/evidence/task-60-coalescing-code-review-2.md` — present; Verdict APPROVE / codeQualityStatus WATCH / recommendation APPROVE; explicitly states programming + remove-ai-slops were loaded and no deletion-only/tautological/path-bridge/implementation-mirroring tests were introduced.
+  - `.omo/evidence/task-60-coalescing-adversarial-verify-2.txt` — present; old needs-human-review because post-fix review/manual QA/notepad were missing then; those gaps are now closed.
+  - `.omo/evidence/task-60-coalescing-manual-qa.md` — present; overall PASS; includes compile/link/run, move-count, chapter20 both modes, scope, cleanup, and adversarial matrix.
+  - `.omo/evidence/task-60-coalescing-move-count.txt` — present; no-coalescing=1, default=0; independently rerun below.
+  - `.omo/evidence/task-60-copy-heavy.c` — present; SHA256 61ef97ad42379921ebb2fcbf042b6db4bb3ec9f44279c94c96f7d32f19d7c63e; used for fresh stdout-assembly compile.
+  - `.omo/notepad.md` — present; records Task60 checkpoint, post-fix review path, prior gate #2 reason, manual QA/final gate pending actions.
+  - `.omo/plans/c-compiler-rust.md` lines 1955-1971 — Task 60 still unchecked as expected pre-completion; acceptance criteria match this gate.
+  - `.omo/boulder.json` todo:60 — status `running` as expected pre-completion.
+
+checkedSourceAndDiffPaths:
+  Modified tracked source/config:
+  - `.omo/boulder.json`
+  - `src/codegen/codegen.rs`
+  - `src/codegen/fixup.rs`
+  - `src/codegen/mod.rs`
+  - `src/codegen/regalloc/allocate.rs`
+  - `src/codegen/regalloc/graph.rs`
+  - `src/codegen/regalloc/mod.rs`
+  - `src/codegen/regalloc/rewrite.rs`
+  - `src/codegen/replace_pseudos.rs`
+  - `src/compiler.rs`
+  - `src/driver.rs`
+  - `src/pipeline.rs`
+
+  New untracked source files inspected:
+  - `src/codegen/fixup/split.rs`
+  - `src/codegen/regalloc/abi_liveness.rs`
+  - `src/codegen/regalloc/coalesce.rs`
+  - `src/codegen/regalloc/division_copy.rs`
+  - `src/codegen/regalloc/graph_pseudos.rs`
+  - `src/codegen/replace_pseudos/move_split.rs`
+  - `src/codegen/replace_pseudos/split.rs`
+  - `src/codegen/xmm.rs`
+
+sourceDiffSummary:
+  - `compiler.rs` now always calls register allocation; `driver.rs` default `RegallocOptions` enables coalescing; `--no-coalescing` disables it.
+  - `regalloc/allocate.rs` threads `RegallocOptions` and iterates coalescing only when `coalescing_enabled` is true.
+  - `regalloc/coalesce.rs` implements Briggs/George coalescing aligned with `nqcc2/lib/backend/regalloc.ml` lines 385-468 and 584-604.
+  - `regalloc/types.rs` keeps GP hardregs at AX,BX,CX,DX,DI,SI,R8,R9,R12,R13,R14,R15 and XMM hardregs at XMM0..XMM13; R10/R11 and XMM14/XMM15 remain scratch-only.
+  - Prior size/slop cleanup split large helpers into focused modules and centralized `is_xmm_binary` in `src/codegen/xmm.rs`.
+  - `division_copy.rs` remains a narrow post-allocation cleanup accepted by code-review-2 as WATCH risk, not blocker.
+
+freshCommandEvidence:
+  - `git diff -- tests`
+    exit=0; output empty.
+  - `cargo fmt --all -- --check`
+    exit=0.
+  - `cargo check --release`
+    exit=0; `Finished release profile`.
+  - `cargo build --release`
+    exit=0; `Finished release profile`.
+  - `cargo test --release`
+    exit=0; 10 unit tests passed; doc-tests passed with 0 tests.
+  - `./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only --no-coalescing`
+    exit=0; `Ran 66 tests`; `OK`.
+  - `./tests/test_compiler ./target/release/rustcc --chapter 20 --latest-only`
+    exit=0; `Ran 66 tests`; `OK`.
+  - `./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only`
+    exit=0; `Ran 120 tests`; `OK`.
+  - `./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union`
+    exit=0; `Ran 286 tests`; `OK`; two existing assembler truncation warnings appeared in chapter_18 static-initializer assembly.
+  - Bridge assertion:
+    command: `if rg -n "source_path_hint|chapter_20|chapter20|test_compiler|latest-only|test[-_ ]?bridge|SystemAssemblySanitizerOptions|compile_with_system_cc_frontend|evaluate_program" src -S; then exit 1; else echo PASS; fi`
+    exit=0; `PASS no bridge hits`.
+  - R10/R11 allocatable assertion:
+    command: `if rg -n "Reg::R10|Reg::R11" src/codegen/regalloc/types.rs -S; then exit 1; else echo PASS; fi`
+    exit=0; `PASS no R10/R11 in RegisterClass allocatable definitions`.
+  - `git diff --check`
+    exit=0.
+  - `git status --short -- tests` + untracked-tests scan
+    exit=0; `PASS tests clean`.
+  - Added-hunk/new-file forbidden-pattern scan corrected:
+    exit=0; `PASS no added forbidden/debug/bridge patterns in tracked hunks or new Rust files`.
+  - `cargo clippy --release -- -W clippy::all`
+    exit=0; emitted 31 warning-class diagnostics across existing code. Treated as informational because this repository does not enforce `-D warnings` here and the mandatory build/check/test gates are clean; no clippy failure.
+
+copyHeavyProbe:
+  source: `.omo/evidence/task-60-copy-heavy.c`
+  source_sha256: `61ef97ad42379921ebb2fcbf042b6db4bb3ec9f44279c94c96f7d32f19d7c63e`
+  method: compiled the required source path with `--codegen` to stdout assembly under `/tmp/rustcc-task60-gate3.o2gEbw` to avoid modifying repo evidence files.
+  commands:
+    - `./target/release/rustcc --no-coalescing --codegen .omo/evidence/task-60-copy-heavy.c > /tmp/.../copy-heavy.no.s`
+    - `./target/release/rustcc --codegen .omo/evidence/task-60-copy-heavy.c > /tmp/.../copy-heavy.default.s`
+    - `gcc /tmp/.../copy-heavy.no.s -o /tmp/.../copy-heavy.no`
+    - `gcc /tmp/.../copy-heavy.default.s -o /tmp/.../copy-heavy.default`
+  noCoalescingAssembly:
+    - `movl $1, %r9d`
+    - `movl %r9d, %eax`
+  defaultCoalescingAssembly:
+    - `movl $1, %eax`
+  moveCounts:
+    - no-coalescing raw reg-to-reg mov-family=3, allocator-relevant non-frame=1.
+    - default raw reg-to-reg mov-family=2, allocator-relevant non-frame=0.
+    - `assembly_differs=True`; `default_fewer=True`.
+  runSemantics:
+    - no-coalescing executable exit=1; default executable exit=1; expected source return=1.
+  result: PASS.
+
+extraAdversarialProbe:
+  input: `/tmp/.../task60-extra.c` containing function call, double addition, and signed long quotient/remainder.
+  commands:
+    - `./target/release/rustcc --no-coalescing -S /tmp/.../task60-extra.c` exit=0.
+    - `./target/release/rustcc -S /tmp/.../task60-extra.c` exit=0.
+    - `gcc /tmp/.../task60-extra.s -o /tmp/.../task60-extra && /tmp/.../task60-extra` exit=51, expected=51.
+  result: PASS.
+
+ultraqaProbes:
+  stale_state:
+    - Executor, review, and manual-QA prose were treated as untrusted; mandated commands were rerun.
+    - `target/release/rustcc` mtime 2026-07-09 05:38:49 -0400 is newer than newest changed Rust source mtime 2026-07-09 05:38:44 -0400 (`src/codegen/regalloc/rewrite.rs`), and `cargo build --release` was rerun successfully.
+    - PASS.
+  dirty_worktree:
+    - Worktree is intentionally dirty for uncommitted Task60 plus prior evidence files; no staged files observed.
+    - tests/ has no tracked diff and no untracked test files.
+    - PASS.
+  misleading_success_output:
+    - Harness `OK` lines were paired with exit codes.
+    - Copy-heavy program returns 1 by design; nonzero executable exits were accepted only after explicit expected=1 comparison for both modes.
+    - PASS.
+  scope_fidelity:
+    - Plan task says implement Briggs/George coalescing, enable default coalescing, keep `--no-coalescing` path, and show fewer copies on a copy-heavy program.
+    - Driver/default/options and allocator branching match that scope; both modes compile and produce distinct copy-heavy assembly.
+    - Bridge scans are clean; tests/harness unchanged; old code-review blockers are superseded by code-review-2 and manual QA.
+    - PASS.
+  generated_artifacts:
+    - Fresh compiler/link/run artifacts were created under `/tmp/rustcc-task60-gate3.o2gEbw` only.
+    - Retry cleanup removed generated assemblies/executables; temp dir was retained only for `commands.log` and probe source until this artifact was written.
+    - No new repo `.s`, source, test, doc, plan, or evidence files were written except this artifact.
+    - PASS.
+  long_commands:
+    - Required harness commands completed without timeout; longest observed run was chapter18 union at ~5 seconds, chapter20 no-coalescing at ~4 seconds.
+    - PASS.
+  copy-heavy input:
+    - Required copy-heavy C input exists, is deterministic, and both modes preserve source exit semantics.
+    - PASS.
+  file-size/slop:
+    - Direct remove-ai-slops/programming pass found no changed tests, so no deletion-only, tautological, implementation-mirroring, or harness-bridge tests exist in this diff.
+    - New or newly touched files are below the 250 pure-LOC defect ceiling except pre-existing oversized files (`src/codegen/codegen.rs`, `src/driver.rs`) that were not grown; codegen.rs was reduced.
+    - Added-hunk/new-file scan found no new `unwrap`, `expect`, `unsafe`, `dbg!`, `println!`, `todo!`, `unimplemented!`, `panic!`, or bridge fingerprints.
+    - `division_copy.rs` is a WATCH risk accepted by post-fix review; it is narrow, guarded, under 250 LOC, and covered by chapter20/default/no-coalescing plus extra division probe.
+    - PASS.
+
+pureLOCCountsChangedNewRust:
+  - `src/codegen/codegen.rs` base=2006 current=1958 status=OVER_250_PREEXISTING_REDUCED
+  - `src/codegen/fixup.rs` base=235 current=33 status=OK
+  - `src/codegen/fixup/split.rs` base=0 current=238 status=WARNING_200_250
+  - `src/codegen/mod.rs` base=19 current=20 status=OK
+  - `src/codegen/regalloc/abi_liveness.rs` base=0 current=103 status=OK
+  - `src/codegen/regalloc/allocate.rs` base=239 current=180 status=OK
+  - `src/codegen/regalloc/coalesce.rs` base=0 current=236 status=WARNING_200_250
+  - `src/codegen/regalloc/division_copy.rs` base=0 current=157 status=OK
+  - `src/codegen/regalloc/graph.rs` base=237 current=231 status=WARNING_200_250
+  - `src/codegen/regalloc/graph_pseudos.rs` base=0 current=37 status=OK
+  - `src/codegen/regalloc/mod.rs` base=61 current=70 status=OK
+  - `src/codegen/regalloc/rewrite.rs` base=143 current=135 status=OK
+  - `src/codegen/replace_pseudos.rs` base=474 current=197 status=OK
+  - `src/codegen/replace_pseudos/move_split.rs` base=0 current=125 status=OK
+  - `src/codegen/replace_pseudos/split.rs` base=0 current=199 status=OK
+  - `src/codegen/xmm.rs` base=0 current=11 status=OK
+  - `src/compiler.rs` base=169 current=164 status=OK
+  - `src/driver.rs` base=278 current=278 status=OVER_250_PREEXISTING_UNCHANGED
+  - `src/pipeline.rs` base=108 current=108 status=OK
+
+R11AllocatableCheck:
+  - `src/codegen/regalloc/types.rs` contains no `Reg::R10` or `Reg::R11` in the register-class definitions.
+  - GP allocatable hardregs are AX/BX/CX/DX/DI/SI/R8/R9/R12/R13/R14/R15.
+  - XMM allocatable hardregs are XMM0..XMM13.
+  - R10/R11/XMM14/XMM15 uses are scratch/fixup/codegen uses, not allocator hardregs.
+
+artifactCoverageAssessment:
+  present_and_adequate:
+    - implementation log
+    - cleanup/fix log
+    - old reject code review, explicitly superseded
+    - post-fix APPROVE/WATCH code review with programming/remove-ai-slops/overfit coverage
+    - prior gate #2 documenting previous missing-artifact reason
+    - manual QA matrix PASS
+    - move-count receipt
+    - copy-heavy input
+    - `.omo/notepad.md` checkpoint
+    - plan task and Boulder state
+  missing_or_unsupported:
+    - None blocking.
+    - Non-blocking expected state: plan task 60 unchecked and Boulder todo:60 running until this confirmed gate is consumed by the completion workflow.
+
+exactEvidenceGaps:
+  - None blocking.
+  - Watch risks only: `division_copy.rs` is a narrow non-reference peephole accepted by post-fix review; `src/codegen/codegen.rs` and `src/driver.rs` remain pre-existing oversized files for later refactor.
+
+transientQaScriptNotes:
+  - An initial copy-heavy comparison helper failed because a here-doc used a quoted `$TMPDIR` literal; corrected retry succeeded with allocator-relevant counts 1 -> 0.
+  - An initial extra-probe expectation used 53 instead of the source-correct 51; corrected retry compiled, linked, and ran with expected=51.
+  - These were gate-script mistakes, not compiler failures; final verdict is based only on the corrected successful evidence above.
+
+finalVerdict: confirmed
+confirmationPolicy: Task60 may be marked complete after this gate; do not reject solely for unchecked plan checkbox or running Boulder state because those are post-confirmation completion actions.

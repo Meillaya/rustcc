@@ -1,0 +1,7 @@
+manual copy-heavy move-count QA
+source: .omo/evidence/task-60-copy-heavy.c
+no-coalescing assembly: .omo/evidence/task-60-copy-heavy.no-coalescing.s
+coalescing assembly: .omo/evidence/task-60-copy-heavy.coalescing.s
+no-coalescing register-to-register moves: 1
+coalescing register-to-register moves: 0
+result: PASS coalescing produced fewer moves

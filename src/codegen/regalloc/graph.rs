@@ -3,8 +3,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::codegen::assembly::{Instr, Operand, Reg};
-use crate::ir::tacky::{OperandType, TypeEnv};
+use crate::ir::tacky::TypeEnv;
 
+use super::graph_pseudos::{PseudoNodeContext, add_pseudo_nodes};
 use super::liveness::LiveCfg;
 use super::operands::{instr_operands, regs_used_and_written};
 use super::types::{LivenessConfig, LivenessError, RegisterClass};
@@ -38,12 +39,6 @@ pub struct InterferenceBuild<'a> {
     pub type_env: &'a TypeEnv,
     pub interference: &'a InterferenceConfig,
     pub liveness: &'a LivenessConfig,
-}
-
-struct PseudoNodeContext<'a> {
-    class: RegisterClass,
-    type_env: &'a TypeEnv,
-    config: &'a InterferenceConfig,
 }
 
 struct EdgeContext<'a> {
@@ -138,6 +133,32 @@ impl InterferenceGraph {
             .get(left)
             .is_some_and(|node| node.neighbors.contains(right))
     }
+
+    pub fn merge_node(&mut self, to_merge: &NodeId, to_keep: &NodeId) {
+        let Some(neighbors) = self.neighbors(to_merge).cloned() else {
+            return;
+        };
+        if !self.contains(to_keep) {
+            return;
+        }
+        let merged_spill_cost = self
+            .nodes
+            .get(to_merge)
+            .map(|node| node.spill_cost)
+            .unwrap_or(0.0);
+        if let Some(kept) = self.nodes.get_mut(to_keep) {
+            kept.spill_cost += merged_spill_cost;
+        }
+        for neighbor in &neighbors {
+            self.add_edge(neighbor, to_keep);
+        }
+        self.nodes.remove(to_merge);
+        for neighbor in neighbors {
+            if let Some(node) = self.nodes.get_mut(&neighbor) {
+                node.neighbors.remove(to_merge);
+            }
+        }
+    }
 }
 
 pub fn build_interference(
@@ -157,26 +178,6 @@ pub fn build_interference(
     };
     add_edges(&mut graph, input.liveness_cfg, &edge_context)?;
     Ok(graph)
-}
-
-fn add_pseudo_nodes(
-    graph: &mut InterferenceGraph,
-    instructions: &[Instr],
-    context: &PseudoNodeContext<'_>,
-) {
-    for instr in instructions {
-        for op in instr_operands(instr) {
-            let Operand::Pseudo(name) = op else {
-                continue;
-            };
-            if pseudo_is_current_class(&name, context.class, context.type_env)
-                && !context.config.static_symbols.contains(&name)
-                && !context.config.aliased_pseudos.contains(&name)
-            {
-                graph.add_node(Operand::Pseudo(name), 0.0);
-            }
-        }
-    }
 }
 
 fn add_spill_costs(graph: &mut InterferenceGraph, instructions: &[Instr]) {
@@ -252,15 +253,6 @@ fn move_source_matches_live(instr: &Instr, live: &Operand) -> bool {
         | Instr::AllocateStack(_)
         | Instr::DeallocateStack(_)
         | Instr::Comment(_) => false,
-    }
-}
-
-fn pseudo_is_current_class(name: &str, class: RegisterClass, type_env: &TypeEnv) -> bool {
-    match (class, type_env.get(name).copied()) {
-        (RegisterClass::Gp, Some(OperandType::Double)) => false,
-        (RegisterClass::Gp, _) => true,
-        (RegisterClass::Xmm, Some(OperandType::Double)) => true,
-        (RegisterClass::Xmm, _) => false,
     }
 }
 

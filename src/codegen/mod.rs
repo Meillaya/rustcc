@@ -36,6 +36,7 @@ pub mod frame;
 pub mod regalloc;
 pub mod replace_pseudos;
 pub mod type_table;
+pub mod xmm;
 
 pub use assembly::{
     AsmProgram, BinaryOpInstr, ConditionCode, Instr, Operand, Reg, StaticInit, TopLevel,

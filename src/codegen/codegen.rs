@@ -1171,21 +1171,11 @@ fn lower_instruction(
         Instruction::Add { src, dst } => {
             let dst_ty = type_of_val(&Val::Var(dst.clone()), env);
             if dst_ty == OperandType::Double {
-                return vec![
-                    Instr::Movsd {
-                        src: Operand::Pseudo(dst.clone()),
-                        dst: Operand::Reg(Reg::XMM(14)),
-                    },
-                    Instr::BinaryOp {
-                        op: BinaryOpInstr::AddDouble,
-                        src: convert_val(src, ctx),
-                        dst: Operand::Reg(Reg::XMM(14)),
-                    },
-                    Instr::Movsd {
-                        src: Operand::Reg(Reg::XMM(14)),
-                        dst: Operand::Pseudo(dst.clone()),
-                    },
-                ];
+                return vec![Instr::BinaryOp {
+                    op: BinaryOpInstr::AddDouble,
+                    src: convert_val(src, ctx),
+                    dst: Operand::Pseudo(dst.clone()),
+                }];
             }
             let op = if dst_ty == OperandType::Double {
                 BinaryOpInstr::AddDouble
@@ -1203,21 +1193,11 @@ fn lower_instruction(
         Instruction::Sub { src, dst } => {
             let dst_ty = type_of_val(&Val::Var(dst.clone()), env);
             if dst_ty == OperandType::Double {
-                return vec![
-                    Instr::Movsd {
-                        src: Operand::Pseudo(dst.clone()),
-                        dst: Operand::Reg(Reg::XMM(14)),
-                    },
-                    Instr::BinaryOp {
-                        op: BinaryOpInstr::SubDouble,
-                        src: convert_val(src, ctx),
-                        dst: Operand::Reg(Reg::XMM(14)),
-                    },
-                    Instr::Movsd {
-                        src: Operand::Reg(Reg::XMM(14)),
-                        dst: Operand::Pseudo(dst.clone()),
-                    },
-                ];
+                return vec![Instr::BinaryOp {
+                    op: BinaryOpInstr::SubDouble,
+                    src: convert_val(src, ctx),
+                    dst: Operand::Pseudo(dst.clone()),
+                }];
             }
             let op = if dst_ty == OperandType::Double {
                 BinaryOpInstr::SubDouble
@@ -1235,21 +1215,11 @@ fn lower_instruction(
         Instruction::Mul { src, dst } => {
             let dst_ty = type_of_val(&Val::Var(dst.clone()), env);
             if dst_ty == OperandType::Double {
-                return vec![
-                    Instr::Movsd {
-                        src: Operand::Pseudo(dst.clone()),
-                        dst: Operand::Reg(Reg::XMM(14)),
-                    },
-                    Instr::BinaryOp {
-                        op: BinaryOpInstr::MultDouble,
-                        src: convert_val(src, ctx),
-                        dst: Operand::Reg(Reg::XMM(14)),
-                    },
-                    Instr::Movsd {
-                        src: Operand::Reg(Reg::XMM(14)),
-                        dst: Operand::Pseudo(dst.clone()),
-                    },
-                ];
+                return vec![Instr::BinaryOp {
+                    op: BinaryOpInstr::MultDouble,
+                    src: convert_val(src, ctx),
+                    dst: Operand::Pseudo(dst.clone()),
+                }];
             }
             let op = if dst_ty.is_long_word() {
                 BinaryOpInstr::MultQ
@@ -1265,21 +1235,11 @@ fn lower_instruction(
         Instruction::DivSigned { src, dst } => {
             let dst_ty = type_of_val(&Val::Var(dst.clone()), env);
             if dst_ty == OperandType::Double {
-                return vec![
-                    Instr::Movsd {
-                        src: Operand::Pseudo(dst.clone()),
-                        dst: Operand::Reg(Reg::XMM(14)),
-                    },
-                    Instr::BinaryOp {
-                        op: BinaryOpInstr::SseDivDouble,
-                        src: convert_val(src, ctx),
-                        dst: Operand::Reg(Reg::XMM(14)),
-                    },
-                    Instr::Movsd {
-                        src: Operand::Reg(Reg::XMM(14)),
-                        dst: Operand::Pseudo(dst.clone()),
-                    },
-                ];
+                return vec![Instr::BinaryOp {
+                    op: BinaryOpInstr::SseDivDouble,
+                    src: convert_val(src, ctx),
+                    dst: Operand::Pseudo(dst.clone()),
+                }];
             }
             let is_long = dst_ty.is_long_word();
             let is_unsigned = dst_ty.is_unsigned();
@@ -1503,12 +1463,8 @@ fn lower_instruction(
             };
             let mut out = prelude;
             if is_double {
-                out.push(Instr::Movsd {
-                    src: cmp_left,
-                    dst: Operand::Reg(Reg::XMM(14)),
-                });
                 out.push(Instr::CmpDouble {
-                    left: Operand::Reg(Reg::XMM(14)),
+                    left: cmp_left,
                     right: right_op,
                 });
                 out.extend(set_double_comparison(*cc, dst, ctx));
@@ -1541,21 +1497,8 @@ fn lower_instruction(
                     dst: Operand::Pseudo(dst.clone()),
                 });
             }
-            // `sete` only writes the destination's low byte; the upper
-            // bytes of the destination are undefined.  Zero-extend the
-            // byte through a scratch register, then write the full
-            // 32-bit value back.  `movzbl` always reads its source as
-            // a single byte, so the source must be the byte that
-            // `sete` wrote (the destination), not a 32-bit register
-            // copy of it.  Uses `%r10d` for the scratch register;
-            // safe because no other codegen path uses `%r10d`
-            // immediately after this sequence.
             out.push(Instr::MovZeroExtend {
                 src: Operand::Pseudo(dst.clone()),
-                dst: Operand::Reg(Reg::R10),
-            });
-            out.push(Instr::Mov {
-                src: Operand::Reg(Reg::R10),
                 dst: Operand::Pseudo(dst.clone()),
             });
             out

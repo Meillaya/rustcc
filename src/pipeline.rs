@@ -143,9 +143,9 @@ pub mod regalloc {
     pub(crate) fn allocate_registers(
         asm: AsmProgram,
         globals: &HashSet<String>,
-        _options: RegallocOptions,
+        options: RegallocOptions,
     ) -> Result<AsmProgram> {
-        allocate_pass(asm, globals)
+        allocate_pass(asm, globals, options)
     }
 }
 

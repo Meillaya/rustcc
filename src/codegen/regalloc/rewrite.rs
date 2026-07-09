@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 
-use crate::codegen::assembly::{BinaryOpInstr, Instr, Operand, Reg};
+use crate::codegen::assembly::{Instr, Operand, Reg};
+use crate::codegen::xmm::is_xmm_binary;
 
+use super::division_copy::cleanup_destructive_dividend_copies;
 use super::types::RegisterClass;
 
 pub(crate) fn replace_colored_pseudos(
@@ -17,7 +19,7 @@ pub(crate) fn replace_colored_pseudos(
 }
 
 pub(crate) fn cleanup_redundant_moves(instructions: Vec<Instr>) -> Vec<Instr> {
-    instructions
+    cleanup_destructive_dividend_copies(instructions)
         .into_iter()
         .filter(|instr| !is_redundant_move(instr))
         .collect()
@@ -138,15 +140,4 @@ fn map_instruction_operands(
         }
         (RegisterClass::Xmm, other) | (RegisterClass::Gp, other) => other,
     }
-}
-
-fn is_xmm_binary(op: BinaryOpInstr) -> bool {
-    matches!(
-        op,
-        BinaryOpInstr::AddDouble
-            | BinaryOpInstr::SubDouble
-            | BinaryOpInstr::MultDouble
-            | BinaryOpInstr::SseDivDouble
-            | BinaryOpInstr::XorDouble
-    )
 }

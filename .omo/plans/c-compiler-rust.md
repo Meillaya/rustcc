@@ -1952,7 +1952,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   **Acceptance Criteria**:
   - [ ] Program with many temporaries compiles without infinite loop. Spilled slots produce correct results.
 
-- [ ] 60. W21-T5: Chapter 20 - conservative coalescing (Briggs/George) + both-modes gate
+- [x] 60. W21-T5: Chapter 20 - conservative coalescing (Briggs/George) + both-modes gate
 
   **What to do**: Implement coalescing. When pseudo `a` and `b` are connected by a `Copy` and don't interfere, merge them.
   - Update `src/codegen/regalloc/mod.rs::allocate` to call into the coalescing pipeline when `--no-coalescing` is NOT passed.
