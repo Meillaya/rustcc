@@ -1158,3 +1158,36 @@ Implemented the Chapter 19 W20-T2 constant-folding pass on top of the CFG founda
 
 - W20-T3 through W20-T5 must still implement unreachable-code elimination, copy propagation, dead-store elimination, and the default all-optimizations gate.
 - Constant tracking is intentionally local to each CFG basic block; later dataflow passes should handle cross-block propagation.
+
+## Wave 20 / Chapter 19 unreachable code elimination (task 53)
+
+Implemented the Chapter 19 W20-T3 unreachable-code elimination pass on top of the CFG foundation. The optimizer now wires `--eliminate-unreachable-code` through the pipeline, removes blocks unreachable from the CFG entry, then performs the reference cleanup sequence for useless jumps, useless labels, and empty blocks while preserving original `TackyFunction` metadata. A code-review rejection removed a compiler-phase Rust unit test to preserve the plan's official-harness-only policy.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `cargo fmt --all -- --check` | exit 0 |
+| `cargo check --release` | exit 0 |
+| `cargo build --release` | exit 0 |
+| `cargo test --release` | 10 passed, 0 failed |
+| chapter 19 `--latest-only --eliminate-unreachable-code` | `Ran 15 tests ... OK` |
+| chapter 19 `--latest-only --fold-constants` | `Ran 16 tests ... OK` |
+| chapter 18 `--latest-only --union` | `Ran 286 tests ... OK` |
+| manual UCE probes | after-return, jump-over-dead, and conditional-tail dead code removed with matching exits |
+| compiler-phase Rust test policy | no `#[cfg(test)]`/`#[test]` remains in UCE file; cargo suite back to 10 tests |
+| forbidden bridge/interpreter scan | no matches in source/tests/manifests |
+| `git diff --check` | exit 0 |
+
+### Evidence
+
+- `.omo/evidence/task-53-unreachable-code-implementation.txt`
+- `.omo/evidence/task-53-unreachable-code-code-review.md`
+- `.omo/evidence/task-53-unreachable-code-fix.txt`
+- `.omo/evidence/task-53-unreachable-code-code-review-2.md`
+- `.omo/evidence/task-53-unreachable-code-adversarial-verify.txt`
+
+### Remaining scope
+
+- W20-T4 copy propagation and W20-T5 dead-store elimination/default-all gate remain pending.
+- UCE intentionally uses CFG reachability only; it does not fold constants or do cross-pass dataflow beyond its own cleanup sequence.

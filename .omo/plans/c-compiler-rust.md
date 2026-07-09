@@ -1847,7 +1847,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   - [ ] `int main(void) { int x = 2; x = x + 3; return x; }` produces assembly where the load+add is replaced by `movl $5, x_slot`.
   - [ ] `--chapter 19 --latest-only --fold-constants` passes.
 
-- [ ] 53. W20-T3: Chapter 19 - unreachable code elimination
+- [x] 53. W20-T3: Chapter 19 - unreachable code elimination
 
   **What to do**: Implement UCE.
   - In `src/ir/opt.rs::run_opt`, add `OptPass::UnreachableCodeElim`.

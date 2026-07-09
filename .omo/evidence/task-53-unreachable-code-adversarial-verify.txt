@@ -1,0 +1,171 @@
+VERDICT: APPROVE
+recommendation: APPROVE
+blockers: []
+
+originalIntent:
+  Independently verify Task 53 / W20-T3 implements only Chapter 19 unreachable-code elimination for rustcc and decide whether it is FullyDone and safe to check off/commit.
+
+desiredOutcome:
+  A CFG-backed TACKY unreachable-code elimination pass is wired only by --eliminate-unreachable-code, passes the official Chapter 19 UCE harness, preserves valid-program behavior, removes unreachable blocks/labels/jumps in optimized output, does not add forbidden compiler-phase unit tests or unrelated optimization passes, and leaves no unsupported evidence gaps.
+
+userOutcomeReview:
+  PASS. From a user perspective, --eliminate-unreachable-code now performs the intended Chapter 19 UCE behavior: official tests pass, no-opt vs optimized executable exits match on adversarial manual probes, and optimized TACKY/assembly drops unreachable code. The change remains scoped to UCE wiring and implementation.
+
+checkedArtifactPaths:
+  Plan/policy:
+    - .omo/plans/c-compiler-rust.md
+  Changed Task 53 source:
+    - src/ir/unreachable_code_elim.rs
+    - src/ir/opt.rs
+    - src/pipeline.rs
+    - src/ir/mod.rs
+  Reference implementation:
+    - nqcc2/lib/optimizations/unreachable_code_elim.ml
+    - nqcc2/lib/optimizations/optimize.ml
+  Supporting CFG/flag plumbing inspected:
+    - src/ir/cfg/types.rs
+    - src/ir/cfg/build.rs
+    - src/driver.rs
+    - src/compiler.rs
+  Executor/review/fix evidence treated as untrusted and rechecked:
+    - .omo/evidence/task-53-unreachable-code-implementation.txt
+    - .omo/evidence/task-53-unreachable-code-code-review.md
+    - .omo/evidence/task-53-unreachable-code-fix.txt
+    - .omo/evidence/task-53-unreachable-code-code-review-2.md
+  This gate artifact:
+    - .omo/evidence/task-53-unreachable-code-adversarial-verify.txt
+
+planAndPolicyFindings:
+  - .omo/plans/c-compiler-rust.md:91 requires official tests/test_compiler as the only compiler-correctness verification path.
+  - .omo/plans/c-compiler-rust.md:104 forbids Rust unit tests for compiler phases.
+  - .omo/plans/c-compiler-rust.md:121 repeats no Rust unit tests for compiler phases; existing tests are CLI/orchestration glue.
+  - .omo/plans/c-compiler-rust.md:1850-1863 defines Task 53 as W20-T3 Chapter 19 unreachable code elimination; acceptance is --chapter 19 --latest-only --eliminate-unreachable-code.
+
+sourceReview:
+  - src/ir/unreachable_code_elim.rs implements program/function UCE over TackyProgram, preserving program metadata fields static_variables, static_constants, function_param_types, and function_return_types, and mutating only TackyFunction.body after CFG reassembly.
+  - UCE uses CFG reachability: eliminate_unreachable_blocks calls Cfg::reachable_block_ids(), which src/ir/cfg/types.rs computes by graph traversal from NodeId::Entry through successor edges.
+  - Cleanup sequence matches nqcc2/lib/optimizations/unreachable_code_elim.ml shape: eliminate unreachable blocks -> eliminate useless jumps -> eliminate useless labels -> remove empty blocks.
+  - src/ir/opt.rs wires OptPass::UnreachableCodeElim inside the existing fixed-point run_opt loop and leaves OptPass::CopyPropagation | OptPass::DeadStoreElim as no-ops.
+  - src/pipeline.rs pushes OptPass::UnreachableCodeElim only when OptimizationFlags::eliminate_unreachable_code is true.
+  - src/driver.rs sets that flag only for --eliminate-unreachable-code.
+  - src/ir/mod.rs only registers the private unreachable_code_elim module.
+
+ocamlComparison:
+  - nqcc2/lib/optimizations/unreachable_code_elim.ml removes blocks unreachable from Entry, removes jumps whose only successors are the default next block, removes labels whose only predecessor is the default predecessor, and rewires/removes empty blocks.
+  - Rust implementation mirrors that pass order and uses the existing Rust CFG edge helpers rather than inventing a different optimizer.
+  - nqcc2/lib/optimizations/optimize.ml runs constant folding before CFG construction/UCE and repeats to a fixed point; Rust run_opt already loops to fixed point and now invokes UCE for its flag. Copy propagation and DSE are intentionally still no-ops for W20-T4/W20-T5.
+
+antiSlopProgrammingReview:
+  - Loaded and applied omo:programming plus Rust reference criteria: no unsafe, no new dependency, source files under 250 pure LOC, uses exhaustive Rust enum matching where relevant, and no unwrap/expect in changed files.
+  - Loaded and applied omo:remove-ai-slops criteria over the diff/tests/production code: no new tautological/deletion-only/implementation-mirroring tests remain; no compiler-phase #[cfg(test)] or #[test] exists in UCE; production code is not over-abstracted and reuses existing CFG/TACKY seams.
+  - Code review coverage was present and supported: .omo/evidence/task-53-unreachable-code-code-review.md explicitly rejected the original unit-test slop/policy violation; .omo/evidence/task-53-unreachable-code-fix.txt documents removal; .omo/evidence/task-53-unreachable-code-code-review-2.md explicitly rechecked remove-ai-slops/programming and found the blocker resolved. My direct pass agrees.
+
+requiredCommandsRun:
+  - cargo fmt --all -- --check
+    result: exit 0, no output.
+  - cargo check --release
+    result: exit 0, Finished release profile.
+  - cargo build --release
+    result: exit 0, Finished release profile.
+  - cargo test --release
+    result: exit 0; src/lib.rs 0 tests; src/main.rs running 10 tests, 10 passed; doc tests 0.
+  - ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-unreachable-code
+    result: exit 0; Ran 15 tests; OK.
+  - ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --fold-constants
+    result: exit 0; Ran 16 tests; OK.
+  - ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union
+    result: exit 0; Ran 286 tests; OK. Existing assembler truncation warnings appeared for static struct initializer client fixtures, but the harness passed.
+  - git diff --check
+    result: exit 0, no output.
+  - rg -n 'evaluate_program|compile_with_system_cc_frontend|SystemAssemblySanitizerOptions|system_c_to_assembly|source_has_' --glob '!target/**' --glob '!.git/**' .
+    result: only historical docs/COACHING_LOG.md references; no source/test/Cargo hits.
+  - rg -n 'evaluate_program|compile_with_system_cc_frontend|SystemAssemblySanitizerOptions|system_c_to_assembly|source_has_' src tests Cargo.toml Cargo.lock || true
+    result: no output.
+
+additionalIndependentChecks:
+  - cargo test --release -- --list
+    result: exactly 10 tests listed: compiler::* and driver::* only; no UCE unit test.
+  - rg -n '#\[cfg\(test\)\]|#\[test\]' src/ir/unreachable_code_elim.rs || true
+    result: no output.
+  - rg -n '#\[cfg\(test\)\]|#\[test\]' src/ir src/codegen src/semantics src/parse src/lex || true
+    result: no output.
+  - git diff -- Cargo.toml Cargo.lock tests
+    result: no output; no dependency or harness changes.
+  - rg -n '\bunsafe\b' src/ir/unreachable_code_elim.rs src/ir/opt.rs src/pipeline.rs src/ir/mod.rs || true
+    result: no output.
+  - changed-file pure LOC:
+    src/ir/unreachable_code_elim.rs 149; src/ir/opt.rs 33; src/pipeline.rs 89; src/ir/mod.rs 11.
+  - rg scan for CopyPropagation/DeadStoreElim/regalloc/liveness/interference terms in changed files found only existing enum/comment/no-op references; no copy-prop, DSE, liveness, interference, or regalloc implementation was added.
+
+manualUCEProbes:
+  Probe command shape:
+    For each temporary /tmp probe source, I compiled and ran without optimization and with --eliminate-unreachable-code, captured --tacky output with and without UCE, and captured -S assembly with UCE. Expected nonzero program exits were handled explicitly.
+
+  1. after_return
+    source:
+      int main(void) {
+          return 7;
+      dead_after_return:
+          return 99;
+      }
+    result:
+      PASS after_return: exits no-opt=7 UCE=7; dead label 'user_label.main.dead_after_return.0' and immediate '99' absent after UCE; TACKY lines 35 -> 27.
+    evidence meaning:
+      UCE removes the block after return without changing observable exit status.
+
+  2. jump_over_dead
+    source:
+      int main(void) {
+          goto live;
+      dead_jump_over:
+          return 99;
+      live:
+          return 3;
+      }
+    result:
+      PASS jump_over_dead: exits no-opt=3 UCE=3; dead label 'user_label.main.dead_jump_over.1' and immediate '99' absent after UCE; TACKY lines 41 -> 27. Live/default label 'user_label.main.live.0' was removed by label cleanup after the jump became a fallthrough.
+    evidence meaning:
+      UCE removes a block skipped by an unconditional jump, then removes now-useless jump/label structure.
+
+  3. conditional_shape
+    source:
+      int main(void) {
+          int x = 0;
+          if (x) {
+              return 99;
+          }
+          return 5;
+      dead_cond_tail:
+          return 77;
+      }
+    result:
+      PASS conditional_shape: exits no-opt=5 UCE=5; dead label 'user_label.main.dead_cond_tail.0' and immediate '77' absent after UCE; TACKY lines 59 -> 51. The live conditional branch remains because CFG reachability (without constant folding) correctly treats both conditional successors as reachable.
+    evidence meaning:
+      UCE preserves reachable conditional control flow and removes only the unreachable tail after the return.
+
+  Note: one intermediate manual assertion script failed because it incorrectly treated immediate 99 as dead in the conditional_shape probe even though that branch is CFG-reachable without constant folding. I corrected the checker to assert the actual dead immediate per scenario (77 for conditional_shape); the compiler output was not the failure.
+
+dirtyWorktreeClassification:
+  Task 53 source paths:
+    - src/ir/unreachable_code_elim.rs (new)
+    - src/ir/mod.rs
+    - src/ir/opt.rs
+    - src/pipeline.rs
+  Task 53 evidence paths present:
+    - .omo/evidence/task-53-unreachable-code-implementation.txt
+    - .omo/evidence/task-53-unreachable-code-code-review.md
+    - .omo/evidence/task-53-unreachable-code-fix.txt
+    - .omo/evidence/task-53-unreachable-code-code-review-2.md
+    - .omo/evidence/task-53-unreachable-code-adversarial-verify.txt
+  Worktree noise not a Task 53 source blocker:
+    - .omo/boulder.json is modified with workflow/session state including todo:53 running plus prior task state; it can be excluded from a source commit if policy wants only Task 53 source/evidence.
+    - .omo/start-work/ledger.jsonl and older untracked .omo/evidence/task-18/task-37/task-38/task-39/task-40/task-41 files are pre-existing/other-task evidence noise; do not stage them for Task 53.
+  Commit can stage only Task 53 source plus intended evidence, so dirty unrelated .omo state is not a rejection reason.
+
+evidenceGaps:
+  - No material evidence gaps for Task 53 approval.
+  - Historical forbidden-fingerprint strings remain in docs/COACHING_LOG.md only; docs were not changed by Task 53 and source/tests/Cargo are clean for the requested fingerprint set.
+  - I did not stage or commit anything and did not edit source; only this evidence artifact was written.
+
+finalDecision:
+  APPROVE. Task 53 is FullyDone and may be checked off/committed with a scoped stage set.

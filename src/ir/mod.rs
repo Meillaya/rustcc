@@ -27,6 +27,7 @@ pub mod lower;
 pub mod opt;
 pub mod tacky;
 pub mod temp;
+mod unreachable_code_elim;
 
 pub use opt::{OptPass, run_opt};
 pub use tacky::{Instruction, TackyFunction, TackyProgram, Val, Var, ast_to_tacky};

@@ -82,6 +82,9 @@ pub mod optimize {
         if optimization_flags.fold_constants {
             passes.push(OptPass::ConstantFolding);
         }
+        if optimization_flags.eliminate_unreachable_code {
+            passes.push(OptPass::UnreachableCodeElim);
+        }
         Ok(run_pass(tacky, &passes))
     }
 }
