@@ -1269,3 +1269,37 @@ Implemented the Chapter 19 W20-T5 dead-store elimination pass and closed the def
 
 - Wave 21 / Chapter 20 register allocation remains pending, starting with assembly liveness analysis.
 - `src/codegen/codegen.rs` and `src/lex/scanner.rs` remain oversized legacy files touched by required support fixes; no additional broad cleanup was taken in Task 55.
+
+## Wave 21 / Chapter 20 liveness analysis foundation (task 56)
+
+Implemented the Chapter 20 W21-T1 assembly liveness foundation for the later register allocator. The new `src/codegen/regalloc/` liveness surface mirrors the OCaml `regalloc.ml` use/write and backward dataflow shape, exposes block live-in/live-out plus instruction live-after annotations, and keeps the actual allocator/interference/color/spill/coalescing work as later Wave 21 scope. A review rejection corrected the register-class sets to match OCaml exactly, made missing call metadata an explicit liveness error, removed broad class filtering, and expanded manual probes across branches, calls, div/idiv, memory/indexed operands, and GP/XMM behavior.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `cargo fmt --all -- --check` | exit 0 |
+| `cargo check --release` | exit 0 |
+| `cargo build --release` | exit 0 |
+| `cargo test --release` | 10 passed, 0 failed |
+| chapter 19 default `--latest-only` | `Ran 120 tests ... OK` after one transient harness rerun |
+| chapter 19 `--latest-only --eliminate-dead-stores` | `Ran 27 tests ... OK` |
+| chapter 18 `--latest-only --union` | `Ran 286 tests ... OK` |
+| liveness manual probes | branch live sets, call metadata/error path, div/idiv implicit regs, memory/indexed operands, return regs, GP/XMM classes all passed |
+| file-size/slop check | Task 56 Rust files all below 250 pure LOC; no compiler-phase Rust tests added |
+| scope scan | no interference graph, coloring, spilling, coalescing, new dependencies, unsafe, unwrap/expect, or bridge/system-C path added |
+| `git diff --check` | exit 0 |
+
+### Evidence
+
+- `.omo/evidence/task-56-liveness-implementation.txt`
+- `.omo/evidence/task-56-liveness-code-review.md`
+- `.omo/evidence/task-56-liveness-adversarial-verify.txt`
+- `.omo/evidence/task-56-liveness-fix.txt`
+- `.omo/evidence/task-56-liveness-code-review-2.md`
+- `.omo/evidence/task-56-liveness-adversarial-verify-2.txt`
+
+### Remaining scope
+
+- W21-T2 must build the interference graph and simplification over this liveness foundation.
+- Strict repo-wide clippy remains red on pre-existing diagnostics and was recorded as a watch item, not a Task 56 blocker.

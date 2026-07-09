@@ -14,7 +14,7 @@
 /// The order of unit variants is fixed by `Reg::encode` / `Reg::slot`
 /// requirements in later waves — do not reorder without checking the
 /// register allocator and frame layout assumptions.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Reg {
     AX,
     CX,
@@ -46,7 +46,7 @@ pub enum Reg {
 ///   into a tuple to keep the enum flat)
 /// - `Pseudo`: a symbolic operand the replace-pseudos pass will resolve
 /// - `Stack`: a frame-relative slot (offset in bytes from `%rbp`)
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Operand {
     Imm(i64),
     Reg(Reg),

@@ -1,0 +1,23 @@
+Task 56 W21-T1 Chapter 20 liveness commit evidence
+
+Verifier verdict: APPROVE (`.omo/evidence/task-56-liveness-adversarial-verify-2.txt`).
+
+Commands/evidence accepted for commit:
+- `cargo fmt --all -- --check` -> exit 0
+- `cargo check --release` -> exit 0
+- `cargo build --release` -> exit 0
+- `cargo test --release` -> exit 0, 10 tests passed
+- `./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only` -> `Ran 120 tests ... OK` on rerun after transient harness missing-output failure
+- `./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-dead-stores` -> `Ran 27 tests ... OK`
+- `./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union` -> `Ran 286 tests ... OK`
+- `git diff --check` -> exit 0
+
+Adversarial checks:
+- GP and XMM hard/caller-saved register sets match OCaml exactly, excluding R10/R11/XMM14/XMM15 scratch registers.
+- Missing call metadata and Pop in liveness now surface explicit errors.
+- Manual probes cover branch live-in/out, calls, return registers, div/idiv implicit AX/DX use/write, memory/indexed operands, and GP/XMM class behavior.
+- Task 56 files are under 250 pure LOC.
+- No compiler-phase Rust tests, new dependencies, unsafe, unwrap/expect, bridge/system-C path, or W21-T2+ interference/color/spill/coalesce implementation was added.
+
+Follow-up:
+- W21-T2 interference graph and simplification remain pending.

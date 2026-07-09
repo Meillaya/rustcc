@@ -1891,7 +1891,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   - [ ] `--chapter 19 --latest-only --eliminate-dead-stores` passes.
   - [ ] `--chapter 19 --latest-only` (default all 4 passes) passes.
 
-- [ ] 56. W21-T1: Chapter 20 - liveness analysis via backward dataflow
+- [x] 56. W21-T1: Chapter 20 - liveness analysis via backward dataflow
 
   **What to do**: Implement liveness on the assembly CFG.
   - In `src/codegen/regalloc/mod.rs` (new module), write `pub fn liveness<N: ...>(cfg: &Cfg<N>) -> HashMap<BlockId, (LiveSet, LiveSet)>`. Mirror OCaml `liveness` from `regalloc.ml`.

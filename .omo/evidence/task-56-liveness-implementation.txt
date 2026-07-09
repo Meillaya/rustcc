@@ -1,0 +1,129 @@
+Task 56 / W21-T1 liveness implementation evidence
+Date: 2026-07-09T00:17:51-04:00
+HEAD: f03a24f
+
+Changed/untracked task files:
+ M src/codegen/assembly.rs
+ M src/codegen/regalloc/mod.rs
+?? .omo/evidence/task-56-liveness-implementation.txt
+?? src/codegen/regalloc/liveness.rs
+?? src/codegen/regalloc/operands.rs
+?? src/codegen/regalloc/types.rs
+
+Implementation notes:
+- Added regalloc liveness module surface: analyze_liveness(cfg,...), analyze_function_liveness(...), block_liveness(...).
+- Mirrors OCaml regalloc.ml liveness: meet unions successor live-ins plus return regs at Exit; transfer walks instructions backward with (live - written) union used.
+- GP/XMM register classes are explicit in RegisterClass; calls use configurable param regs and caller-saved clobbers.
+- Address-taken pseudo exclusion is deliberately left for W21-T2 interference candidate selection; liveness keeps all pseudos visible so aliased variables remain spill/memory candidates later.
+
+Manual liveness probe source: /tmp/rustcc_liveness_probe.rs
+Probe program: a->b; if b==0 goto done; b+=c; done: AX=b; ret
+Expected hand-derived sets: block0 live_in {a,c} live_out {b,c}; block1 live_in {b,c} live_out {b}; block2 live_in {b} live_out {AX}.
+
+===== cargo fmt --all -- --check =====
+[exit 0]
+
+===== cargo check --release =====
+    Finished `release` profile [optimized] target(s) in 0.01s
+[exit 0]
+
+===== cargo build --release =====
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 3.24s
+[exit 0]
+
+===== cargo test --release =====
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 3.17s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 10 tests
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test driver::tests::derives_all_output_paths ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test compiler::tests::parses_sizeof_expression_without_evaluating_it ... ok
+test driver::tests::parses_default_run_stage ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[exit 0]
+
+===== ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only =====
+----------------------------------------------------------------------
+Ran 120 tests in 2.959s
+
+OK
+[exit 0]
+
+===== ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-dead-stores =====
+----------------------------------------------------------------------
+Ran 27 tests in 0.629s
+
+OK
+[exit 0]
+
+===== ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union =====
+----------------------------------------------------------------------
+Ran 286 tests in 5.284s
+
+OK
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s:17: Warning: value 0x1000000080000000 truncated to 0x80000000
+
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s:9: Warning: value 0x400000005 truncated to 0x5
+
+[exit 0]
+
+===== rustc --edition=2024 /tmp/rustcc_liveness_probe.rs -o /tmp/rustcc_liveness_probe && /tmp/rustcc_liveness_probe =====
+warning: variant `Xmm` is never constructed
+  --> /home/mei/projects/rustcc/src/codegen/regalloc/types.rs:13:5
+   |
+11 | pub enum RegisterClass {
+   |          ------------- variant in this enum
+12 |     Gp,
+13 |     Xmm,
+   |     ^^^
+   |
+   = note: `RegisterClass` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: 1 warning emitted
+
+block 0 live_in {Pseudo("a"), Pseudo("c")} live_out {Pseudo("b"), Pseudo("c")}
+block 1 live_in {Pseudo("b"), Pseudo("c")} live_out {Pseudo("b")}
+block 2 live_in {Pseudo("b")} live_out {Reg(AX)}
+hand-derived: block0 live_in {Pseudo(a), Pseudo(c)} live_out {Pseudo(b), Pseudo(c)}; block1 live_in {Pseudo(b), Pseudo(c)} live_out {Pseudo(b)}; block2 live_in {Pseudo(b)} live_out {Reg(AX)}
+[exit 0]
+
+===== python3 /tmp/loc_check.py =====
+src/codegen/assembly.rs: 214 pure LOC
+src/codegen/regalloc/mod.rs: 22 pure LOC
+src/codegen/regalloc/types.rs: 69 pure LOC
+src/codegen/regalloc/operands.rs: 131 pure LOC
+src/codegen/regalloc/liveness.rs: 102 pure LOC
+[exit 0]
+
+===== git diff --check =====
+[exit 0]
+
+Known remaining scope:
+- W21-T2 interference graph, W21-T3 coloring, W21-T4 spilling/rewrite loop, and W21-T5 coalescing are intentionally not implemented.
+- allocate() remains the existing chapter-20 stub, so chapter 19 behavior and CLI gates are unchanged.
