@@ -1,0 +1,204 @@
+VERDICT: APPROVE
+recommendation: APPROVE
+reviewer: final gate / independent adversarial verification
+workspace: /home/mei/projects/rustcc
+date: 2026-07-09
+head: bd4aad2 feat(compiler): chapter 19: unreachable code elimination
+
+originalIntent:
+  Task 54 / W20-T4 should implement Chapter 19 copy propagation in the Rust C compiler, mirroring the OCaml reference shape, gated by --propagate-copies, without implementing W20-T5 DSE or Wave 21 register allocation/liveness/interference/coalescing, and without adding compiler-phase Rust unit tests.
+
+desiredOutcome:
+  The user can check off/commit Task 54 because the uncommitted Task 54 source implements CFG/dataflow copy propagation safely, preserves TackyFunction metadata, passes required official gates, resolves prior file-size/slop blockers, and leaves unrelated dirty .omo state out of the commit scope.
+
+userOutcomeReview:
+  APPROVE. From the user's perspective, `--propagate-copies` now runs a CFG/dataflow copy-propagation pass and passes the official Chapter 19 copy-propagation harness. Independent manual optimized/no-opt executable probes returned matching exit 0 for pure-copy, address-taken, store, call, and memory cases. The source review found the optimization pass itself is selected only from `OptimizationFlags.propagate_copies`; DSE remains a no-op and regalloc/liveness/interference/coalescing remain unimplemented scaffolding. Prior review-1 slop blockers are resolved: `src/ir/constant_folding/instr.rs` is below 250 pure LOC, Task54 helper bodies are relocated out of oversized `codegen.rs`, and no compiler-phase tests were added.
+
+blockers:
+  None.
+
+evidenceGaps:
+  None blocking. I did not run default-all Chapter 19 or DSE because W20-T5 owns DSE/default-all and this gate explicitly required individual copy-prop/UCE/fold plus Chapter 18 union. `src/codegen/codegen.rs` remains a legacy oversized file, but Task54 helper bodies were moved to `src/codegen/codegen/copy_prop_support.rs` and the remaining codegen.rs Task54 hunks are narrow delegations.
+
+checkedArtifactPaths:
+  Plan / policy:
+    - .omo/plans/c-compiler-rust.md
+      * Task 54 acceptance: W20-T4 copy propagation, references OCaml copy_prop.ml/backward_dataflow.ml, pass `--chapter 19 --latest-only --propagate-copies`.
+      * Global policy: official `tests/test_compiler` harness is compiler correctness path; no Rust unit tests for compiler phases.
+      * W20-T5 owns DSE and default all-optimizations gate.
+  Prior evidence / reviews:
+    - .omo/evidence/task-54-copy-prop-implementation.txt
+    - .omo/evidence/task-54-copy-prop-code-review.md
+    - .omo/evidence/task-54-copy-prop-fix.txt
+    - .omo/evidence/task-54-copy-prop-code-review-2.md
+  Changed source inspected:
+    - src/ir/copy_propagation.rs
+    - src/ir/copy_propagation/facts.rs
+    - src/ir/copy_propagation/dataflow.rs
+    - src/ir/copy_propagation/rewrite.rs
+    - src/ir/copy_propagation/cleanup.rs
+    - src/ir/opt.rs
+    - src/pipeline.rs
+    - src/ir/mod.rs
+    - src/ir/constant_folding.rs
+    - src/ir/constant_folding/folds.rs
+    - src/ir/constant_folding/instr.rs
+    - src/ir/constant_folding/state.rs
+    - src/codegen/codegen.rs
+    - src/codegen/codegen/copy_prop_support.rs
+    - src/codegen/regalloc/mod.rs
+    - src/compiler.rs
+    - src/driver.rs
+    - src/codegen/mod.rs
+  OCaml/reference source inspected:
+    - nqcc2/lib/optimizations/copy_prop.ml
+    - nqcc2/lib/backward_dataflow.ml
+    - nqcc2/lib/optimizations/optimize_utils.ml
+    - nqcc2/lib/optimizations/address_taken.ml
+    - nqcc2/lib/optimizations/optimize.ml
+  Skill criteria consulted/applied directly:
+    - /home/mei/.codex/plugins/cache/sisyphuslabs/omo/4.16.0/skills/remove-ai-slops/SKILL.md
+    - /home/mei/.codex/plugins/cache/sisyphuslabs/omo/4.16.0/skills/programming/SKILL.md
+    - /home/mei/.codex/plugins/cache/sisyphuslabs/omo/4.16.0/skills/programming/references/rust/README.md
+    - /home/mei/.codex/plugins/cache/sisyphuslabs/omo/4.16.0/skills/programming/references/code-smells.md
+
+exactCommandsRunOrInspected:
+  - cat /home/mei/.codex/plugins/cache/sisyphuslabs/omo/4.16.0/skills/remove-ai-slops/SKILL.md
+  - cat /home/mei/.codex/plugins/cache/sisyphuslabs/omo/4.16.0/skills/programming/SKILL.md
+  - cat /home/mei/.codex/plugins/cache/sisyphuslabs/omo/4.16.0/skills/programming/references/rust/README.md
+  - cat /home/mei/.codex/plugins/cache/sisyphuslabs/omo/4.16.0/skills/programming/references/code-smells.md
+  - git status --short
+  - git rev-parse --short HEAD
+  - git log -1 --oneline
+  - git diff --name-status HEAD
+  - git ls-files --others --exclude-standard
+  - grep -n -A45 -B20 -E 'Task 54|W20-T4|copy propagation|propagate-copies|compiler-phase unit tests|unit tests' .omo/plans/c-compiler-rust.md
+  - sed -n '1,240p' .omo/evidence/task-54-copy-prop-implementation.txt
+  - sed -n '1,280p' .omo/evidence/task-54-copy-prop-code-review.md
+  - sed -n '1,240p' .omo/evidence/task-54-copy-prop-fix.txt
+  - sed -n '1,280p' .omo/evidence/task-54-copy-prop-code-review-2.md
+  - codegraph_explore: Task 54 copy propagation source review for copy_propagation, opt, pipeline, constant_folding, codegen support
+  - git diff -- src/codegen/codegen.rs src/ir/constant_folding.rs src/ir/constant_folding/folds.rs src/ir/constant_folding/instr.rs src/ir/mod.rs src/ir/opt.rs src/pipeline.rs
+  - nl -ba src/ir/copy_propagation.rs src/ir/copy_propagation/facts.rs src/ir/copy_propagation/dataflow.rs src/ir/copy_propagation/rewrite.rs src/ir/copy_propagation/cleanup.rs src/ir/constant_folding/state.rs src/codegen/codegen/copy_prop_support.rs
+  - nl -ba nqcc2/lib/optimizations/copy_prop.ml nqcc2/lib/backward_dataflow.ml nqcc2/lib/optimizations/optimize_utils.ml nqcc2/lib/optimizations/address_taken.ml nqcc2/lib/optimizations/optimize.ml
+  - nl -ba src/driver.rs | sed -n '1,130p'
+  - nl -ba src/pipeline.rs | sed -n '65,100p'
+  - nl -ba src/ir/opt.rs | sed -n '1,80p'
+  - nl -ba src/ir/mod.rs | sed -n '1,60p'
+  - nl -ba src/codegen/codegen.rs | sed -n '40,55p;420,470p;1830,1875p'
+  - nl -ba src/ir/constant_folding.rs | sed -n '1,100p'
+  - nl -ba src/ir/constant_folding/instr.rs | sed -n '35,260p'
+  - nl -ba src/codegen/regalloc/mod.rs | sed -n '1,80p'
+  - rg -n 'regalloc|allocate\(' src/compiler.rs src/pipeline.rs src/codegen -g '*.rs'
+
+requiredCommandResults:
+  - cargo fmt --all -- --check
+    result: PASS, exit 0.
+  - cargo check --release
+    result: PASS, exit 0. Output: `Finished release profile [optimized] target(s) in 0.02s`.
+  - cargo build --release
+    result: PASS, exit 0. Output: `Finished release profile [optimized] target(s) in 0.01s`.
+  - cargo test --release
+    result: PASS, exit 0. src/main.rs ran 10 tests; `test result: ok. 10 passed; 0 failed`. src/lib.rs and doc-tests ran 0 tests.
+  - ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --propagate-copies
+    result: PASS, exit 0. Output: `Ran 42 tests ... OK`.
+  - ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-unreachable-code
+    result: PASS, exit 0. Output: `Ran 15 tests ... OK`.
+  - ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --fold-constants
+    result: PASS, exit 0. Output: `Ran 16 tests ... OK`.
+  - ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union
+    result: PASS, exit 0. Output: `Ran 286 tests ... OK`. gcc/assembler emitted two truncation warnings for static struct initializer test assembly files, but harness still reported OK.
+  - git diff --check
+    result: PASS, exit 0.
+  - rg -n 'evaluate_program|compile_with_system_cc_frontend|SystemAssemblySanitizerOptions|system_c_to_assembly|source_has_' src
+    result: PASS/CLEAN. rg exit 1, meaning no matches.
+
+manualProbe:
+  Temp source was written under mktemp /tmp and removed after the probe. Exact behavior classes:
+    - pure_chain: int b=a; int c=b; int d=c; return d;
+    - address_taken_case: copies a local, takes &x, stores through pointer, verifies y retains old a while x is updated.
+    - store_case: similar address/store case with a different value.
+    - call_case: copies local around a call that mutates static glob; verifies local copy and global update.
+    - memory_case: loads through pointer, copies loaded value, stores through pointer, reloads; verifies old loaded value and new memory value.
+  Commands:
+    - ./target/release/rustcc /tmp/.../cp_probe.c; /tmp/.../cp_probe
+      result: no_opt_compile_exit=0 no_opt_run_exit=0.
+    - ./target/release/rustcc --propagate-copies /tmp/.../cp_probe.c; /tmp/.../cp_probe
+      result: opt_compile_exit=0 opt_run_exit=0.
+    - ./target/release/rustcc --tacky --propagate-copies /tmp/.../cp_probe.c
+      inspected optimized TACKY excerpts.
+  Manual TACKY evidence:
+    - pure_chain Return was rewritten from no-opt `Return(Var("pure_chain.d.3"))` to optimized `Return(Var("pure_chain.a.0"))`, with intermediate copy sources rewritten to the original argument.
+    - address/store cases retained `GetAddress` and `Store` and kept post-store comparisons against the updated x variable, while y comparisons were safely rewritten to the original parameter value.
+    - call_case retained `Call { name: "change_global", dst: None }` and retained static `glob` reads after the call.
+    - memory_case retained `Load`, `Store`, and a second `Load` after the store; optimized/no-opt executable exits matched.
+
+sourceReviewFindings:
+  - OCaml shape match: Rust `copy_propagation` mirrors `copy_prop.ml` with a ReachingCopies set, `filter_updated`, aliased/static filtering on calls/stores, all-copies identity initialization, predecessor intersection meet, fixed-point worklist, and rewrite that drops redundant copies and replaces instruction sources. Rust extends this cautiously for aggregate `CopyBytes` because this port's TACKY represents aggregate operations differently from OCaml (`CopyToOffset`/`CopyFromOffset`); the extension is bounded to known GetAddress bases and unused tmp aggregate cleanup.
+  - CFG/dataflow: `src/ir/copy_propagation.rs:60-72` builds a TACKY CFG, `dataflow.rs:15-40` runs fixed-point reaching-copy analysis, `dataflow.rs:52-66` implements predecessor meet/intersection, `rewrite.rs:10-29` strips annotations and returns a rewritten CFG.
+  - TackyFunction metadata preservation: `src/ir/copy_propagation.rs:54-77` clones the original body for changed detection, optimizes only the CFG-derived body, and assigns only `function.body = body`; name/global/params/type_env/ast_type_env/return_type are preserved.
+  - Flag wiring: `src/driver.rs:94-99` parses `--propagate-copies`; `src/pipeline.rs:81-90` pushes `OptPass::CopyPropagation` only when `optimization_flags.propagate_copies`; `src/ir/opt.rs:51-55` dispatches to `propagate_copies_program`. `OptPass::DeadStoreElim => current` remains a no-op at `src/ir/opt.rs:56`.
+  - DSE/regalloc/liveness/interference/coalescing: `src/codegen/regalloc/mod.rs:19-20` still contains `unimplemented!("ch.20 regalloc wired in wave 21")`; grep found only existing driver flags/scaffold comments and no Task54 implementation of liveness/interference/coalescing. Diff-only forbidden future-pass scan found only the updated opt.rs comment and `OptPass::DeadStoreElim => current`.
+  - Constant folding support: new `ConstState` avoids remembering constants for static variables, preserving safety around calls/stores and official copy-prop scenarios. Constant folding still passes its Chapter 19 gate.
+  - Codegen support: Task54 helper bodies are in `src/codegen/codegen/copy_prop_support.rs` (98 pure LOC); `src/codegen/codegen.rs` only adds module declaration and narrow delegations for repeated integer call args and constant-index AddPtr lowering. These helpers are unconditional codegen shape improvements but did not change observed valid-program behavior in no-opt vs optimized manual runs and regression gates.
+
+slopAndTestReview:
+  Direct remove-ai-slops/programming pass:
+    - No tests were added, so there are no deletion-only tests, tautological tests, implementation-mirroring tests, prompt/snapshot brittleness, or excessive unit tests.
+    - `git diff -- tests Cargo.toml Cargo.lock` returned empty; no harness/dependency weakening.
+    - Diff-only scan for `#[cfg(test)]`, `#[test]`, and `mod tests` in src/tests returned no additions.
+    - Diff-only scan for added `unsafe`, `unwrap(`, or `expect(` returned no matches.
+    - No new dependency or broad abstraction was added; the new modules are scoped by responsibility.
+  Review-report coverage check:
+    - `.omo/evidence/task-54-copy-prop-code-review.md` explicitly loaded remove-ai-slops/programming and rejected on file-size/slop.
+    - `.omo/evidence/task-54-copy-prop-code-review-2.md` explicitly reloaded the same skills, checked overfit/slop criteria, confirmed no tests added, and supported its resolution claims with LOC/output evidence. My direct pass supports that coverage.
+
+fileSizeReview:
+  Pure LOC command used:
+    for f in <required files>; do awk '!/^[[:space:]]*$/ && !/^[[:space:]]*(\/\/|#)/ {c++} END{printf "%4d %s\n", c+0, FILENAME}' "$f"; done
+  Results:
+      73 src/ir/copy_propagation.rs
+     177 src/ir/copy_propagation/facts.rs
+     204 src/ir/copy_propagation/dataflow.rs
+     244 src/ir/copy_propagation/rewrite.rs
+     110 src/ir/copy_propagation/cleanup.rs
+      77 src/ir/constant_folding.rs
+     165 src/ir/constant_folding/folds.rs
+     233 src/ir/constant_folding/instr.rs
+      21 src/ir/constant_folding/state.rs
+    1907 src/codegen/codegen.rs
+      98 src/codegen/codegen/copy_prop_support.rs
+      39 src/ir/opt.rs
+      92 src/pipeline.rs
+      12 src/ir/mod.rs
+  Assessment:
+    - Prior blocker `src/ir/constant_folding/instr.rs` is resolved at 233 pure LOC (<250).
+    - New Task54 copy-prop/helper modules are below 250 pure LOC.
+    - `src/codegen/codegen.rs` remains legacy oversized, but Task54 helper bodies were moved out and remaining changes are small delegations; this matches the passed fix review and does not block Task54.
+
+dirtyWorktreeClassification:
+  Task54 source paths to stage when committing:
+    - src/codegen/codegen.rs
+    - src/codegen/codegen/copy_prop_support.rs
+    - src/ir/constant_folding.rs
+    - src/ir/constant_folding/folds.rs
+    - src/ir/constant_folding/instr.rs
+    - src/ir/constant_folding/state.rs
+    - src/ir/mod.rs
+    - src/ir/opt.rs
+    - src/pipeline.rs
+    - src/ir/copy_propagation.rs
+    - src/ir/copy_propagation/cleanup.rs
+    - src/ir/copy_propagation/dataflow.rs
+    - src/ir/copy_propagation/facts.rs
+    - src/ir/copy_propagation/rewrite.rs
+    - Task54 evidence files if desired by project workflow: .omo/evidence/task-54-copy-prop-implementation.txt, .omo/evidence/task-54-copy-prop-code-review.md, .omo/evidence/task-54-copy-prop-fix.txt, .omo/evidence/task-54-copy-prop-code-review-2.md, .omo/evidence/task-54-copy-prop-adversarial-verify.txt
+  Unrelated/old/workflow-state dirty paths not required for Task54 source commit:
+    - .omo/boulder.json (workflow state; modified)
+    - .omo/start-work/ledger.jsonl
+    - older untracked evidence files for task-18/task-37/task-38/task-39/task-40/task-41.
+  Assessment:
+    - Dirty worktree is stageable by path; unrelated old evidence/.omo state is not an approval blocker.
+
+finalDecision:
+  APPROVE. All required official commands passed, direct source and OCaml-shape review found the implementation scoped to Task54, manual probes did not expose behavioral divergence, previous slop/file-size blockers are resolved, no compiler-phase unit tests or forbidden bridge fingerprints are present, and future-pass work remains unimplemented as required.

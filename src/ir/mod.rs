@@ -23,6 +23,7 @@
 pub mod cfg;
 pub mod const_eval;
 mod constant_folding;
+mod copy_propagation;
 pub mod lower;
 pub mod opt;
 pub mod tacky;

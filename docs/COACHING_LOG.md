@@ -1191,3 +1191,37 @@ Implemented the Chapter 19 W20-T3 unreachable-code elimination pass on top of th
 
 - W20-T4 copy propagation and W20-T5 dead-store elimination/default-all gate remain pending.
 - UCE intentionally uses CFG reachability only; it does not fold constants or do cross-pass dataflow beyond its own cleanup sequence.
+
+## Wave 20 / Chapter 19 copy propagation (task 54)
+
+Implemented the Chapter 19 W20-T4 copy-propagation pass on top of the CFG foundation. The optimizer now wires `--propagate-copies` through the pipeline, runs a conservative CFG/dataflow reaching-copy analysis, rewrites safe TACKY uses, preserves original `TackyFunction` metadata, and keeps stores, calls, address-taken variables, static variables, and aggregate `CopyBytes` cases conservative. A code-review rejection forced a file-size/slop cleanup: constant-folding state handling was split out and copy-prop-induced codegen helper bodies were relocated from legacy `codegen.rs` into a small helper module.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `cargo fmt --all -- --check` | exit 0 |
+| `cargo check --release` | exit 0 |
+| `cargo build --release` | exit 0 |
+| `cargo test --release` | 10 passed, 0 failed |
+| chapter 19 `--latest-only --propagate-copies` | `Ran 42 tests ... OK` |
+| chapter 19 `--latest-only --eliminate-unreachable-code` | `Ran 15 tests ... OK` |
+| chapter 19 `--latest-only --fold-constants` | `Ran 16 tests ... OK` |
+| chapter 18 `--latest-only --union` | `Ran 286 tests ... OK` |
+| manual copy-prop probes | pure copy chain optimized; address-taken/store/call/memory cases matched no-opt exits |
+| file-size/slop check | Task 54 helper modules under 250 pure LOC; no compiler-phase Rust tests added |
+| forbidden bridge/interpreter scan | no matches in source |
+| `git diff --check` | exit 0 |
+
+### Evidence
+
+- `.omo/evidence/task-54-copy-prop-implementation.txt`
+- `.omo/evidence/task-54-copy-prop-code-review.md`
+- `.omo/evidence/task-54-copy-prop-fix.txt`
+- `.omo/evidence/task-54-copy-prop-code-review-2.md`
+- `.omo/evidence/task-54-copy-prop-adversarial-verify.txt`
+
+### Remaining scope
+
+- W20-T5 must still implement dead-store elimination and the default all-optimizations Chapter 19 gate.
+- `src/codegen/codegen.rs` remains a legacy oversized file, but Task 54 helper bodies now live in `src/codegen/codegen/copy_prop_support.rs`; broad codegen decomposition remains out of scope.

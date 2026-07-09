@@ -47,6 +47,8 @@
 
 use std::collections::HashMap;
 
+mod copy_prop_support;
+
 use anyhow::Result;
 
 use crate::ast::Type;
@@ -433,7 +435,6 @@ fn lower_call(
     for (idx, slot) in classified.int_slots.iter().enumerate() {
         let reg = abi_reg(abi::int_param_reg(idx + first_int_reg));
         let val = &args[slot.param_index];
-        let ty = type_of_val(val, type_env);
         if matches!(
             param_types.get(slot.param_index),
             Some(Type::Struct(_) | Type::Union(_))
@@ -443,28 +444,26 @@ fn lower_call(
                 slot.size,
                 reg,
             ));
-        } else if ty.is_long_word()
-            || matches!(param_types.get(slot.param_index), Some(Type::Pointer(_)))
-        {
-            out.push(Instr::Movq {
-                src: convert_val(val, ctx),
-                dst: Operand::Reg(reg),
-            });
-        } else if ty == OperandType::Byte {
-            out.push(Instr::MovSignExtendByte {
-                src: convert_val(val, ctx),
-                dst: Operand::Reg(reg),
-            });
-        } else if ty == OperandType::UByte {
-            out.push(Instr::MovZeroExtend {
-                src: convert_val(val, ctx),
-                dst: Operand::Reg(reg),
-            });
         } else {
-            out.push(Instr::Mov {
-                src: convert_val(val, ctx),
-                dst: Operand::Reg(reg),
-            });
+            let arg_ctx = copy_prop_support::IntArgMoveCtx {
+                args,
+                param_types: &param_types,
+                classified: &classified,
+                type_env,
+                first_int_reg,
+            };
+            out.push(
+                copy_prop_support::move_reused_int_arg(idx, val, reg.clone(), &arg_ctx)
+                    .unwrap_or_else(|| {
+                        copy_prop_support::move_call_arg(
+                            val,
+                            reg,
+                            param_types.get(slot.param_index),
+                            type_env,
+                            ctx,
+                        )
+                    }),
+            );
         }
     }
 
@@ -1842,13 +1841,12 @@ fn lower_instruction(
         } => {
             let index_op = convert_val(index, ctx);
             let mut out = Vec::new();
+            if let Some(lowered) =
+                copy_prop_support::lower_const_index_addptr(ptr, &index_op, *scale, dst, ctx)
+            {
+                return lowered;
+            }
             match index_op {
-                Operand::Imm(n) => {
-                    out.push(Instr::Movq {
-                        src: Operand::Imm(n),
-                        dst: Operand::Reg(Reg::R11),
-                    });
-                }
                 op => {
                     let index_ty = type_of_val(index, env);
                     if index_ty.is_long_word() {

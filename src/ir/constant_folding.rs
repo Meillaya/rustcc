@@ -3,7 +3,7 @@
 //! Mirrors nqcc2/lib/optimizations/constant_folding.ml:173-175 and is wired
 //! from `opt.rs` in the same slot as nqcc2/lib/optimizations/optimize.ml:9-12.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use crate::ir::cfg;
 use crate::ir::const_eval::ConstVal;
@@ -12,6 +12,7 @@ use crate::ir::tacky::{TackyFunction, TackyProgram};
 
 mod folds;
 mod instr;
+mod state;
 mod util;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -22,12 +23,17 @@ pub(crate) struct PassResult {
 
 // Mirrors nqcc2/lib/optimizations/optimize.ml:37-46.
 pub(crate) fn constant_fold_program(program: TackyProgram) -> PassResult {
+    let static_vars = program
+        .static_variables
+        .iter()
+        .map(|var| var.name.clone())
+        .collect::<BTreeSet<_>>();
     let mut changed = false;
     let functions = program
         .functions
         .into_iter()
         .map(|function| {
-            let result = constant_fold_function(function);
+            let result = constant_fold_function(function, &static_vars);
             changed |= result.changed;
             result.function
         })
@@ -50,7 +56,10 @@ struct FunctionResult {
     changed: bool,
 }
 
-fn constant_fold_function(mut function: TackyFunction) -> FunctionResult {
+fn constant_fold_function(
+    mut function: TackyFunction,
+    static_vars: &BTreeSet<String>,
+) -> FunctionResult {
     let Ok(mut function_cfg) = cfg::tacky_function_cfg(&function) else {
         return FunctionResult {
             function,
@@ -65,7 +74,12 @@ fn constant_fold_function(mut function: TackyFunction) -> FunctionResult {
             .instructions
             .drain(..)
             .filter_map(|(annotation, instruction)| {
-                let result = optimize_instruction(instruction, &function.type_env, &mut constants);
+                let result = optimize_instruction(
+                    instruction,
+                    &function.type_env,
+                    &mut constants,
+                    static_vars,
+                );
                 changed |= result.changed;
                 result
                     .instruction

@@ -2,10 +2,11 @@
 //!
 //! Mirrors nqcc2/lib/optimizations/constant_folding.ml:132-155.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use crate::ir::const_eval::{BinaryOp, ConstVal, UnaryOp, evaluate_cmp};
 use crate::ir::constant_folding::folds::{CastOp, fold_binary, fold_cast, fold_copy, fold_unary};
+use crate::ir::constant_folding::state::ConstState;
 use crate::ir::constant_folding::util::{
     comparison_type, const_for_val, value_is_zero, value_type,
 };
@@ -44,67 +45,74 @@ pub(super) fn optimize_instruction(
     instruction: Instruction,
     type_env: &TypeEnv,
     constants: &mut HashMap<String, ConstVal>,
+    static_vars: &BTreeSet<String>,
 ) -> InstructionResult {
+    let mut state = ConstState {
+        constants,
+        static_vars,
+    };
     match instruction {
         Instruction::Copy { src, dst } => {
-            let (instruction, changed) = fold_copy(src, dst, type_env, constants);
+            let (instruction, changed) = fold_copy(src, dst, type_env, &mut state);
             InstructionResult::replace(instruction, changed)
         }
         Instruction::SignExtend { src, dst } => {
-            fold_cast_result(CastOp::SignExtend, src, dst, type_env, constants)
+            fold_cast_result(CastOp::SignExtend, src, dst, type_env, &mut state)
         }
         Instruction::ZeroExtend { src, dst } => {
-            fold_cast_result(CastOp::ZeroExtend, src, dst, type_env, constants)
+            fold_cast_result(CastOp::ZeroExtend, src, dst, type_env, &mut state)
         }
         Instruction::Truncate { src, dst } => {
-            fold_cast_result(CastOp::Truncate, src, dst, type_env, constants)
+            fold_cast_result(CastOp::Truncate, src, dst, type_env, &mut state)
         }
         Instruction::IntToDouble { src, dst } => {
-            fold_cast_result(CastOp::IntToDouble, src, dst, type_env, constants)
+            fold_cast_result(CastOp::IntToDouble, src, dst, type_env, &mut state)
         }
         Instruction::DoubleToInt { src, dst } => {
-            fold_cast_result(CastOp::DoubleToInt, src, dst, type_env, constants)
+            fold_cast_result(CastOp::DoubleToInt, src, dst, type_env, &mut state)
         }
         Instruction::UIntToDouble { src, dst } => {
-            fold_cast_result(CastOp::UIntToDouble, src, dst, type_env, constants)
+            fold_cast_result(CastOp::UIntToDouble, src, dst, type_env, &mut state)
         }
         Instruction::DoubleToUInt { src, dst } => {
-            fold_cast_result(CastOp::DoubleToUInt, src, dst, type_env, constants)
+            fold_cast_result(CastOp::DoubleToUInt, src, dst, type_env, &mut state)
         }
-        Instruction::Negate { dst } => fold_unary_result(UnaryOp::Negate, dst, type_env, constants),
+        Instruction::Negate { dst } => {
+            fold_unary_result(UnaryOp::Negate, dst, type_env, &mut state)
+        }
         Instruction::Complement { dst } => {
-            fold_unary_result(UnaryOp::Complement, dst, type_env, constants)
+            fold_unary_result(UnaryOp::Complement, dst, type_env, &mut state)
         }
-        Instruction::Not { dst } => fold_unary_result(UnaryOp::Not, dst, type_env, constants),
+        Instruction::Not { dst } => fold_unary_result(UnaryOp::Not, dst, type_env, &mut state),
         Instruction::Add { src, dst } => {
-            fold_binary_result(BinaryOp::Add, src, dst, type_env, constants)
+            fold_binary_result(BinaryOp::Add, src, dst, type_env, &mut state)
         }
         Instruction::Sub { src, dst } => {
-            fold_binary_result(BinaryOp::Subtract, src, dst, type_env, constants)
+            fold_binary_result(BinaryOp::Subtract, src, dst, type_env, &mut state)
         }
         Instruction::Mul { src, dst } => {
-            fold_binary_result(BinaryOp::Multiply, src, dst, type_env, constants)
+            fold_binary_result(BinaryOp::Multiply, src, dst, type_env, &mut state)
         }
         Instruction::DivSigned { src, dst } => {
-            fold_binary_result(BinaryOp::Divide, src, dst, type_env, constants)
+            fold_binary_result(BinaryOp::Divide, src, dst, type_env, &mut state)
         }
         Instruction::RemSigned { src, dst } => {
-            fold_binary_result(BinaryOp::Remainder, src, dst, type_env, constants)
+            fold_binary_result(BinaryOp::Remainder, src, dst, type_env, &mut state)
         }
         Instruction::BitAnd { src, dst } => {
-            fold_binary_result(BinaryOp::BitAnd, src, dst, type_env, constants)
+            fold_binary_result(BinaryOp::BitAnd, src, dst, type_env, &mut state)
         }
         Instruction::BitOr { src, dst } => {
-            fold_binary_result(BinaryOp::BitOr, src, dst, type_env, constants)
+            fold_binary_result(BinaryOp::BitOr, src, dst, type_env, &mut state)
         }
         Instruction::BitXor { src, dst } => {
-            fold_binary_result(BinaryOp::BitXor, src, dst, type_env, constants)
+            fold_binary_result(BinaryOp::BitXor, src, dst, type_env, &mut state)
         }
         Instruction::BitShiftLeft { src, dst } => {
-            fold_binary_result(BinaryOp::ShiftLeft, src, dst, type_env, constants)
+            fold_binary_result(BinaryOp::ShiftLeft, src, dst, type_env, &mut state)
         }
         Instruction::BitShiftRight { src, dst } => {
-            fold_binary_result(BinaryOp::ShiftRight, src, dst, type_env, constants)
+            fold_binary_result(BinaryOp::ShiftRight, src, dst, type_env, &mut state)
         }
         Instruction::Cmp {
             left,
@@ -112,13 +120,13 @@ pub(super) fn optimize_instruction(
             dst,
             cc,
         } => {
-            let cmp_ty = comparison_type(&left, &right, type_env, constants);
-            let folded = const_for_val(&left, cmp_ty, constants)
-                .zip(const_for_val(&right, cmp_ty, constants))
+            let cmp_ty = comparison_type(&left, &right, type_env, state.constants);
+            let folded = const_for_val(&left, cmp_ty, state.constants)
+                .zip(const_for_val(&right, cmp_ty, state.constants))
                 .and_then(|(left, right)| evaluate_cmp(cc, left, right));
             match folded {
                 Some(value) => {
-                    constants.insert(dst.clone(), value);
+                    state.remember(&dst, value);
                     InstructionResult::replace(
                         Instruction::Copy {
                             src: value.to_val(),
@@ -128,7 +136,7 @@ pub(super) fn optimize_instruction(
                     )
                 }
                 None => {
-                    constants.remove(&dst);
+                    state.forget(&dst);
                     InstructionResult::keep(Instruction::Cmp {
                         left,
                         right,
@@ -140,8 +148,8 @@ pub(super) fn optimize_instruction(
         }
         Instruction::JumpIfZero { condition, target } => match const_for_val(
             &condition,
-            value_type(&condition, type_env, constants),
-            constants,
+            value_type(&condition, type_env, state.constants),
+            state.constants,
         ) {
             Some(value) if value_is_zero(value) => {
                 InstructionResult::replace(Instruction::Jump { target }, true)
@@ -151,23 +159,23 @@ pub(super) fn optimize_instruction(
         },
         Instruction::JumpIfNotZero { condition, target } => match const_for_val(
             &condition,
-            value_type(&condition, type_env, constants),
-            constants,
+            value_type(&condition, type_env, state.constants),
+            state.constants,
         ) {
             Some(value) if value_is_zero(value) => InstructionResult::remove(),
             Some(_) => InstructionResult::replace(Instruction::Jump { target }, true),
             None => InstructionResult::keep(Instruction::JumpIfNotZero { condition, target }),
         },
         Instruction::Load { dst, src_pointer } => {
-            constants.remove(&dst);
+            state.forget(&dst);
             InstructionResult::keep(Instruction::Load { src_pointer, dst })
         }
         Instruction::Call { name, args, dst } => {
-            constants.clear();
+            state.clear();
             InstructionResult::keep(Instruction::Call { name, args, dst })
         }
         Instruction::Store { src, dst_pointer } => {
-            constants.clear();
+            state.clear();
             InstructionResult::keep(Instruction::Store { src, dst_pointer })
         }
         Instruction::CopyBytes {
@@ -175,7 +183,7 @@ pub(super) fn optimize_instruction(
             dst_pointer,
             size,
         } => {
-            constants.clear();
+            state.clear();
             InstructionResult::keep(Instruction::CopyBytes {
                 src_pointer,
                 dst_pointer,
@@ -183,7 +191,7 @@ pub(super) fn optimize_instruction(
             })
         }
         Instruction::GetAddress { src, dst } => {
-            constants.remove(&dst);
+            state.forget(&dst);
             InstructionResult::keep(Instruction::GetAddress { src, dst })
         }
         Instruction::AddPtr {
@@ -192,7 +200,7 @@ pub(super) fn optimize_instruction(
             scale,
             dst,
         } => {
-            constants.remove(&dst);
+            state.forget(&dst);
             InstructionResult::keep(Instruction::AddPtr {
                 ptr,
                 index,
@@ -211,9 +219,9 @@ fn fold_cast_result(
     src: crate::ir::tacky::Val,
     dst: String,
     type_env: &TypeEnv,
-    constants: &mut HashMap<String, ConstVal>,
+    state: &mut ConstState<'_>,
 ) -> InstructionResult {
-    let (instruction, changed) = fold_cast(op, src, dst, type_env, constants);
+    let (instruction, changed) = fold_cast(op, src, dst, type_env, state);
     InstructionResult::replace(instruction, changed)
 }
 
@@ -221,9 +229,9 @@ fn fold_unary_result(
     op: UnaryOp,
     dst: String,
     type_env: &TypeEnv,
-    constants: &mut HashMap<String, ConstVal>,
+    state: &mut ConstState<'_>,
 ) -> InstructionResult {
-    let (instruction, changed) = fold_unary(op, dst, type_env, constants);
+    let (instruction, changed) = fold_unary(op, dst, type_env, state);
     InstructionResult::replace(instruction, changed)
 }
 
@@ -232,8 +240,8 @@ fn fold_binary_result(
     src: crate::ir::tacky::Val,
     dst: String,
     type_env: &TypeEnv,
-    constants: &mut HashMap<String, ConstVal>,
+    state: &mut ConstState<'_>,
 ) -> InstructionResult {
-    let (instruction, changed) = fold_binary(op, src, dst, type_env, constants);
+    let (instruction, changed) = fold_binary(op, src, dst, type_env, state);
     InstructionResult::replace(instruction, changed)
 }

@@ -1,0 +1,122 @@
+# Task 54 / W20-T4 Copy Propagation Implementation Evidence
+
+Date: 2026-07-09
+Workspace: /home/mei/projects/rustcc
+Base requested: bd4aad2 (UCE)
+
+## Changed files
+ M src/codegen/codegen.rs
+ M src/ir/constant_folding.rs
+ M src/ir/constant_folding/folds.rs
+ M src/ir/constant_folding/instr.rs
+ M src/ir/mod.rs
+ M src/ir/opt.rs
+ M src/pipeline.rs
+?? src/ir/copy_propagation.rs
+?? src/ir/copy_propagation/
+
+## Implementation summary
+- Wired CLI optimization flag path: pipeline now maps --propagate-copies to OptPass::CopyPropagation and run_opt dispatches it.
+- Added CFG/dataflow copy propagation split across src/ir/copy_propagation.rs and submodules, mirroring nqcc2/lib/optimizations/copy_prop.ml and address_taken.ml.
+- Preserves TackyFunction metadata by replacing only function.body after CFG reassembly.
+- Conservatively handles calls, stores, CopyBytes, static variables, and address-taken variables; aggregate CopyBytes support is limited to known GetAddress bases.
+- Adjusted constant folding side table to avoid treating static variables as stable local constants, preserving reaching-copy facts for static copy-prop cases.
+- Added codegen support needed by official copy-prop assembly inspections: repeated integer/pointer call args move from the earlier arg register, and constant AddPtr indices use direct displacement instead of imul.
+
+## LOC measurement
+src/ir/copy_propagation.rs: 73
+src/ir/copy_propagation/facts.rs: 177
+src/ir/copy_propagation/dataflow.rs: 204
+src/ir/copy_propagation/rewrite.rs: 244
+src/ir/copy_propagation/cleanup.rs: 110
+src/ir/constant_folding.rs: 76
+src/ir/constant_folding/instr.rs: 303
+src/ir/constant_folding/folds.rs: 178
+src/ir/mod.rs: 12
+src/ir/opt.rs: 39
+src/pipeline.rs: 92
+src/codegen/codegen.rs: 1949
+Scoped LOC exceptions: src/codegen/codegen.rs and src/ir/constant_folding/instr.rs were already large chapter-surface files; Task 54 changes there are narrow support edits, not new broad modules. New copy-prop modules are each below 250 pure LOC.
+
+## LSP diagnostics
+- mcp__lsp.diagnostics: No diagnostics found for copy_propagation.rs, copy_propagation/{facts,dataflow,rewrite,cleanup}.rs, constant_folding.rs, constant_folding/{instr,folds}.rs, opt.rs, pipeline.rs, ir/mod.rs, and codegen.rs.
+
+## Exact commands run and pass/fail summary
+### cargo fmt --all -- --check
+### cargo check --release
+    Finished `release` profile [optimized] target(s) in 0.03s
+### cargo build --release
+    Finished `release` profile [optimized] target(s) in 0.01s
+### cargo test --release
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 2.68s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 10 tests
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test driver::tests::derives_all_output_paths ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test driver::tests::parses_default_run_stage ... ok
+test compiler::tests::parses_sizeof_expression_without_evaluating_it ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+### copy prop gate
+----------------------------------------------------------------------
+Ran 42 tests in 0.954s
+
+OK
+### uce gate
+----------------------------------------------------------------------
+Ran 15 tests in 0.319s
+
+OK
+### constant fold gate
+----------------------------------------------------------------------
+Ran 16 tests in 0.430s
+
+OK
+### chapter18 union gate
+----------------------------------------------------------------------
+Ran 286 tests in 5.084s
+
+OK
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s:17: Warning: value 0x1000000080000000 truncated to 0x80000000
+
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s:9: Warning: value 0x400000005 truncated to 0x5
+
+### git diff --check
+
+## Manual QA probe
+Command: ./target/release/rustcc --tacky --fold-constants --eliminate-unreachable-code --propagate-copies /tmp/rustcc_cp_probe.c
+Result: PASS. copy_probe call args were rewritten to the same source variable copy_probe.a.0; memory_probe preserved Store and kept pointer comparison safe; address_probe retained address-taken store and returned the pre-store copy; compiled probe exited 0.
+Probe source: /tmp/rustcc_cp_probe.c
+Probe TACKY capture: /tmp/rustcc_cp_probe.tacky
+
+## Additional audits
+Forbidden fingerprint scan: rg evaluate_program/compile_with_system_cc_frontend/SystemAssemblySanitizerOptions/system_c_to_assembly/source_has_ src -> none found.
+Unrelated dirty state preserved: .omo/boulder.json, old untracked .omo/evidence files, and .omo/start-work/ left untouched.
+
+## Risks / follow-ups
+- Aggregate CopyBytes propagation is intentionally conservative: it only forms aggregate copy facts when both pointers resolve to local GetAddress bases.
+- Narrow aggregate temp cleanup removes unused assignment-result scaffolding exposed by redundant aggregate copy elimination; full dead-store elimination remains W20-T5 and is still no-op.
+- Existing oversized codegen/constant-folding files remain future refactor candidates; no new dependencies or compiler-phase unit tests were added.

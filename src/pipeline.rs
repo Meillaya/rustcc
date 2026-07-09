@@ -85,6 +85,9 @@ pub mod optimize {
         if optimization_flags.eliminate_unreachable_code {
             passes.push(OptPass::UnreachableCodeElim);
         }
+        if optimization_flags.propagate_copies {
+            passes.push(OptPass::CopyPropagation);
+        }
         Ok(run_pass(tacky, &passes))
     }
 }

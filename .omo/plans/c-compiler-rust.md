@@ -1862,7 +1862,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   **Acceptance Criteria**:
   - [ ] `--chapter 19 --latest-only --eliminate-unreachable-code` passes.
 
-- [ ] 54. W20-T4: Chapter 19 - copy propagation
+- [x] 54. W20-T4: Chapter 19 - copy propagation
 
   **What to do**: Implement copy prop.
   - For each `Copy { src, dst }` where `src` is a constant, propagate the constant to uses of `dst`. Uses dataflow on the CFG.
