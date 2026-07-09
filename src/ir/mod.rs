@@ -21,6 +21,8 @@
 #![allow(unused_imports)]
 
 pub mod cfg;
+pub mod const_eval;
+mod constant_folding;
 pub mod lower;
 pub mod opt;
 pub mod tacky;

@@ -1,0 +1,181 @@
+VERDICT: APPROVE
+recommendation: APPROVE
+reviewerRole: final gate reviewer, read-only except this evidence file
+reviewDate: 2026-07-09
+repo: /home/mei/projects/rustcc
+head: ad379410a28aafbdd9819229b05598e8cd938a4d
+
+originalIntent:
+Task 52 / W20-T2 from .omo/plans/c-compiler-rust.md is Chapter 19 constant folding only: wire OptPass::ConstantFolding, implement constant evaluation mirroring nqcc2/lib/optimizations/constant_folding.ml, and pass the manual folded-assembly probe plus `--chapter 19 --latest-only --fold-constants`.
+
+desiredOutcome:
+A commit-scoped Task 52 diff that enables `--fold-constants`, folds constant TACKY arithmetic/casts/comparisons/constant branches without changing accepted-program behavior, keeps W20-T3..T5 no-op, keeps files under 250 pure LOC, removes prior NaN hang and dead `shift_u32`, and leaves build/test/static gates green.
+
+userOutcomeReview:
+APPROVE. From the user perspective, the shipped artifact satisfies Task 52: the manual program emits folded `movl $5`, the official Chapter 19 fold-constants gate passes, the prior NaN fixed-point hang is independently gone, Chapter 18 union regression still passes, and adversarial probes did not show observable behavior changes for valid accepted programs. Dirty worktree contains Task 52 source paths plus unrelated old .omo evidence/state; Task 52 can be staged without those unrelated files.
+
+checkedArtifactPaths:
+- .omo/plans/c-compiler-rust.md
+- .omo/evidence/task-52-constant-folding-implementation.txt
+- .omo/evidence/task-52-constant-folding-code-review.md
+- .omo/evidence/task-52-constant-folding-fix.txt
+- .omo/evidence/task-52-constant-folding-code-review-2.md
+- .omx/notepad.md (present; old unrelated working memory, no Task 52-specific note found)
+- nqcc2/lib/optimizations/constant_folding.ml
+- nqcc2/lib/optimizations/optimize.ml
+- src/ir/const_eval.rs
+- src/ir/constant_folding.rs
+- src/ir/constant_folding/folds.rs
+- src/ir/constant_folding/instr.rs
+- src/ir/constant_folding/util.rs
+- src/ir/opt.rs
+- src/pipeline.rs
+- src/ir/mod.rs
+- src/ir/tacky.rs, src/ir/cfg/types.rs, src/ir/cfg/build.rs, src/ir/lower.rs (context/assumption checks)
+
+planAcceptanceReread:
+- .omo/plans/c-compiler-rust.md:1830-1848 defines Task 52 W20-T2 constant folding.
+- Acceptance requires `int main(void) { int x = 2; x = x + 3; return x; }` assembly with folded `movl $5` and `./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --fold-constants` passing.
+- Guardrails: Chapter 19 only has four named opt passes; Task 52 must not implement UCE/copy propagation/DSE/regalloc.
+
+sourceReviewSummary:
+- src/ir/mod.rs adds `pub mod const_eval;` and private `mod constant_folding;` only.
+- src/pipeline.rs maps `optimization_flags.fold_constants` to `OptPass::ConstantFolding`; later optimization flags are not pushed.
+- src/ir/opt.rs now runs enabled passes to a pass-level changed-flag fixed point. UnreachableCodeElim, CopyPropagation, and DeadStoreElim remain no-ops.
+- src/ir/constant_folding.rs builds a TACKY CFG per function, folds each basic block locally, preserves TackyProgram/TackyFunction metadata, and reassembles only function bodies.
+- src/ir/constant_folding/instr.rs folds Copy/casts/unary/binary/Cmp/constant conditional jumps; Load/GetAddress/AddPtr invalidate dst; Store/CopyBytes/Call clear tracked constants.
+- src/ir/constant_folding/folds.rs performs two-address TACKY fold helpers and reconstructs original instructions when not foldable.
+- src/ir/constant_folding/util.rs keeps type/comparison helpers and uses f64 `to_bits()` for double constant equality, avoiding the prior NaN fixed-point trap.
+- src/ir/const_eval.rs mirrors OCaml constant evaluator shape for int/uint/long/ulong/double; integer div/rem by zero use checked operations with zero fallback to avoid optimizer crashes in dead UB code; double comparisons handle unordered/NaN.
+
+nqcc2ShapeComparison:
+- nqcc2/lib/optimizations/constant_folding.ml:3-155: Rust implements evaluate_cast, bool constants, unary/binary/cmp evaluation, constant branches, and constant copies/casts. Rust adapts for the repo's two-address TACKY by tracking per-block destination constants.
+- nqcc2/lib/optimizations/optimize.ml:4-35: Rust mirrors fixed-point pass orchestration, but Task 52 intentionally wires only constant folding; other pass selectors remain placeholders for W20-T3..T5.
+
+skillPerspectiveAndSlopReview:
+- Loaded/consulted omo:remove-ai-slops and omo:programming plus Rust reference.
+- Direct slop/overfit pass: no tests were added/removed/weakened; therefore no deletion-only, tautological, implementation-mirroring, or useless tests were introduced.
+- Direct production slop pass: prior blockers resolved. All touched Rust files are below 250 pure LOC; `shift_u32` has no matches; no unsafe, unwrap, expect, new dependencies, or harness edits. The split into constant_folding driver/folds/instr/util is responsibility-based and keeps reviewable files below the programming ceiling, not a speculative abstraction.
+- Code review report coverage check: `.omo/evidence/task-52-constant-folding-code-review-2.md` explicitly documents both `omo:remove-ai-slops` and `omo:programming` checks, overfit/test-slop criteria, previous blocker resolution, and targeted cast/comparison probes. I did not rely on it alone; I reran independent checks below.
+
+exactCommandsRunOrInspected:
+1. Skill/reference loading:
+   - `cat /home/mei/.codex/plugins/cache/sisyphuslabs/omo/4.16.0/skills/remove-ai-slops/SKILL.md`
+   - `cat /home/mei/.codex/plugins/cache/sisyphuslabs/omo/4.16.0/skills/programming/SKILL.md`
+   - `cat /home/mei/.codex/plugins/cache/sisyphuslabs/omo/4.16.0/skills/programming/references/rust/README.md`
+2. State/plan/evidence/source/reference inspection:
+   - `git status --short && git rev-parse HEAD && git diff --name-status HEAD`
+   - `grep -n -A30 -B10 -E 'Task 52|W20-T2|constant folding|fold-constants' .omo/plans/c-compiler-rust.md`
+   - `sed -n '1,240p'` over the four Task 52 evidence files listed above
+   - `git diff --stat HEAD && git diff --name-status HEAD && git diff -- src/ir/mod.rs src/ir/opt.rs src/pipeline.rs`
+   - `nl -ba` over all Task 52 source files listed above
+   - `nl -ba nqcc2/lib/optimizations/constant_folding.ml | sed -n '1,220p'`
+   - `nl -ba nqcc2/lib/optimizations/optimize.ml | sed -n '1,220p'`
+   - codegraph exploration for constant folding flow and TACKY/CFG assumptions
+3. Required gates:
+   - `cargo fmt --all -- --check` => status=0
+   - `cargo check --release` => status=0, Finished release profile
+   - `cargo build --release` => status=0, Finished release profile
+   - `cargo test --release` => status=0, 10 main tests passed, doc/lib tests 0 passed/0 failed
+   - `./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --fold-constants` => status=0, Ran 16 tests OK
+   - `./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union` => status=0, Ran 286 tests OK (pre-existing assembler truncation warnings only)
+   - `git diff --check` => status=0
+4. Additional static checks:
+   - `git diff --no-index --check -- /dev/null <new Task 52 Rust file>` for each new file => OK/no whitespace errors
+   - pure LOC awk check for all Task 52 files
+   - `rg -n '\bshift_u32\b' src/ir/const_eval.rs src/ir/constant_folding.rs src/ir/constant_folding || true` => no matches
+   - `git status --short Cargo.toml Cargo.lock tests; git diff -- Cargo.toml Cargo.lock tests` => no dependency or test/harness changes
+   - `rg -n 'evaluate_program|compile_with_system_cc_frontend|SystemAssemblySanitizerOptions|system_c_to_assembly|source_has_' src tests Cargo.toml Cargo.lock || true` => no matches
+   - Broad stale fingerprint scan outside target/nqcc2 found only historical docs/COACHING_LOG.md mentions, not source/test bridge code.
+   - `rg -n '\bunsafe\b|\.unwrap\(|\.expect\(|#\[allow' <Task52 files>` => no matches
+   - `rg -n '\sas\s' src/ir/const_eval.rs` => raw casts only in C constant-conversion helpers; covered by probes.
+   - `rg -n 'UnreachableCodeElim|CopyPropagation|DeadStoreElim|regalloc|register allocation|RegisterAlloc|liveness|interference|copy_prop|dead_store|unreachable_code|UCE|DSE' src/ir src/pipeline.rs src/driver.rs src/codegen Cargo.toml Cargo.lock || true` => Task 52 changes show only enum/no-op pass selectors; regalloc/liveness/interference hits are pre-existing stubs/comments outside Task 52.
+5. Manual/probe commands used temporary files under /tmp and timeout guards:
+   - `./target/release/rustcc --fold-constants -S /tmp/.../accept.c` then `grep -nF 'movl $5' /tmp/.../accept.s`
+   - For each probe: compile/run with rustcc no-fold, rustcc `--fold-constants`, and GCC; compare exits.
+6. Optional non-required check:
+   - `cargo clippy --release -- -D warnings` => status=101 due pre-existing warnings in src/ast, src/codegen, src/ir/lower.rs, src/parse, src/semantics. No Task 52 files appeared in the clippy error output. This is recorded but not used as a Task 52 blocker because the user-required gates and plan acceptance do not require project-wide clippy for W20-T2 and failures are outside the Task 52 diff.
+
+requiredGateEvidence:
+- cargo fmt/check/build/test: PASS.
+- Chapter 19 latest-only fold-constants: PASS, 16 tests OK.
+- Chapter 18 latest-only union regression: PASS, 286 tests OK.
+- git diff --check: PASS.
+- Manual acceptance assembly: PASS. Source `int main(void) { int x = 2; x = x + 3; return x; }` compiled with `--fold-constants -S`; assembly contained:
+  - `9:    movl $5, -8(%rbp)`
+  - `10:    movl $5, -4(%rbp)`
+
+adversarialProbeEvidence:
+All listed probes compiled and ran under rustcc no-fold, rustcc `--fold-constants`, and GCC with matching exits unless marked compile-only UB:
+- nan_repro `double x = 0.0 / 0.0; return x != x;`: nofold=1 fold=1 gcc=1 PASS. Prior hidden NaN hang is resolved; fold compilation terminated under timeout.
+- dead_divzero `if (0) return 1 / 0; return 7;`: nofold=7 fold=7 gcc=7 PASS.
+- dead_remzero `if (0) return 1 % 0; return 8;`: nofold=8 fold=8 gcc=8 PASS.
+- branch_zero: nofold=2 fold=2 gcc=2 PASS.
+- branch_nonzero: nofold=1 fold=1 gcc=1 PASS.
+- side_effect_condition_true `(x = 1)` in if condition: nofold=1 fold=1 gcc=1 PASS.
+- side_effect_condition_false `(x = 0)` in if condition: nofold=0 fold=0 gcc=0 PASS.
+- store_alias pointer store clears tracked constants: nofold=7 fold=7 gcc=7 PASS.
+- call_alias call through pointer clears tracked constants: nofold=7 fold=7 gcc=7 PASS.
+- uchar_cast `(unsigned char)300`: nofold=44 fold=44 gcc=44 PASS.
+- double_to_int `(int)3.9`: nofold=3 fold=3 gcc=3 PASS.
+- unsigned_cmp variable case: nofold=1 fold=1 gcc=1 PASS.
+- signed_unsigned_cmp variable case: nofold=1 fold=1 gcc=1 PASS.
+- double_cmp variable case: nofold=1 fold=1 gcc=1 PASS.
+- nan_condition `if (NaN)`: nofold=11 fold=11 gcc=11 PASS.
+- direct_unsigned_gt `4294967295U > 1U`: nofold=1 fold=1 gcc=1 PASS.
+- direct_unsigned_lt `4294967295U < 1U`: nofold=0 fold=0 gcc=0 PASS.
+- direct_ulong_gt `18446744073709551615UL > 1UL`: nofold=1 fold=1 gcc=1 PASS.
+- direct_long_cmp: nofold=1 fold=1 gcc=1 PASS.
+- direct_mixed_signed_unsigned: nofold=1 fold=1 gcc=1 PASS.
+- direct_double_cmp: nofold=1 fold=1 gcc=1 PASS.
+- direct_double_cast_uint `(unsigned char)300.0`: nofold=44 fold=44 gcc=44 PASS.
+- unsigned_div: nofold=1 fold=1 gcc=1 PASS.
+- unsigned_rem: nofold=0 fold=0 gcc=0 PASS.
+- ulong_div: nofold=1 fold=1 gcc=1 PASS.
+- shift_left: nofold=8 fold=8 gcc=8 PASS.
+- shift_large_dead: nofold=7 fold=7 gcc=7 PASS.
+- live_divzero/live_remzero: fold compile-only statuses 0 under timeout; runtime is UB and was not used as an approval criterion.
+- signed overflow probe was also compile/run matched nofold=1 fold=1 gcc=1 but is UB; recorded only as termination/matching sanity, not a validity criterion.
+
+pureLocCounts:
+- src/ir/const_eval.rs 221
+- src/ir/constant_folding.rs 63
+- src/ir/constant_folding/folds.rs 159
+- src/ir/constant_folding/instr.rs 225
+- src/ir/constant_folding/util.rs 70
+- src/ir/opt.rs 29
+- src/pipeline.rs 86
+- src/ir/mod.rs 10
+All are under the 250 pure LOC ceiling.
+
+scopeAndDirtyWorktreeClassification:
+Task 52 paths:
+- M src/ir/mod.rs
+- M src/ir/opt.rs
+- M src/pipeline.rs
+- ?? src/ir/const_eval.rs
+- ?? src/ir/constant_folding.rs
+- ?? src/ir/constant_folding/folds.rs
+- ?? src/ir/constant_folding/instr.rs
+- ?? src/ir/constant_folding/util.rs
+Task 52 evidence paths present:
+- ?? .omo/evidence/task-52-constant-folding-implementation.txt
+- ?? .omo/evidence/task-52-constant-folding-code-review.md
+- ?? .omo/evidence/task-52-constant-folding-fix.txt
+- ?? .omo/evidence/task-52-constant-folding-code-review-2.md
+Unrelated old/workflow state:
+- M .omo/boulder.json (workflow/session state with todo:52 status running and older tasks)
+- many old untracked .omo/evidence/task-18/task-37/... files
+- ?? .omo/start-work/
+Conclusion: do not reject solely for dirty worktree; a commit can stage only Task 52 source/evidence paths and intentionally exclude unrelated old state.
+
+blockers:
+None.
+
+exactEvidenceGaps:
+- No durable in-repo regression test was added for the NaN fixed-point repro; however this task's requested verification is official harness + adversarial evidence, and I independently reran the NaN timeout/run comparison successfully.
+- Project-wide optional clippy is not clean due pre-existing non-Task-52 warnings. Required Task 52 gates are green, and clippy emitted no errors in Task 52 files.
+- .omx/notepad.md exists but contains old/unrelated history, not Task 52-specific decision notes.
+
+finalDecision:
+APPROVE Task 52 as FullyDone and eligible to check off/commit, provided staging is limited to Task 52 source/evidence paths and unrelated .omo state is handled intentionally.

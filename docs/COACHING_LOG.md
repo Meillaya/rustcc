@@ -1124,3 +1124,37 @@ Implemented the Chapter 19 W20-T1 control-flow graph foundation that mirrors `nq
 
 - W20-T2 through W20-T5 must consume this CFG for constant folding, unreachable-code elimination, copy propagation, and dead-store elimination.
 - Chapter 20 regalloc/liveness can use the assembly CFG seam, but liveness/interference/coalescing remain intentionally unimplemented.
+
+## Wave 20 / Chapter 19 constant folding (task 52)
+
+Implemented the Chapter 19 W20-T2 constant-folding pass on top of the CFG foundation. The optimizer now wires `--fold-constants` through the pipeline, evaluates safe constant TACKY copies/casts/unary/binary/comparison operations for the supported scalar types, folds constant conditional branches, preserves original `TackyFunction` metadata when reassembling CFG bodies, and keeps memory/call effects conservative by clearing tracked constants. A code-review rejection caught a NaN fixed-point convergence hang; the fix now uses pass-level changed flags and splits the constant-folding implementation into submodules below the Rust file-size ceiling.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `cargo fmt --all -- --check` | exit 0 |
+| `cargo check --release` | exit 0 |
+| `cargo build --release` | exit 0 |
+| `cargo test --release` | 10 passed, 0 failed |
+| chapter 19 `--latest-only --fold-constants` | `Ran 16 tests ... OK` |
+| chapter 18 `--latest-only --union` | `Ran 286 tests ... OK` |
+| manual folded-assembly probe | `movl $5` present for `int x = 2; x = x + 3` |
+| NaN fixed-point repro | no-fold, fold, and GCC all exit 1 under timeout guard |
+| adversarial semantic probes | div/rem zero, casts, comparisons, branch side effects, stores, and calls matched no-fold/fold/GCC where defined |
+| file-size/slop check | all Task 52 Rust files under 250 pure LOC; `shift_u32` removed |
+| forbidden bridge/interpreter scan | no matches in source/tests/manifests |
+| `git diff --check` | exit 0 |
+
+### Evidence
+
+- `.omo/evidence/task-52-constant-folding-implementation.txt`
+- `.omo/evidence/task-52-constant-folding-code-review.md`
+- `.omo/evidence/task-52-constant-folding-fix.txt`
+- `.omo/evidence/task-52-constant-folding-code-review-2.md`
+- `.omo/evidence/task-52-constant-folding-adversarial-verify.txt`
+
+### Remaining scope
+
+- W20-T3 through W20-T5 must still implement unreachable-code elimination, copy propagation, dead-store elimination, and the default all-optimizations gate.
+- Constant tracking is intentionally local to each CFG basic block; later dataflow passes should handle cross-block propagation.

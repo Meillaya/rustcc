@@ -71,17 +71,18 @@ pub mod optimize {
     use anyhow::Result;
 
     use crate::driver::OptimizationFlags;
-    use crate::ir::opt::run_opt as run_pass;
+    use crate::ir::opt::{OptPass, run_opt as run_pass};
     use crate::ir::tacky::TackyProgram;
 
     pub(crate) fn optimize_tacky(
         tacky: TackyProgram,
-        _optimization_flags: OptimizationFlags,
+        optimization_flags: OptimizationFlags,
     ) -> Result<TackyProgram> {
-        // Until wave 20 lands each optimization pass we run no passes; the
-        // pure identity function keeps the pipeline deterministic.
-        let _ = run_pass;
-        Ok(tacky)
+        let mut passes = Vec::new();
+        if optimization_flags.fold_constants {
+            passes.push(OptPass::ConstantFolding);
+        }
+        Ok(run_pass(tacky, &passes))
     }
 }
 

@@ -2,18 +2,17 @@
 //!
 //! Mirrors `nqcc2/lib/optimizations/optimize.ml`.  Each `OptPass` corresponds
 //! to one chapter in the optimization arc of the book:
-//! - `ConstantFolding` — chapter 20
-//! - `UnreachableCodeElim` — chapter 20
-//! - `CopyPropagation` — chapter 20
-//! - `DeadStoreElim` — chapter 20
+//! - `ConstantFolding` — chapter 19
+//! - `UnreachableCodeElim` — chapter 19
+//! - `CopyPropagation` — chapter 19
+//! - `DeadStoreElim` — chapter 19
 //!
 //! The real implementations live in their own modules under
 //! `nqcc2/lib/optimizations/` (e.g. `constant_folding.ml`, `copy_prop.ml`).
-//! Until wave 20 wires each pass, `run_opt` is a stub that returns the
-//! program unchanged so the pipeline continues to compile.
 
 #![allow(dead_code)]
 
+use crate::ir::constant_folding::constant_fold_program;
 use crate::ir::tacky::TackyProgram;
 
 /// Book-faithful optimization pass selector.
@@ -27,10 +26,29 @@ pub enum OptPass {
 
 /// Run the selected optimization passes in order.
 ///
-/// The real implementation constructs a CFG per function, runs each pass in
-/// sequence with a fixed-point loop until no pass reports a change, and
-/// reassembles the optimized TACKY program.  The placeholder exists so the
-/// pipeline compiles before the wave-20 passes arrive.
-pub fn run_opt(_program: TackyProgram, _passes: &[OptPass]) -> TackyProgram {
-    unimplemented!()
+/// Mirrors nqcc2/lib/optimizations/optimize.ml:4-35.  The full OCaml pipeline
+/// reaches a fixed point over all enabled passes; this wave wires only constant
+/// folding and leaves the later pass selectors as no-ops for W20-T3..T5.
+pub fn run_opt(program: TackyProgram, passes: &[OptPass]) -> TackyProgram {
+    let mut current = program;
+    loop {
+        let mut changed = false;
+        for pass in passes {
+            current = match pass {
+                OptPass::ConstantFolding => {
+                    let result = constant_fold_program(current);
+                    changed |= result.changed;
+                    result.program
+                }
+                OptPass::UnreachableCodeElim
+                | OptPass::CopyPropagation
+                | OptPass::DeadStoreElim => current,
+            };
+        }
+        if !changed {
+            return current;
+        }
+    }
 }
+
+// Mirrors nqcc2/lib/optimizations/optimize.ml:37-46.

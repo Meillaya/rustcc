@@ -1827,7 +1827,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   - [ ] `cargo check --release` zero errors.
   - [ ] W20-T2 through W20-T5 build atop this CFG.
 
-- [ ] 52. W20-T2: Chapter 19 - constant folding pass
+- [x] 52. W20-T2: Chapter 19 - constant folding pass
 
   **What to do**: Implement constant folding.
   - In `src/ir/opt.rs::run_opt`, add `OptPass::ConstantFolding`.
