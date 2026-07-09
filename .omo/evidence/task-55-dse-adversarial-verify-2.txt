@@ -1,0 +1,540 @@
+VERDICT: CONFIRMED
+
+AdversarialVerify {
+  task: "Task 55 W20-T5 Chapter 19 DSE final adversarial gate rerun after size, direct-store alias, and call-alias fixes"
+  verdict: confirmed
+  recommendation: APPROVE
+  reviewedAt: "2026-07-09T00:05:28-04:00"
+  originalIntent: "Implement Chapter 19 dead-store elimination, wire --eliminate-dead-stores and default all-optimization Chapter 19 behavior, and keep scope limited to the optimizer/compiler support required for those gates. The expected user-visible outcome is that Task 55 can be marked complete only after previous size and aliasing blockers are actually resolved, official gates pass, and adversarial DSE/copy-prop probes preserve observable C behavior."
+  desiredOutcome: "Task 55 W20-T5 is complete-ready: DSE official gate and default Chapter 19 all-optimization gate pass; Chapter 19 copy-prop/UCE/fold and Chapter 18 union regressions pass; B1 copy-prop rewrite size blocker is resolved by split files under 250 pure LOC; code-review-3 direct-store alias repro exits 9 under baseline/--propagate-copies/all; code-review-4 call pointer alias repro exits 9 under baseline/--propagate-copies/all; DSE extern/global scalar and aggregate probes are safe; address-taken, pointer store, call side effect, global, aggregate, malformed-input, and temp-cleanup adversarial classes are covered; no new unwrap/expect/tests/deps/bridge/system-C/Chapter20 scope is introduced."
+  userOutcomeReview: "CONFIRMED. From the user's perspective, the previously blocking outcome is now satisfied. The exact B1 file-size blocker is resolved: src/ir/copy_propagation/rewrite.rs is 107 pure LOC and src/ir/copy_propagation/rewrite_support.rs is 224 pure LOC. Current source includes the call-argument write-pointer seed in collect_write_pointers, and both the direct store alias and call pointer alias repros now exit 9 for baseline, --propagate-copies, and explicit all-optimization runs. Official fmt/check/build/test and required chapter gates all pass. DSE scalar/global/aggregate/extern/manual safety probes pass. Diff-only scans show no new unwrap/expect, unsafe, Rust compiler-phase tests, dependency changes, bridge/system-C/interpreter fingerprints, or Chapter 20 regalloc/coalescing scope."
+
+  blockers: []
+
+  previousBlockersResolved: [
+    { id: "B1-size", result: "PASS", evidence: "src/ir/copy_propagation/rewrite.rs=107 pure LOC; src/ir/copy_propagation/rewrite_support.rs=224 pure LOC; all DSE module files are below 250 pure LOC." },
+    { id: "code-review-3-direct-store-alias", result: "PASS", evidence: "/tmp/task55_direct_store_alias.c program_exit=9 for baseline, --propagate-copies, and all flags." },
+    { id: "code-review-4-call-pointer-alias", result: "PASS", evidence: "/tmp/task55_call_alias.c program_exit=9 for baseline, --propagate-copies, and all flags; propagated TACKY keeps main.dst.1 address at call-relevant GetAddress lines." }
+  ]
+
+  checkedArtifactPaths: [
+    ".omo/evidence/task-55-dse-adversarial-verify.txt",
+    ".omo/evidence/task-55-dse-code-review-3.md",
+    ".omo/evidence/task-55-dse-code-review-4.md",
+    ".omo/evidence/task-55-copy-prop-rewrite-split-fix.txt",
+    ".omo/evidence/task-55-copy-prop-write-alias-fix.txt",
+    ".omo/evidence/task-55-copy-prop-call-alias-fix.txt",
+    ".omo/plans/c-compiler-rust.md",
+    "src/ir/copy_propagation.rs",
+    "src/ir/copy_propagation/facts.rs",
+    "src/ir/copy_propagation/rewrite.rs",
+    "src/ir/copy_propagation/rewrite_support.rs",
+    "src/ir/dead_store_elim/mod.rs",
+    "src/ir/dead_store_elim/analysis.rs",
+    "src/ir/dead_store_elim/liveness.rs",
+    "src/ir/dead_store_elim/rewrite.rs",
+    "src/ir/dead_store_elim/util.rs",
+    "src/ir/opt.rs",
+    "src/pipeline.rs",
+    "src/codegen/codegen.rs",
+    "src/lex/scanner.rs",
+    "src/ir/mod.rs"
+  ]
+
+  skillPerspective: {
+    loaded: ["omo:programming", "omo:remove-ai-slops", "programming/references/rust/README.md", "programming/references/code-smells.md"]
+    directPass: "No new tests were added, so deletion-only, tautological, implementation-mirroring, and requested-removal-only test slop classes are absent. Production-code pass found the prior oversized copy-prop rewrite blocker resolved; rewrite_support.rs remains below 250 pure LOC and has a cohesive support responsibility. The call-argument seed is conservative but behavior-preserving and directly tied to the prior alias bug. Existing oversized codegen.rs/scanner.rs remain pre-existing risk surfaces touched by support work; no new semantic failure or unsupported scope was found in this rerun, so they are recorded as remaining risk rather than a completion blocker for the user's explicitly scoped B1 rerun."
+    reportCoverage: "PRESENT. task-55-dse-code-review-3.md and task-55-dse-code-review-4.md explicitly load/remove-ai-slops and programming, discuss overfit/slop criteria, and reject on behavior-changing production support bugs. Those reports predate the final call-alias fix, so this gate did not trust their success claims; it directly reran the repros and source scans."
+  }
+
+  sourceReview: {
+    dseWiring: "src/ir/mod.rs registers dead_store_elim; src/ir/opt.rs runs eliminate_dead_stores_program for OptPass::DeadStoreElim in the fixed-point optimization loop; src/pipeline.rs maps --eliminate-dead-stores into the pass list."
+    externGlobalSupport: "src/ir/dead_store_elim/analysis.rs includes non-local function type_env names in static storage vars; liveness meet makes static vars live at exit; scalar and aggregate extern probes confirm stores are preserved."
+    aliasFixSupport: "src/ir/copy_propagation/rewrite.rs computes function-wide write_pointers from annotated blocks and passes them into source replacement. src/ir/copy_propagation/rewrite_support.rs seeds Store/CopyBytes destination pointers and Call args, then propagates protection backward through Copy and AddPtr to block aggregate GetAddress source replacement when the address may feed a write/escape."
+    noForbiddenScope: "Diff-only scans: no added unwrap/expect, unsafe, #[test]/#[cfg(test)], Cargo.toml/Cargo.lock/tests diffs, bridge/system-C/interpreter fingerprints, or Chapter20/regalloc/coalescing/interference/spill fingerprints."
+  }
+
+  officialGateSummary: [
+    "cargo fmt --all -- --check: exit=0",
+    "cargo check --release: exit=0",
+    "cargo build --release: exit=0",
+    "cargo test --release: exit=0; 10 main tests passed",
+    "Chapter 19 --eliminate-dead-stores: exit=0; 27 tests OK",
+    "Chapter 19 default --latest-only: exit=0; 120 tests OK",
+    "Chapter 19 --propagate-copies: exit=0; 42 tests OK",
+    "Chapter 19 --eliminate-unreachable-code: exit=0; 15 tests OK",
+    "Chapter 19 --fold-constants: exit=0; 16 tests OK",
+    "Chapter 18 --union: exit=0; 286 tests OK; same assembler truncation warnings as prior evidence",
+    "git diff --check: exit=0"
+  ]
+
+  manualProbeSummary: [
+    "direct store alias repro: baseline=9, propagate=9, all=9",
+    "call pointer alias repro: baseline=9, propagate=9, all=9",
+    "dead overwritten local: baseline=2, dse=2, all=2; TACKY DSE removed overwritten x=1 copy",
+    "address-taken local: baseline=2, dse=2, all=2",
+    "pointer store live: baseline=7, dse=7, all=7",
+    "call side effect/global side effect: baseline=9, dse=9, all=9",
+    "same-TU global scalar: baseline=6, dse=6, all=6",
+    "same-TU aggregate global: baseline=11, dse=11, all=11",
+    "call pointer side effect: baseline=8, dse=8, all=8",
+    "extern scalar global: baseline=5, dse=5, all=5",
+    "extern aggregate global: baseline=7, dse=7, all=7",
+    "malformed input smoke: exit=1 with parse error, not timeout/hang"
+  ]
+
+  ultraqaNotes: {
+    dirty_worktree: "Present before this review: .omo/boulder.json modified; Task 55 tracked source files modified; src/ir/copy_propagation/rewrite_support.rs and src/ir/dead_store_elim/ untracked; many prior evidence files untracked. This gate did not edit code, plan docs, Boulder, staging, commits, or git history; only this evidence file was written."
+    stale_state: "Plan Task 55 remains unchecked in .omo/plans/c-compiler-rust.md, which is expected because this gate does not mark completion. Prior reject artifacts are stale relative to the latest call-alias fix; this gate treated them as historical blockers and reran their repros."
+    misleading_success_output: "git diff --stat omits untracked DSE/rewrite_support files; evidence therefore includes explicit find/LOC output. Prior official gate success was not trusted without manual alias/DSE probes. Prior code-review-4 is a REJECT artifact predating the call-alias fix; final decision is based on current source and rerun probes."
+    malformed_input: "Malformed C input returned exit=1 with parse error under --eliminate-dead-stores; no hang."
+    hung_commands: "All official gates and probes completed under timeout wrappers or quick shell execution; no timeout exit 124 observed."
+    flaky_tests: "No flake observed in this single rerun; official harness counts match expected Chapter 18/19 suites."
+    temp_cleanup: "Manual probes and logs used /tmp/task55_*; cleanup command and verification appended below."
+  }
+
+  evidenceGaps: [
+    "No source regression tests were added by this read-only final gate; manual probes are temporary adversarial verification artifacts.",
+    "No LSP/clippy run was required by the user’s official gate list; cargo check/build/test/fmt and official compiler harness gates were run instead.",
+    "Pre-existing oversized codegen.rs/scanner.rs remain maintenance risks; no new current semantic blocker was found for this Task 55 completion gate."
+  ]
+
+  hygieneAndSourceEvidence: <<'HYGIENE'
+$ date -Is
+2026-07-09T00:05:28-04:00
+$ git status --short
+ M .omo/boulder.json
+ M src/codegen/codegen.rs
+ M src/ir/copy_propagation.rs
+ M src/ir/copy_propagation/facts.rs
+ M src/ir/copy_propagation/rewrite.rs
+ M src/ir/mod.rs
+ M src/ir/opt.rs
+ M src/lex/scanner.rs
+ M src/pipeline.rs
+?? .omo/evidence/task-18-adversarial-verify-2.txt
+?? .omo/evidence/task-18-adversarial-verify-3.txt
+?? .omo/evidence/task-18-adversarial-verify-4.txt
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/evidence/task-37-adversarial-verify-2.txt
+?? .omo/evidence/task-37-adversarial-verify.txt
+?? .omo/evidence/task-38-adversarial-verify.txt
+?? .omo/evidence/task-39-adversarial-verify.txt
+?? .omo/evidence/task-40-adversarial-verify-2.txt
+?? .omo/evidence/task-40-adversarial-verify.txt
+?? .omo/evidence/task-41-adversarial-verify.txt
+?? .omo/evidence/task-55-copy-prop-call-alias-fix.txt
+?? .omo/evidence/task-55-copy-prop-rewrite-split-fix.txt
+?? .omo/evidence/task-55-copy-prop-write-alias-fix.txt
+?? .omo/evidence/task-55-dse-adversarial-verify-gate-review.md
+?? .omo/evidence/task-55-dse-adversarial-verify.txt
+?? .omo/evidence/task-55-dse-code-review-2.md
+?? .omo/evidence/task-55-dse-code-review-3.md
+?? .omo/evidence/task-55-dse-code-review-4.md
+?? .omo/evidence/task-55-dse-code-review.md
+?? .omo/evidence/task-55-dse-fix.txt
+?? .omo/evidence/task-55-dse-implementation.txt
+?? .omo/start-work/
+?? src/ir/copy_propagation/rewrite_support.rs
+?? src/ir/dead_store_elim/
+$ git rev-parse HEAD
+6bc6feb22a0f45b2cfb7a27446bc247757cc7489
+$ git diff --name-only
+.omo/boulder.json
+src/codegen/codegen.rs
+src/ir/copy_propagation.rs
+src/ir/copy_propagation/facts.rs
+src/ir/copy_propagation/rewrite.rs
+src/ir/mod.rs
+src/ir/opt.rs
+src/lex/scanner.rs
+src/pipeline.rs
+$ git diff --stat
+ .omo/boulder.json                  | 196 +++++++++++++++++++++++++++++++++++--
+ src/codegen/codegen.rs             | 139 ++++++++++++++++++++++++--
+ src/ir/copy_propagation.rs         |   1 +
+ src/ir/copy_propagation/facts.rs   |   1 +
+ src/ir/copy_propagation/rewrite.rs | 165 +++----------------------------
+ src/ir/mod.rs                      |   1 +
+ src/ir/opt.rs                      |  11 ++-
+ src/lex/scanner.rs                 |  10 +-
+ src/pipeline.rs                    |   3 +
+ 9 files changed, 357 insertions(+), 170 deletions(-)
+$ git diff --name-status && find src/ir/dead_store_elim -maxdepth 1 -type f -print
+M	.omo/boulder.json
+M	src/codegen/codegen.rs
+M	src/ir/copy_propagation.rs
+M	src/ir/copy_propagation/facts.rs
+M	src/ir/copy_propagation/rewrite.rs
+M	src/ir/mod.rs
+M	src/ir/opt.rs
+M	src/lex/scanner.rs
+M	src/pipeline.rs
+src/ir/dead_store_elim/analysis.rs
+src/ir/dead_store_elim/liveness.rs
+src/ir/dead_store_elim/mod.rs
+src/ir/dead_store_elim/rewrite.rs
+src/ir/dead_store_elim/util.rs
+$ pure LOC current
+src/ir/copy_propagation.rs                              74
+src/ir/copy_propagation/rewrite.rs                      107
+src/ir/copy_propagation/rewrite_support.rs              224
+src/ir/copy_propagation/facts.rs                        178
+src/ir/dead_store_elim/mod.rs                           61
+src/ir/dead_store_elim/analysis.rs                      30
+src/ir/dead_store_elim/liveness.rs                      113
+src/ir/dead_store_elim/rewrite.rs                       84
+src/ir/dead_store_elim/util.rs                          148
+src/ir/opt.rs                                           44
+src/pipeline.rs                                         95
+src/codegen/codegen.rs                                  2028
+src/lex/scanner.rs                                      557
+src/ir/mod.rs                                           13
+$ pure LOC HEAD tracked baseline/delta
+src/ir/copy_propagation/rewrite.rs            HEAD=244 WT=107 DELTA=-137
+src/codegen/codegen.rs                        HEAD=1907 WT=2028 DELTA=+121
+src/lex/scanner.rs                            HEAD=557 WT=557 DELTA=+0
+src/ir/copy_propagation/facts.rs              HEAD=177 WT=178 DELTA=+1
+src/ir/opt.rs                                 HEAD=39 WT=44 DELTA=+5
+src/pipeline.rs                               HEAD=92 WT=95 DELTA=+3
+src/ir/mod.rs                                 HEAD=12 WT=13 DELTA=+1
+$ forbidden diff scans
+new unwrap/expect: new unsafe: new tests cfg/test: deps diff (tests Cargo.toml Cargo.lock):
+bridge/system-C/interpreter fingerprints: chapter20/regalloc fingerprints: $ call alias propagate TACKY relevant
+10:                Store {
+18:                Return(
+39:                GetAddress {
+40:                    src: "main.src.0",
+43:                Store {
+61:                Store {
+69:                Store {
+87:                Store {
+95:                GetAddress {
+96:                    src: "main.dst.1",
+99:                Store {
+117:                Store {
+125:                Store {
+143:                Store {
+151:                GetAddress {
+152:                    src: "main.dst.1",
+155:                GetAddress {
+156:                    src: "main.src.0",
+168:                GetAddress {
+169:                    src: "main.dst.1",
+176:                    dst: "main.p.2",
+178:                Call {
+189:                GetAddress {
+190:                    src: "main.dst.1",
+199:                Return(
+210:                "main.src.0": ByteArray {
+220:                "main.p.2": Long,
+224:                "main.dst.1": ByteArray {
+231:                "main.src.0": Struct(
+235:                "main.dst.1": Struct(
+241:                "main.p.2": Pointer(
+$ direct store alias propagate TACKY relevant
+8:                GetAddress {
+9:                    src: "main.src.0",
+12:                Store {
+30:                Store {
+38:                Store {
+56:                Store {
+64:                GetAddress {
+65:                    src: "main.dst.1",
+68:                Store {
+86:                Store {
+94:                Store {
+112:                Store {
+120:                GetAddress {
+121:                    src: "main.dst.1",
+124:                GetAddress {
+125:                    src: "main.src.0",
+137:                GetAddress {
+138:                    src: "main.dst.1",
+145:                    dst: "main.p.2",
+153:                Store {
+164:                GetAddress {
+165:                    src: "main.dst.1",
+174:                Return(
+186:                "main.dst.1": ByteArray {
+196:                "main.src.0": ByteArray {
+202:                "main.p.2": Long,
+205:                "main.dst.1": Struct(
+208:                "main.p.2": Pointer(
+214:                "main.src.0": Struct(
+HYGIENE
+
+  officialCommandEvidence: <<'OFFICIAL'
+\n$ cargo fmt --all -- --check
+exit=0 duration=0s
+\n$ cargo check --release
+    Finished `release` profile [optimized] target(s) in 0.01s
+exit=0 duration=0s
+\n$ cargo build --release
+    Finished `release` profile [optimized] target(s) in 0.01s
+exit=0 duration=0s
+\n$ cargo test --release
+    Finished `release` profile [optimized] target(s) in 0.01s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 10 tests
+test compiler::tests::rejects_bad_lexeme ... ok
+test compiler::tests::compiles_constant_return ... ok
+test driver::tests::derives_all_output_paths ... ok
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test compiler::tests::parses_sizeof_expression_without_evaluating_it ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test driver::tests::parses_default_run_stage ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+exit=0 duration=0s
+\n$ ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-dead-stores
+----------------------------------------------------------------------
+Ran 27 tests in 0.620s
+
+OK
+exit=0 duration=1s
+\n$ ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only
+----------------------------------------------------------------------
+Ran 120 tests in 2.840s
+
+OK
+exit=0 duration=3s
+\n$ ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --propagate-copies
+----------------------------------------------------------------------
+Ran 42 tests in 0.990s
+
+OK
+exit=0 duration=1s
+\n$ ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-unreachable-code
+----------------------------------------------------------------------
+Ran 15 tests in 0.336s
+
+OK
+exit=0 duration=1s
+\n$ ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --fold-constants
+----------------------------------------------------------------------
+Ran 16 tests in 0.422s
+
+OK
+exit=0 duration=0s
+\n$ ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union
+----------------------------------------------------------------------
+Ran 286 tests in 5.156s
+
+OK
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s:17: Warning: value 0x1000000080000000 truncated to 0x80000000
+
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s:9: Warning: value 0x400000005 truncated to 0x5
+
+exit=0 duration=5s
+\n$ git diff --check
+exit=0 duration=0s
+OFFICIAL
+
+  manualProbeEvidence: <<'PROBES'
+\n$ ./target/release/rustcc -S  /tmp/task55_direct_store_alias.c && gcc /tmp/task55_direct_store_alias.s -o /tmp/task55_direct_store_alias_baseline && /tmp/task55_direct_store_alias_baseline
+rustcc_exit=0
+gcc_exit=0
+program_exit=9 expected=9
+PROBE_PASS task55_direct_store_alias baseline
+\n$ ./target/release/rustcc -S --propagate-copies /tmp/task55_direct_store_alias.c && gcc /tmp/task55_direct_store_alias.s -o /tmp/task55_direct_store_alias_propagate && /tmp/task55_direct_store_alias_propagate
+rustcc_exit=0
+gcc_exit=0
+program_exit=9 expected=9
+PROBE_PASS task55_direct_store_alias propagate
+\n$ ./target/release/rustcc -S --fold-constants --eliminate-unreachable-code --propagate-copies --eliminate-dead-stores /tmp/task55_direct_store_alias.c && gcc /tmp/task55_direct_store_alias.s -o /tmp/task55_direct_store_alias_all && /tmp/task55_direct_store_alias_all
+rustcc_exit=0
+gcc_exit=0
+program_exit=9 expected=9
+PROBE_PASS task55_direct_store_alias all
+\n$ ./target/release/rustcc -S  /tmp/task55_call_alias.c && gcc /tmp/task55_call_alias.s -o /tmp/task55_call_alias_baseline && /tmp/task55_call_alias_baseline
+rustcc_exit=0
+gcc_exit=0
+program_exit=9 expected=9
+PROBE_PASS task55_call_alias baseline
+\n$ ./target/release/rustcc -S --propagate-copies /tmp/task55_call_alias.c && gcc /tmp/task55_call_alias.s -o /tmp/task55_call_alias_propagate && /tmp/task55_call_alias_propagate
+rustcc_exit=0
+gcc_exit=0
+program_exit=9 expected=9
+PROBE_PASS task55_call_alias propagate
+\n$ ./target/release/rustcc -S --fold-constants --eliminate-unreachable-code --propagate-copies --eliminate-dead-stores /tmp/task55_call_alias.c && gcc /tmp/task55_call_alias.s -o /tmp/task55_call_alias_all && /tmp/task55_call_alias_all
+rustcc_exit=0
+gcc_exit=0
+program_exit=9 expected=9
+PROBE_PASS task55_call_alias all
+\n$ ./target/release/rustcc -S  /tmp/task55_dead_local.c && gcc /tmp/task55_dead_local.s -o /tmp/task55_dead_local_baseline && /tmp/task55_dead_local_baseline
+rustcc_exit=0
+gcc_exit=0
+program_exit=2 expected=2
+PROBE_PASS task55_dead_local baseline
+\n$ ./target/release/rustcc -S --eliminate-dead-stores /tmp/task55_dead_local.c && gcc /tmp/task55_dead_local.s -o /tmp/task55_dead_local_dse && /tmp/task55_dead_local_dse
+rustcc_exit=0
+gcc_exit=0
+program_exit=2 expected=2
+PROBE_PASS task55_dead_local dse
+\n$ ./target/release/rustcc -S --fold-constants --eliminate-unreachable-code --propagate-copies --eliminate-dead-stores /tmp/task55_dead_local.c && gcc /tmp/task55_dead_local.s -o /tmp/task55_dead_local_all && /tmp/task55_dead_local_all
+rustcc_exit=0
+gcc_exit=0
+program_exit=2 expected=2
+PROBE_PASS task55_dead_local all
+\n$ ./target/release/rustcc -S  /tmp/task55_address_taken.c && gcc /tmp/task55_address_taken.s -o /tmp/task55_address_taken_baseline && /tmp/task55_address_taken_baseline
+rustcc_exit=0
+gcc_exit=0
+program_exit=2 expected=2
+PROBE_PASS task55_address_taken baseline
+\n$ ./target/release/rustcc -S --eliminate-dead-stores /tmp/task55_address_taken.c && gcc /tmp/task55_address_taken.s -o /tmp/task55_address_taken_dse && /tmp/task55_address_taken_dse
+rustcc_exit=0
+gcc_exit=0
+program_exit=2 expected=2
+PROBE_PASS task55_address_taken dse
+\n$ ./target/release/rustcc -S --fold-constants --eliminate-unreachable-code --propagate-copies --eliminate-dead-stores /tmp/task55_address_taken.c && gcc /tmp/task55_address_taken.s -o /tmp/task55_address_taken_all && /tmp/task55_address_taken_all
+rustcc_exit=0
+gcc_exit=0
+program_exit=2 expected=2
+PROBE_PASS task55_address_taken all
+\n$ ./target/release/rustcc -S  /tmp/task55_pointer_store_live.c && gcc /tmp/task55_pointer_store_live.s -o /tmp/task55_pointer_store_live_baseline && /tmp/task55_pointer_store_live_baseline
+rustcc_exit=0
+gcc_exit=0
+program_exit=7 expected=7
+PROBE_PASS task55_pointer_store_live baseline
+\n$ ./target/release/rustcc -S --eliminate-dead-stores /tmp/task55_pointer_store_live.c && gcc /tmp/task55_pointer_store_live.s -o /tmp/task55_pointer_store_live_dse && /tmp/task55_pointer_store_live_dse
+rustcc_exit=0
+gcc_exit=0
+program_exit=7 expected=7
+PROBE_PASS task55_pointer_store_live dse
+\n$ ./target/release/rustcc -S --fold-constants --eliminate-unreachable-code --propagate-copies --eliminate-dead-stores /tmp/task55_pointer_store_live.c && gcc /tmp/task55_pointer_store_live.s -o /tmp/task55_pointer_store_live_all && /tmp/task55_pointer_store_live_all
+rustcc_exit=0
+gcc_exit=0
+program_exit=7 expected=7
+PROBE_PASS task55_pointer_store_live all
+\n$ ./target/release/rustcc -S  /tmp/task55_call_side_effect.c && gcc /tmp/task55_call_side_effect.s -o /tmp/task55_call_side_effect_baseline && /tmp/task55_call_side_effect_baseline
+rustcc_exit=0
+gcc_exit=0
+program_exit=9 expected=9
+PROBE_PASS task55_call_side_effect baseline
+\n$ ./target/release/rustcc -S --eliminate-dead-stores /tmp/task55_call_side_effect.c && gcc /tmp/task55_call_side_effect.s -o /tmp/task55_call_side_effect_dse && /tmp/task55_call_side_effect_dse
+rustcc_exit=0
+gcc_exit=0
+program_exit=9 expected=9
+PROBE_PASS task55_call_side_effect dse
+\n$ ./target/release/rustcc -S --fold-constants --eliminate-unreachable-code --propagate-copies --eliminate-dead-stores /tmp/task55_call_side_effect.c && gcc /tmp/task55_call_side_effect.s -o /tmp/task55_call_side_effect_all && /tmp/task55_call_side_effect_all
+rustcc_exit=0
+gcc_exit=0
+program_exit=9 expected=9
+PROBE_PASS task55_call_side_effect all
+\n$ ./target/release/rustcc -S  /tmp/task55_global_same_tu.c && gcc /tmp/task55_global_same_tu.s -o /tmp/task55_global_same_tu_baseline && /tmp/task55_global_same_tu_baseline
+rustcc_exit=0
+gcc_exit=0
+program_exit=6 expected=6
+PROBE_PASS task55_global_same_tu baseline
+\n$ ./target/release/rustcc -S --eliminate-dead-stores /tmp/task55_global_same_tu.c && gcc /tmp/task55_global_same_tu.s -o /tmp/task55_global_same_tu_dse && /tmp/task55_global_same_tu_dse
+rustcc_exit=0
+gcc_exit=0
+program_exit=6 expected=6
+PROBE_PASS task55_global_same_tu dse
+\n$ ./target/release/rustcc -S --fold-constants --eliminate-unreachable-code --propagate-copies --eliminate-dead-stores /tmp/task55_global_same_tu.c && gcc /tmp/task55_global_same_tu.s -o /tmp/task55_global_same_tu_all && /tmp/task55_global_same_tu_all
+rustcc_exit=0
+gcc_exit=0
+program_exit=6 expected=6
+PROBE_PASS task55_global_same_tu all
+\n$ ./target/release/rustcc -S  /tmp/task55_aggregate_global.c && gcc /tmp/task55_aggregate_global.s -o /tmp/task55_aggregate_global_baseline && /tmp/task55_aggregate_global_baseline
+rustcc_exit=0
+gcc_exit=0
+program_exit=11 expected=11
+PROBE_PASS task55_aggregate_global baseline
+\n$ ./target/release/rustcc -S --eliminate-dead-stores /tmp/task55_aggregate_global.c && gcc /tmp/task55_aggregate_global.s -o /tmp/task55_aggregate_global_dse && /tmp/task55_aggregate_global_dse
+rustcc_exit=0
+gcc_exit=0
+program_exit=11 expected=11
+PROBE_PASS task55_aggregate_global dse
+\n$ ./target/release/rustcc -S --fold-constants --eliminate-unreachable-code --propagate-copies --eliminate-dead-stores /tmp/task55_aggregate_global.c && gcc /tmp/task55_aggregate_global.s -o /tmp/task55_aggregate_global_all && /tmp/task55_aggregate_global_all
+rustcc_exit=0
+gcc_exit=0
+program_exit=11 expected=11
+PROBE_PASS task55_aggregate_global all
+\n$ ./target/release/rustcc -S  /tmp/task55_call_pointer_side_effect.c && gcc /tmp/task55_call_pointer_side_effect.s -o /tmp/task55_call_pointer_side_effect_baseline && /tmp/task55_call_pointer_side_effect_baseline
+rustcc_exit=0
+gcc_exit=0
+program_exit=8 expected=8
+PROBE_PASS task55_call_pointer_side_effect baseline
+\n$ ./target/release/rustcc -S --eliminate-dead-stores /tmp/task55_call_pointer_side_effect.c && gcc /tmp/task55_call_pointer_side_effect.s -o /tmp/task55_call_pointer_side_effect_dse && /tmp/task55_call_pointer_side_effect_dse
+rustcc_exit=0
+gcc_exit=0
+program_exit=8 expected=8
+PROBE_PASS task55_call_pointer_side_effect dse
+\n$ ./target/release/rustcc -S --fold-constants --eliminate-unreachable-code --propagate-copies --eliminate-dead-stores /tmp/task55_call_pointer_side_effect.c && gcc /tmp/task55_call_pointer_side_effect.s -o /tmp/task55_call_pointer_side_effect_all && /tmp/task55_call_pointer_side_effect_all
+rustcc_exit=0
+gcc_exit=0
+program_exit=8 expected=8
+PROBE_PASS task55_call_pointer_side_effect all
+\n$ ./target/release/rustcc -S  /tmp/task55_extern_store.c && gcc /tmp/task55_extern_store.s /tmp/task55_extern_client.c -o /tmp/task55_extern_scalar_baseline && /tmp/task55_extern_scalar_baseline
+rustcc_exit=0
+gcc_exit=0
+program_exit=5 expected=5
+PROBE_PASS task55_extern_scalar baseline
+\n$ ./target/release/rustcc -S --eliminate-dead-stores /tmp/task55_extern_store.c && gcc /tmp/task55_extern_store.s /tmp/task55_extern_client.c -o /tmp/task55_extern_scalar_dse && /tmp/task55_extern_scalar_dse
+rustcc_exit=0
+gcc_exit=0
+program_exit=5 expected=5
+PROBE_PASS task55_extern_scalar dse
+\n$ ./target/release/rustcc -S --fold-constants --eliminate-unreachable-code --propagate-copies --eliminate-dead-stores /tmp/task55_extern_store.c && gcc /tmp/task55_extern_store.s /tmp/task55_extern_client.c -o /tmp/task55_extern_scalar_all && /tmp/task55_extern_scalar_all
+rustcc_exit=0
+gcc_exit=0
+program_exit=5 expected=5
+PROBE_PASS task55_extern_scalar all
+\n$ ./target/release/rustcc -S  /tmp/task55_extern_agg_store.c && gcc /tmp/task55_extern_agg_store.s /tmp/task55_extern_agg_client.c -o /tmp/task55_extern_aggregate_baseline && /tmp/task55_extern_aggregate_baseline
+rustcc_exit=0
+gcc_exit=0
+program_exit=7 expected=7
+PROBE_PASS task55_extern_aggregate baseline
+\n$ ./target/release/rustcc -S --eliminate-dead-stores /tmp/task55_extern_agg_store.c && gcc /tmp/task55_extern_agg_store.s /tmp/task55_extern_agg_client.c -o /tmp/task55_extern_aggregate_dse && /tmp/task55_extern_aggregate_dse
+rustcc_exit=0
+gcc_exit=0
+program_exit=7 expected=7
+PROBE_PASS task55_extern_aggregate dse
+\n$ ./target/release/rustcc -S --fold-constants --eliminate-unreachable-code --propagate-copies --eliminate-dead-stores /tmp/task55_extern_agg_store.c && gcc /tmp/task55_extern_agg_store.s /tmp/task55_extern_agg_client.c -o /tmp/task55_extern_aggregate_all && /tmp/task55_extern_aggregate_all
+rustcc_exit=0
+gcc_exit=0
+program_exit=7 expected=7
+PROBE_PASS task55_extern_aggregate all
+\n$ ./target/release/rustcc --tacky --eliminate-dead-stores /tmp/task55_dead_local.c > /tmp/task55_dead_local_dse.tacky
+tacky_exit=0
+dead_local_tacky_main_x_lines:
+8:                Return(
+15:                "main.x.0": Int,
+18:                "main.x.0": Int,
+PROBE_PASS dead_local_tacky removed overwritten x=1
+\n$ timeout 15s ./target/release/rustcc --eliminate-dead-stores /tmp/task55_malformed.c
+malformed_exit=1
+parse error: expected expression, found Semicolon (";")
+PROBE_PASS malformed nonzero non-timeout
+\nprobe_failures=0
+PROBES
+
+  cleanupEvidence: <<'CLEANUP'
+$ rm -f /tmp/task55_* /tmp/run_task55*
+cleanup_exit=0
+$ ls /tmp/task55_* 2>/dev/null || true
+(no output; verified no /tmp/task55_* artifacts remained after cleanup)
+CLEANUP
+}

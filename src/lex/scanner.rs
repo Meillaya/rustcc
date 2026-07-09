@@ -149,10 +149,13 @@ fn lex_number(chars: &mut Chars<'_>, tokens: &mut Vec<Token>) -> Result<()> {
         let is_long = suffix.contains('l') || suffix.contains('L');
         let is_unsigned = suffix.contains('u') || suffix.contains('U');
         if is_unsigned {
+            // Mirrors nqcc2/lib/lex.ml integer suffix classification: unsigned
+            // literals without an explicit long suffix still widen when their
+            // value cannot fit in `unsigned int`.
             tokens.push(Token {
                 kind: TokenKind::UIntConstant(
                     value as i64,
-                    if is_long {
+                    if is_long || value > u128::from(u32::MAX) {
                         UIntKind::ULong
                     } else {
                         UIntKind::UInt
@@ -267,10 +270,13 @@ fn lex_number(chars: &mut Chars<'_>, tokens: &mut Vec<Token>) -> Result<()> {
     let is_long = suffix.contains('l') || suffix.contains('L');
     let is_unsigned = suffix.contains('u') || suffix.contains('U');
     if is_unsigned {
+        // Mirrors nqcc2/lib/lex.ml integer suffix classification: unsigned
+        // literals without an explicit long suffix still widen when their
+        // value cannot fit in `unsigned int`.
         tokens.push(Token {
             kind: TokenKind::UIntConstant(
                 value as i64,
-                if is_long {
+                if is_long || value > u128::from(u32::MAX) {
                     UIntKind::ULong
                 } else {
                     UIntKind::UInt

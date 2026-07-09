@@ -45,7 +45,7 @@
 //     `TopLevel::Fn` entry; the body is the union of prologue and
 //     per-instruction lowering.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 mod copy_prop_support;
 
@@ -79,6 +79,19 @@ fn type_of_val(val: &Val, env: &TypeEnv) -> OperandType {
 
 fn is_byte_type(ty: OperandType) -> bool {
     matches!(ty, OperandType::Byte | OperandType::UByte)
+}
+
+fn operand_type_for_scalar_return(ty: &Type) -> OperandType {
+    match ty {
+        Type::Char | Type::SignedChar => OperandType::Byte,
+        Type::UnsignedChar => OperandType::UByte,
+        Type::Long => OperandType::Long,
+        Type::UnsignedLong | Type::Pointer(_) => OperandType::ULong,
+        Type::Double => OperandType::Double,
+        Type::UnsignedInt => OperandType::UInt,
+        Type::Int => OperandType::Int,
+        Type::Void | Type::Array { .. } | Type::Struct(_) | Type::Union(_) => OperandType::Int,
+    }
 }
 
 /// Convert a TACKY [`ConditionCode`] to the equivalent assembly
@@ -197,6 +210,7 @@ struct CodegenCtx {
     function_param_types: HashMap<String, Vec<Type>>,
     function_return_types: HashMap<String, Type>,
     current_return_on_stack: bool,
+    current_return_type: Option<Type>,
     current_function_name: String,
 }
 
@@ -644,7 +658,13 @@ fn lower_instruction(
                 out.push(Instr::Ret);
                 return out;
             }
-            let val_ty = type_of_val(val, env);
+            let val_ty = match val {
+                Val::Constant(_) => ctx
+                    .current_return_type
+                    .as_ref()
+                    .map_or(OperandType::Int, operand_type_for_scalar_return),
+                Val::ConstantDouble(_) | Val::Var(_) => type_of_val(val, env),
+            };
             let is_long = val_ty.is_long_word();
             let mut out: Vec<Instr> = Vec::new();
             if val_ty == OperandType::Double {
@@ -1892,6 +1912,88 @@ fn lower_instruction(
     }
 }
 
+fn collect_global_copy_dests(body: &[Instruction], globals: &TypeEnv) -> BTreeSet<String> {
+    let mut pointer_uses = HashMap::<String, usize>::new();
+    let mut copy_dests = BTreeSet::new();
+    for instruction in body {
+        match instruction {
+            Instruction::Store { dst_pointer, .. } => {
+                count_pointer_use(dst_pointer, &mut pointer_uses)
+            }
+            Instruction::Load { src_pointer, .. } => {
+                count_pointer_use(src_pointer, &mut pointer_uses)
+            }
+            Instruction::CopyBytes {
+                src_pointer,
+                dst_pointer,
+                ..
+            } => {
+                count_pointer_use(src_pointer, &mut pointer_uses);
+                if let Val::Var(name) = dst_pointer {
+                    copy_dests.insert(name.clone());
+                }
+                count_pointer_use(dst_pointer, &mut pointer_uses);
+            }
+            Instruction::AddPtr { ptr, .. } => count_pointer_use(ptr, &mut pointer_uses),
+            _ => {}
+        }
+    }
+    body.iter()
+        .filter_map(|instruction| match instruction {
+            Instruction::GetAddress { src, dst }
+                if globals.contains_key(src)
+                    && copy_dests.contains(dst)
+                    && pointer_uses.get(dst).copied() == Some(1) =>
+            {
+                Some(dst.clone())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+fn count_pointer_use(val: &Val, pointer_uses: &mut HashMap<String, usize>) {
+    if let Val::Var(name) = val {
+        *pointer_uses.entry(name.clone()).or_insert(0) += 1;
+    }
+}
+
+fn lower_copybytes_to_global(
+    src_pointer: &Val,
+    dst: &str,
+    size: i64,
+    ctx: &mut CodegenCtx,
+) -> Vec<Instr> {
+    let mut out = vec![Instr::Movq {
+        src: convert_val(src_pointer, ctx),
+        dst: Operand::Reg(Reg::R8),
+    }];
+    let mut offset = 0;
+    while offset + 8 <= size {
+        out.push(Instr::Movq {
+            src: Operand::Memory(Reg::R8, offset as i32),
+            dst: Operand::Reg(Reg::R10),
+        });
+        out.push(Instr::Movq {
+            src: Operand::Reg(Reg::R10),
+            dst: Operand::DataOffset(dst.to_string(), offset as i32),
+        });
+        offset += 8;
+    }
+    while offset < size {
+        out.push(Instr::MovByte {
+            src: Operand::Memory(Reg::R8, offset as i32),
+            dst: Operand::Reg(Reg::R10),
+        });
+        out.push(Instr::MovByte {
+            src: Operand::Reg(Reg::R10),
+            dst: Operand::DataOffset(dst.to_string(), offset as i32),
+        });
+        offset += 1;
+    }
+    out
+}
+
 /// Lower a single function definition into a `TopLevel::Fn`.
 ///
 /// Mirrors `convert_top_level` in `nqcc2/lib/backend/codegen.ml:858-866`
@@ -1906,6 +2008,7 @@ fn lower_instruction(
 /// ...) by `replace_pseudos` once the frame is laid out.
 fn generate_function(func: &TackyFunction, globals: &TypeEnv, ctx: &mut CodegenCtx) -> TopLevel {
     ctx.current_function_name = func.name.clone();
+    ctx.current_return_type = Some(func.return_type.clone());
     ctx.current_return_on_stack = matches!(func.return_type, Type::Struct(_) | Type::Union(_))
         && abi::returns_on_stack(&func.return_type);
 
@@ -2019,11 +2122,33 @@ fn generate_function(func: &TackyFunction, globals: &TypeEnv, ctx: &mut CodegenC
     for (k, v) in &func.type_env {
         merged.insert(k.clone(), *v);
     }
-    let body = func
-        .body
-        .iter()
-        .flat_map(|instr| lower_instruction(instr, &merged, &func.ast_type_env, ctx))
-        .collect::<Vec<_>>();
+    let global_copy_dests = collect_global_copy_dests(&func.body, globals);
+    let mut address_of = BTreeMap::<String, String>::new();
+    let mut body = Vec::new();
+    for instr in &func.body {
+        match instr {
+            Instruction::GetAddress { src, dst } if global_copy_dests.contains(dst) => {
+                address_of.insert(dst.clone(), src.clone());
+            }
+            Instruction::GetAddress { src, dst } => {
+                address_of.insert(dst.clone(), src.clone());
+                body.extend(lower_instruction(instr, &merged, &func.ast_type_env, ctx));
+            }
+            Instruction::CopyBytes {
+                src_pointer,
+                dst_pointer: Val::Var(dst_pointer),
+                size,
+            } if address_of
+                .get(dst_pointer)
+                .is_some_and(|name| globals.contains_key(name)) =>
+            {
+                if let Some(dst) = address_of.get(dst_pointer) {
+                    body.extend(lower_copybytes_to_global(src_pointer, dst, *size, ctx));
+                }
+            }
+            _ => body.extend(lower_instruction(instr, &merged, &func.ast_type_env, ctx)),
+        }
+    }
     let mut type_env = func.type_env.clone();
     if ctx.current_return_on_stack {
         type_env.insert(format!("{}.return_ptr", func.name), OperandType::Long);

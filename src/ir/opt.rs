@@ -14,6 +14,7 @@
 
 use crate::ir::constant_folding::constant_fold_program;
 use crate::ir::copy_propagation::propagate_copies_program;
+use crate::ir::dead_store_elim::eliminate_dead_stores_program;
 use crate::ir::tacky::TackyProgram;
 use crate::ir::unreachable_code_elim::eliminate_unreachable_code_program;
 
@@ -30,8 +31,8 @@ pub enum OptPass {
 ///
 /// Mirrors nqcc2/lib/optimizations/optimize.ml:4-35.  The full OCaml pipeline
 /// reaches a fixed point over all enabled passes; this wave wires constant
-/// folding, unreachable-code elimination, and copy propagation while leaving
-/// dead-store elimination as a no-op for W20-T5.
+/// folding, unreachable-code elimination, copy propagation, and dead-store
+/// elimination in the book order until they reach a fixed point.
 pub fn run_opt(program: TackyProgram, passes: &[OptPass]) -> TackyProgram {
     let mut current = program;
     loop {
@@ -53,7 +54,11 @@ pub fn run_opt(program: TackyProgram, passes: &[OptPass]) -> TackyProgram {
                     changed |= result.changed;
                     result.program
                 }
-                OptPass::DeadStoreElim => current,
+                OptPass::DeadStoreElim => {
+                    let result = eliminate_dead_stores_program(current);
+                    changed |= result.changed;
+                    result.program
+                }
             };
         }
         if !changed {

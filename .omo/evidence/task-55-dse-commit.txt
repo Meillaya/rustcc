@@ -1,0 +1,26 @@
+Task 55 W20-T5 Chapter 19 dead store elimination commit evidence
+
+Verifier verdict: APPROVE (`.omo/evidence/task-55-dse-adversarial-verify-2.txt`).
+
+Commands/evidence accepted for commit:
+- `cargo fmt --all -- --check` -> exit 0
+- `cargo check --release` -> exit 0
+- `cargo build --release` -> exit 0
+- `cargo test --release` -> exit 0, 10 tests passed
+- `./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-dead-stores` -> `Ran 27 tests ... OK`
+- `./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only` -> `Ran 120 tests ... OK`
+- `./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --propagate-copies` -> `Ran 42 tests ... OK`
+- `./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-unreachable-code` -> `Ran 15 tests ... OK`
+- `./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --fold-constants` -> `Ran 16 tests ... OK`
+- `./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union` -> `Ran 286 tests ... OK`
+- `git diff --check` -> exit 0
+
+Adversarial checks:
+- Dead overwritten locals are eliminated while address-taken locals and pointer stores remain live.
+- Calls and globals preserve side effects; same-TU and extern scalar/aggregate globals retain writes.
+- Copy-prop aggregate address rewriting no longer changes direct-store or call-pointer alias behavior.
+- `src/ir/dead_store_elim/*`, `src/ir/copy_propagation/rewrite.rs`, and `src/ir/copy_propagation/rewrite_support.rs` are below 250 pure LOC.
+- No compiler-phase Rust tests, new dependencies, unwrap/expect additions, bridge/system-C fingerprints, or Chapter 20 regalloc/coalescing scope were added.
+
+Follow-up:
+- W21-T1 Chapter 20 assembly liveness analysis remains pending.

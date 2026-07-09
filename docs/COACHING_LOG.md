@@ -1225,3 +1225,47 @@ Implemented the Chapter 19 W20-T4 copy-propagation pass on top of the CFG founda
 
 - W20-T5 must still implement dead-store elimination and the default all-optimizations Chapter 19 gate.
 - `src/codegen/codegen.rs` remains a legacy oversized file, but Task 54 helper bodies now live in `src/codegen/codegen/copy_prop_support.rs`; broad codegen decomposition remains out of scope.
+
+## Wave 20 / Chapter 19 dead store elimination and default all-optimizations gate (task 55)
+
+Implemented the Chapter 19 W20-T5 dead-store elimination pass and closed the default all-optimizations gate. The optimizer now wires `--eliminate-dead-stores` through the pipeline, runs DSE in the Chapter 19 fixed-point pass sequence, preserves static-storage and extern-global writes, and keeps address-taken, pointer-store, call-side-effect, and aggregate/global memory effects conservative. Supporting copy-propagation address rewriting was split into a focused helper and hardened after review-found alias bugs involving direct stores and pointer arguments passed to calls.
+
+### QA
+
+| Gate | Result |
+|------|--------|
+| `cargo fmt --all -- --check` | exit 0 |
+| `cargo check --release` | exit 0 |
+| `cargo build --release` | exit 0 |
+| `cargo test --release` | 10 passed, 0 failed |
+| chapter 19 `--latest-only --eliminate-dead-stores` | `Ran 27 tests ... OK` |
+| chapter 19 default `--latest-only` | `Ran 120 tests ... OK` |
+| chapter 19 `--latest-only --propagate-copies` | `Ran 42 tests ... OK` |
+| chapter 19 `--latest-only --eliminate-unreachable-code` | `Ran 15 tests ... OK` |
+| chapter 19 `--latest-only --fold-constants` | `Ran 16 tests ... OK` |
+| chapter 18 `--latest-only --union` | `Ran 286 tests ... OK` |
+| extern/global DSE probes | scalar extern exits 5; aggregate extern exits 7; all preserved under DSE/default |
+| alias regression probes | direct store alias and call pointer alias both exit 9 under baseline, copy-prop, and default all opts |
+| file-size/slop check | DSE modules, `rewrite.rs`, and `rewrite_support.rs` all below 250 pure LOC; no compiler-phase Rust tests added |
+| forbidden bridge/interpreter scan | no new bridge/system-C/interpreter or Chapter 20 regalloc fingerprints |
+| `git diff --check` | exit 0 |
+
+### Evidence
+
+- `.omo/evidence/task-55-dse-implementation.txt`
+- `.omo/evidence/task-55-dse-code-review.md`
+- `.omo/evidence/task-55-dse-fix.txt`
+- `.omo/evidence/task-55-dse-code-review-2.md`
+- `.omo/evidence/task-55-dse-adversarial-verify.txt`
+- `.omo/evidence/task-55-copy-prop-rewrite-split-fix.txt`
+- `.omo/evidence/task-55-dse-code-review-3.md`
+- `.omo/evidence/task-55-copy-prop-write-alias-fix.txt`
+- `.omo/evidence/task-55-dse-code-review-4.md`
+- `.omo/evidence/task-55-copy-prop-call-alias-fix.txt`
+- `.omo/evidence/task-55-dse-code-review-5.md`
+- `.omo/evidence/task-55-dse-adversarial-verify-2.txt`
+
+### Remaining scope
+
+- Wave 21 / Chapter 20 register allocation remains pending, starting with assembly liveness analysis.
+- `src/codegen/codegen.rs` and `src/lex/scanner.rs` remain oversized legacy files touched by required support fixes; no additional broad cleanup was taken in Task 55.

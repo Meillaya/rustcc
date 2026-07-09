@@ -24,6 +24,7 @@ pub mod cfg;
 pub mod const_eval;
 mod constant_folding;
 mod copy_propagation;
+mod dead_store_elim;
 pub mod lower;
 pub mod opt;
 pub mod tacky;

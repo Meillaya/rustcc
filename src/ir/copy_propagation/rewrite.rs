@@ -1,10 +1,11 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ir::cfg::{BasicBlock, Cfg};
-use crate::ir::tacky::{Instruction, TypeEnv, Val};
+use crate::ir::tacky::{Instruction, TypeEnv};
 
 use super::dataflow::find_reaching_copies;
 use super::facts::{CopyFact, ReachingCopies, ValKey, aggregate_copy_fact, update_address_facts};
+use super::rewrite_support::{collect_write_pointers, replace_instruction_sources};
 
 // Mirrors nqcc2/lib/optimizations/copy_prop.ml:209-227.
 pub(super) fn optimize(
@@ -14,10 +15,11 @@ pub(super) fn optimize(
     aliased_vars: &std::collections::BTreeSet<String>,
 ) -> Cfg<(), Instruction> {
     let annotated_cfg = find_reaching_copies(cfg, type_env, static_vars, aliased_vars);
+    let write_pointers = collect_write_pointers(&annotated_cfg.basic_blocks);
     let basic_blocks = annotated_cfg
         .basic_blocks
         .iter()
-        .map(|block| rewrite_block(block, type_env))
+        .map(|block| rewrite_block(block, type_env, &write_pointers))
         .collect();
     Cfg {
         basic_blocks,
@@ -32,13 +34,15 @@ pub(super) fn optimize(
 fn rewrite_block(
     block: &BasicBlock<ReachingCopies, Instruction>,
     type_env: &TypeEnv,
+    write_pointers: &BTreeSet<String>,
 ) -> BasicBlock<(), Instruction> {
     let mut address_of = BTreeMap::<String, String>::new();
     let instructions = block
         .instructions
         .iter()
         .filter_map(|(copies, instruction)| {
-            let rewritten = rewrite_instruction(copies, instruction, &address_of, type_env);
+            let rewritten =
+                rewrite_instruction(copies, instruction, &address_of, type_env, write_pointers);
             update_address_facts(&mut address_of, instruction);
             rewritten
         })
@@ -58,6 +62,7 @@ fn rewrite_instruction(
     instruction: &Instruction,
     address_of: &BTreeMap<String, String>,
     type_env: &TypeEnv,
+    write_pointers: &BTreeSet<String>,
 ) -> Option<((), Instruction)> {
     if redundant_aggregate_copy(copies, instruction, address_of, type_env) {
         return None;
@@ -65,7 +70,10 @@ fn rewrite_instruction(
     if redundant_scalar_copy(copies, instruction) {
         return None;
     }
-    Some(((), replace_instruction_sources(instruction, copies)))
+    Some((
+        (),
+        replace_instruction_sources(instruction, copies, type_env, write_pointers),
+    ))
 }
 
 fn redundant_aggregate_copy(
@@ -105,151 +113,4 @@ fn redundant_scalar_copy(copies: &ReachingCopies, instruction: &Instruction) -> 
         dst: ValKey::from_val(src),
     };
     copies.contains(&copy) || copies.contains(&reverse)
-}
-
-fn replace_instruction_sources(instruction: &Instruction, copies: &ReachingCopies) -> Instruction {
-    match instruction {
-        Instruction::Return(val) => Instruction::Return(replace_val(val, copies)),
-        Instruction::Copy { src, dst } => Instruction::Copy {
-            src: replace_val(src, copies),
-            dst: dst.clone(),
-        },
-        Instruction::SignExtend { src, dst } => Instruction::SignExtend {
-            src: replace_val(src, copies),
-            dst: dst.clone(),
-        },
-        Instruction::ZeroExtend { src, dst } => Instruction::ZeroExtend {
-            src: replace_val(src, copies),
-            dst: dst.clone(),
-        },
-        Instruction::Truncate { src, dst } => Instruction::Truncate {
-            src: replace_val(src, copies),
-            dst: dst.clone(),
-        },
-        Instruction::IntToDouble { src, dst } => Instruction::IntToDouble {
-            src: replace_val(src, copies),
-            dst: dst.clone(),
-        },
-        Instruction::DoubleToInt { src, dst } => Instruction::DoubleToInt {
-            src: replace_val(src, copies),
-            dst: dst.clone(),
-        },
-        Instruction::UIntToDouble { src, dst } => Instruction::UIntToDouble {
-            src: replace_val(src, copies),
-            dst: dst.clone(),
-        },
-        Instruction::DoubleToUInt { src, dst } => Instruction::DoubleToUInt {
-            src: replace_val(src, copies),
-            dst: dst.clone(),
-        },
-        Instruction::Add { src, dst } => Instruction::Add {
-            src: replace_val(src, copies),
-            dst: dst.clone(),
-        },
-        Instruction::Sub { src, dst } => Instruction::Sub {
-            src: replace_val(src, copies),
-            dst: dst.clone(),
-        },
-        Instruction::Mul { src, dst } => Instruction::Mul {
-            src: replace_val(src, copies),
-            dst: dst.clone(),
-        },
-        Instruction::DivSigned { src, dst } => Instruction::DivSigned {
-            src: replace_val(src, copies),
-            dst: dst.clone(),
-        },
-        Instruction::RemSigned { src, dst } => Instruction::RemSigned {
-            src: replace_val(src, copies),
-            dst: dst.clone(),
-        },
-        Instruction::BitAnd { src, dst } => Instruction::BitAnd {
-            src: replace_val(src, copies),
-            dst: dst.clone(),
-        },
-        Instruction::BitOr { src, dst } => Instruction::BitOr {
-            src: replace_val(src, copies),
-            dst: dst.clone(),
-        },
-        Instruction::BitXor { src, dst } => Instruction::BitXor {
-            src: replace_val(src, copies),
-            dst: dst.clone(),
-        },
-        Instruction::BitShiftLeft { src, dst } => Instruction::BitShiftLeft {
-            src: replace_val(src, copies),
-            dst: dst.clone(),
-        },
-        Instruction::BitShiftRight { src, dst } => Instruction::BitShiftRight {
-            src: replace_val(src, copies),
-            dst: dst.clone(),
-        },
-        Instruction::Cmp {
-            left,
-            right,
-            dst,
-            cc,
-        } => Instruction::Cmp {
-            left: replace_val(left, copies),
-            right: replace_val(right, copies),
-            dst: dst.clone(),
-            cc: *cc,
-        },
-        Instruction::JumpIfZero { condition, target } => Instruction::JumpIfZero {
-            condition: replace_val(condition, copies),
-            target: target.clone(),
-        },
-        Instruction::JumpIfNotZero { condition, target } => Instruction::JumpIfNotZero {
-            condition: replace_val(condition, copies),
-            target: target.clone(),
-        },
-        Instruction::Load { src_pointer, dst } => Instruction::Load {
-            src_pointer: replace_val(src_pointer, copies),
-            dst: dst.clone(),
-        },
-        Instruction::Store { src, dst_pointer } => Instruction::Store {
-            src: replace_val(src, copies),
-            dst_pointer: replace_val(dst_pointer, copies),
-        },
-        Instruction::CopyBytes {
-            src_pointer,
-            dst_pointer,
-            size,
-        } => Instruction::CopyBytes {
-            src_pointer: replace_val(src_pointer, copies),
-            dst_pointer: replace_val(dst_pointer, copies),
-            size: *size,
-        },
-        Instruction::AddPtr {
-            ptr,
-            index,
-            scale,
-            dst,
-        } => Instruction::AddPtr {
-            ptr: replace_val(ptr, copies),
-            index: replace_val(index, copies),
-            scale: *scale,
-            dst: dst.clone(),
-        },
-        Instruction::Call { name, args, dst } => Instruction::Call {
-            name: name.clone(),
-            args: args.iter().map(|arg| replace_val(arg, copies)).collect(),
-            dst: dst.clone(),
-        },
-        Instruction::Negate { .. }
-        | Instruction::Complement { .. }
-        | Instruction::Not { .. }
-        | Instruction::Jump { .. }
-        | Instruction::Label(_)
-        | Instruction::GetAddress { .. } => instruction.clone(),
-    }
-}
-
-fn replace_val(val: &Val, copies: &ReachingCopies) -> Val {
-    let Val::Var(_) = val else {
-        return val.clone();
-    };
-    let key = ValKey::from_val(val);
-    copies
-        .iter()
-        .find(|copy| copy.dst == key)
-        .map_or_else(|| val.clone(), |copy| copy.src.to_val())
 }

@@ -1876,7 +1876,7 @@ Tasks numbered globally 1...N. Wave prefix in title.
   **Acceptance Criteria**:
   - [ ] `--chapter 19 --latest-only --propagate-copies` passes.
 
-- [ ] 55. W20-T5: Chapter 19 - dead store elimination + default all-optimizations gate
+- [x] 55. W20-T5: Chapter 19 - dead store elimination + default all-optimizations gate
 
   **What to do**: Implement DSE; verify all 4 passes work in combination.
   - For each store to a variable that is overwritten before being read, remove the store.

@@ -1,0 +1,133 @@
+Task 55 copy-prop write-alias fix evidence
+Date: 2026-07-08
+
+Scope changed:
+- src/ir/copy_propagation/rewrite_support.rs
+  - collect_write_pointers now scans all annotated blocks in the function.
+  - It seeds pointer values used as Store/CopyBytes write destinations.
+  - It conservatively propagates protection backward through Copy src->dst and AddPtr ptr->dst, to a fixed point.
+  - replace_address_source remains blocked whenever the GetAddress destination is in this write-pointer set.
+- src/ir/copy_propagation/rewrite.rs
+  - computes the function-wide write-pointer set once and passes it into each block rewrite.
+
+Initial repro before fix:
+$ ./target/release/rustcc -S /tmp/task55_copyprop_cross_block_write.c && gcc /tmp/task55_copyprop_cross_block_write.s -o /tmp/task55_copyprop_baseline && /tmp/task55_copyprop_baseline; echo baseline=$?
+baseline=9
+$ ./target/release/rustcc -S --propagate-copies /tmp/task55_copyprop_cross_block_write.c && gcc /tmp/task55_copyprop_cross_block_write.s -o /tmp/task55_copyprop_prop && /tmp/task55_copyprop_prop; echo propagate=$?
+propagate=1
+$ ./target/release/rustcc -S --fold-constants --eliminate-unreachable-code --propagate-copies --eliminate-dead-stores /tmp/task55_copyprop_cross_block_write.c && gcc /tmp/task55_copyprop_cross_block_write.s -o /tmp/task55_copyprop_all && /tmp/task55_copyprop_all; echo all=$?
+all=1
+
+Manual copy-prop write-alias repro after fix:
+Source: /tmp/task55_copyprop_cross_block_write.c
+struct S { int a; int b; };
+int main(void) {
+    struct S src = {1, 2};
+    struct S dst = {3, 4};
+    dst = src;
+    int *p = &dst.a;
+    if (1) { *p = 9; }
+    return dst.a;
+}
+
+$ ./target/release/rustcc -S /tmp/task55_copyprop_cross_block_write.c && gcc /tmp/task55_copyprop_cross_block_write.s -o /tmp/task55_copyprop_baseline && /tmp/task55_copyprop_baseline; echo "copyprop baseline exit=$?"
+copyprop baseline exit=9
+$ ./target/release/rustcc -S --propagate-copies /tmp/task55_copyprop_cross_block_write.c && gcc /tmp/task55_copyprop_cross_block_write.s -o /tmp/task55_copyprop_prop && /tmp/task55_copyprop_prop; echo "copyprop --propagate-copies exit=$?"
+copyprop --propagate-copies exit=9
+$ ./target/release/rustcc -S --fold-constants --eliminate-unreachable-code --propagate-copies --eliminate-dead-stores /tmp/task55_copyprop_cross_block_write.c && gcc /tmp/task55_copyprop_cross_block_write.s -o /tmp/task55_copyprop_all && /tmp/task55_copyprop_all; echo "copyprop all opts exit=$?"
+copyprop all opts exit=9
+
+DSE extern/global scalar repro after fix:
+Store source: /tmp/task55_extern_store.c
+extern int g;
+int set_g(void) { g = 5; return 0; }
+
+Client source: /tmp/task55_extern_client.c
+int g = 0;
+int set_g(void);
+int main(void) { set_g(); return g; }
+
+$ ./target/release/rustcc -S /tmp/task55_extern_store.c && gcc /tmp/task55_extern_store.s /tmp/task55_extern_client.c -o /tmp/task55_extern_baseline && /tmp/task55_extern_baseline; echo "extern baseline exit=$?"
+extern baseline exit=5
+$ ./target/release/rustcc -S --eliminate-dead-stores /tmp/task55_extern_store.c && gcc /tmp/task55_extern_store.s /tmp/task55_extern_client.c -o /tmp/task55_extern_dse && /tmp/task55_extern_dse; echo "extern dse exit=$?"
+extern dse exit=5
+$ ./target/release/rustcc -S --fold-constants --eliminate-unreachable-code --propagate-copies --eliminate-dead-stores /tmp/task55_extern_store.c && gcc /tmp/task55_extern_store.s /tmp/task55_extern_client.c -o /tmp/task55_extern_all && /tmp/task55_extern_all; echo "extern all exit=$?"
+extern all exit=5
+
+Pure LOC checks:
+$ python3 - <<'PY'
+from pathlib import Path
+for p in ['src/ir/copy_propagation/rewrite.rs','src/ir/copy_propagation/rewrite_support.rs']:
+    n=0
+    for line in Path(p).read_text().splitlines():
+        s=line.strip()
+        if s and not s.startswith('//'):
+            n+=1
+    print(f'{p}: {n}')
+PY
+src/ir/copy_propagation/rewrite.rs: 107
+src/ir/copy_propagation/rewrite_support.rs: 217
+
+Formatting/check/build/test:
+$ cargo fmt --all -- --check
+exit 0
+
+$ cargo check --release
+    Checking rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 0.64s
+
+$ cargo build --release
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 2.59s
+
+$ cargo test --release
+    Finished `release` profile [optimized] target(s) in 2.59s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+running 10 tests
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+   Doc-tests rustcc
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+LSP diagnostics:
+$ mcp__lsp.diagnostics /home/mei/projects/rustcc/src/ir/copy_propagation/rewrite.rs
+No diagnostics found
+$ mcp__lsp.diagnostics /home/mei/projects/rustcc/src/ir/copy_propagation/rewrite_support.rs
+No diagnostics found
+
+Official Task 55 gates:
+$ ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --propagate-copies
+Ran 42 tests in 0.982s
+OK
+
+$ ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-dead-stores
+Ran 27 tests in 0.599s
+OK
+
+$ ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only
+Ran 120 tests in 2.842s
+OK
+
+$ ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-unreachable-code
+Ran 15 tests in 0.325s
+OK
+
+$ ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --fold-constants
+Ran 16 tests in 0.422s
+OK
+
+$ ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union
+Ran 286 tests in 5.123s
+OK
+Non-blocking assembler warnings observed for chapter_18 static initializer client .s files:
+- nested_static_struct_initializers_client.s:17 value 0x1000000080000000 truncated to 0x80000000
+- static_struct_initializers_client.s:9 value 0x400000005 truncated to 0x5
+
+Diff hygiene:
+$ git diff --check
+exit 0
+
+No commit was made.

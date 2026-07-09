@@ -88,6 +88,9 @@ pub mod optimize {
         if optimization_flags.propagate_copies {
             passes.push(OptPass::CopyPropagation);
         }
+        if optimization_flags.eliminate_dead_stores {
+            passes.push(OptPass::DeadStoreElim);
+        }
         Ok(run_pass(tacky, &passes))
     }
 }

@@ -1,0 +1,406 @@
+# Task 55 DSE implementation evidence
+Date: 2026-07-08T22:56:24-04:00
+HEAD: 6bc6feb
+
+## Changed files
+src/codegen/codegen.rs
+src/ir/copy_propagation/facts.rs
+src/ir/copy_propagation/rewrite.rs
+src/ir/mod.rs
+src/ir/opt.rs
+src/lex/scanner.rs
+src/pipeline.rs
+
+## COMMAND: cargo fmt --all -- --check
+## EXIT: 0
+
+## COMMAND: cargo check --release
+    Finished `release` profile [optimized] target(s) in 0.01s
+## EXIT: 0
+
+## COMMAND: cargo build --release
+    Finished `release` profile [optimized] target(s) in 0.01s
+## EXIT: 0
+
+## COMMAND: cargo test --release
+   Compiling rustcc v0.0.1 (/home/mei/projects/rustcc)
+    Finished `release` profile [optimized] target(s) in 2.56s
+     Running unittests src/lib.rs (target/release/deps/rustcc-41b78a55704c0e27)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/release/deps/rustcc-b48f2e14c29f3b0e)
+
+running 10 tests
+test compiler::tests::reaches_validate_through_pass_through_resolve ... ok
+test compiler::tests::rejects_bad_lexeme ... ok
+test compiler::tests::compiles_constant_return ... ok
+test compiler::tests::compiles_expression_precedence ... ok
+test driver::tests::parses_artifact_and_feature_flags ... ok
+test compiler::tests::parses_sizeof_expression_without_evaluating_it ... ok
+test compiler::tests::handles_locals_and_assignment ... ok
+test driver::tests::derives_all_output_paths ... ok
+test driver::tests::parses_default_run_stage ... ok
+test driver::tests::parses_stage_flags_as_stdout_only ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rustcc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+## EXIT: 0
+
+## COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-dead-stores
+----------------------------------------------------------------------
+Ran 27 tests in 0.599s
+
+OK
+## EXIT: 0
+
+## COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --propagate-copies
+----------------------------------------------------------------------
+Ran 42 tests in 0.991s
+
+OK
+## EXIT: 0
+
+## COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-unreachable-code
+----------------------------------------------------------------------
+Ran 15 tests in 0.332s
+
+OK
+## EXIT: 0
+
+## COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --fold-constants
+----------------------------------------------------------------------
+Ran 16 tests in 0.417s
+
+OK
+## EXIT: 0
+
+## COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only
+----------------------------------------------------------------------
+Ran 120 tests in 2.813s
+
+OK
+## EXIT: 0
+
+## COMMAND: ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union
+----------------------------------------------------------------------
+Ran 286 tests in 5.131s
+
+OK
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/nested_static_struct_initializers_client.s:17: Warning: value 0x1000000080000000 truncated to 0x80000000
+
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s: Assembler messages:
+/home/mei/projects/rustcc/tests/tests/chapter_18/valid/no_structure_parameters/libraries/initializers/static_struct_initializers_client.s:9: Warning: value 0x400000005 truncated to 0x5
+
+## EXIT: 0
+
+## COMMAND: git diff --check
+## EXIT: 0
+
+
+## Manual DSE probe
+Probe source: /tmp/task55_manual_dse.c
+### COMMAND: ./target/release/rustcc --tacky --fold-constants --eliminate-unreachable-code --propagate-copies --eliminate-dead-stores /tmp/task55_manual_dse.c
+### TACKY slices
+42:            name: "overwritten_dead_local",
+43-            global: true,
+44-            params: [],
+45-            body: [
+46-                Return(
+47-                    Constant(
+48-                        2,
+49-                    ),
+50-                ),
+51-            ],
+52-            type_env: {
+53-                "sink": Int,
+54-                "overwritten_dead_local.x.0": Int,
+55-            },
+56-            ast_type_env: {
+57-                "sink": Int,
+58-                "overwritten_dead_local.x.0": Int,
+59-            },
+60-            return_type: Int,
+61-        },
+62-        TackyFunction {
+63-            name: "live_address_taken",
+64-            global: true,
+65-            params: [],
+66-            body: [
+--
+167:                    name: "overwritten_dead_local",
+168-                    args: [],
+169-                    dst: Some(
+170-                        "tmp.3",
+171-                    ),
+172-                },
+173-                Cmp {
+174-                    left: Var(
+175-                        "tmp.3",
+176-                    ),
+177-                    right: Constant(
+178-                        2,
+179-                    ),
+180-                    dst: "tmp.4",
+181-                    cc: NE,
+182-                },
+183-                JumpIfZero {
+184-                    condition: Var(
+185-                        "tmp.4",
+186-                    ),
+187-                    target: "if_end.0",
+188-                },
+189-                Return(
+190-                    Constant(
+191-                        1,
+63:            name: "live_address_taken",
+64-            global: true,
+65-            params: [],
+66-            body: [
+67-                Copy {
+68-                    src: Constant(
+69-                        1,
+70-                    ),
+71-                    dst: "live_address_taken.x.0",
+72-                },
+73-                GetAddress {
+74-                    src: "live_address_taken.x.0",
+75-                    dst: "tmp.1",
+76-                },
+77-                Store {
+78-                    src: Constant(
+79-                        3,
+80-                    ),
+81-                    dst_pointer: Var(
+82-                        "tmp.1",
+83-                    ),
+84-                },
+85-                Return(
+86-                    Var(
+87-                        "live_address_taken.x.0",
+88-                    ),
+89-                ),
+90-            ],
+91-            type_env: {
+92-                "live_address_taken.p.1": Long,
+93-                "sink": Int,
+94-                "live_address_taken.x.0": Int,
+95-                "tmp.1": Long,
+96-            },
+97-            ast_type_env: {
+98-                "live_address_taken.x.0": Int,
+99-                "sink": Int,
+100-                "live_address_taken.p.1": Pointer(
+101-                    Int,
+102-                ),
+103-            },
+104-            return_type: Int,
+105-        },
+--
+198:                    name: "live_address_taken",
+199-                    args: [],
+200-                    dst: Some(
+201-                        "tmp.5",
+202-                    ),
+203-                },
+204-                Cmp {
+205-                    left: Var(
+206-                        "tmp.5",
+207-                    ),
+208-                    right: Constant(
+209-                        3,
+210-                    ),
+211-                    dst: "tmp.6",
+212-                    cc: NE,
+213-                },
+214-                JumpIfZero {
+215-                    condition: Var(
+216-                        "tmp.6",
+217-                    ),
+218-                    target: "if_end.2",
+219-                },
+220-                Return(
+221-                    Constant(
+222-                        2,
+223-                    ),
+224-                ),
+225-                Label(
+226-                    "if_end.2",
+227-                ),
+228-                Copy {
+229-                    src: Constant(
+230-                        0,
+231-                    ),
+232-                    dst: "sink",
+233-                },
+234-                Call {
+235-                    name: "call_result_dead_but_call_live",
+236-                    args: [],
+237-                    dst: Some(
+238-                        "tmp.7",
+239-                    ),
+240-                },
+107:            name: "call_result_dead_but_call_live",
+108-            global: true,
+109-            params: [],
+110-            body: [
+111-                Call {
+112-                    name: "callee",
+113-                    args: [],
+114-                    dst: Some(
+115-                        "tmp.2",
+116-                    ),
+117-                },
+118-                Return(
+119-                    Var(
+120-                        "sink",
+121-                    ),
+122-                ),
+123-            ],
+124-            type_env: {
+125-                "tmp.2": Int,
+126-                "sink": Int,
+127-                "call_result_dead_but_call_live.x.0": Int,
+128-            },
+129-            ast_type_env: {
+130-                "sink": Int,
+131-                "call_result_dead_but_call_live.x.0": Int,
+--
+235:                    name: "call_result_dead_but_call_live",
+236-                    args: [],
+237-                    dst: Some(
+238-                        "tmp.7",
+239-                    ),
+240-                },
+241-                Cmp {
+242-                    left: Var(
+243-                        "tmp.7",
+244-                    ),
+245-                    right: Constant(
+246-                        1,
+247-                    ),
+248-                    dst: "tmp.8",
+249-                    cc: NE,
+250-                },
+251-                JumpIfZero {
+252-                    condition: Var(
+253-                        "tmp.8",
+254-                    ),
+255-                    target: "if_end.4",
+256-                },
+257-                Return(
+258-                    Constant(
+259-                        3,
+137:            name: "global_memory_live",
+138-            global: true,
+139-            params: [],
+140-            body: [
+141-                Copy {
+142-                    src: Constant(
+143-                        4,
+144-                    ),
+145-                    dst: "sink",
+146-                },
+147-                Return(
+148-                    Constant(
+149-                        4,
+150-                    ),
+151-                ),
+152-            ],
+153-            type_env: {
+154-                "sink": Int,
+155-            },
+156-            ast_type_env: {
+157-                "sink": Int,
+158-            },
+159-            return_type: Int,
+160-        },
+161-        TackyFunction {
+--
+266:                    name: "global_memory_live",
+267-                    args: [],
+268-                    dst: Some(
+269-                        "tmp.9",
+270-                    ),
+271-                },
+272-                Cmp {
+273-                    left: Var(
+274-                        "tmp.9",
+275-                    ),
+276-                    right: Constant(
+277-                        4,
+278-                    ),
+279-                    dst: "tmp.10",
+280-                    cc: NE,
+281-                },
+282-                JumpIfZero {
+283-                    condition: Var(
+284-                        "tmp.10",
+285-                    ),
+286-                    target: "if_end.6",
+287-                },
+288-                Return(
+289-                    Constant(
+290-                        4,
+### COMMAND: ./target/release/rustcc --fold-constants --eliminate-unreachable-code --propagate-copies --eliminate-dead-stores /tmp/task55_manual_dse.c && /tmp/task55_manual_dse
+### EXIT: 0
+
+## Pure LOC for changed/new .rs files
+src/codegen/codegen.rs 2029
+src/ir/copy_propagation/facts.rs 178
+src/ir/copy_propagation/rewrite.rs 304
+src/ir/dead_store_elim.rs 400
+src/ir/mod.rs 13
+src/ir/opt.rs 44
+src/lex/scanner.rs 557
+src/pipeline.rs 95
+
+## Pass/fail summary
+All required commands above exited 0. Chapter 18 union emitted pre-existing assembler warnings but passed.
+Manual probe exit 0: overwritten local dead store removed; address-taken store, call side effect, and global memory store remained behaviorally safe.
+
+## Risks / follow-ups
+- src/codegen/codegen.rs and src/lex/scanner.rs are pre-existing oversized legacy files touched narrowly for Chapter 19 harness compatibility; no broad refactor attempted in this scoped task.
+- DSE tracks aggregate memory conservatively at base-object granularity, not field-sensitive liveness.
+
+## Final git status
+ M .omo/boulder.json
+ M src/codegen/codegen.rs
+ M src/ir/copy_propagation/facts.rs
+ M src/ir/copy_propagation/rewrite.rs
+ M src/ir/mod.rs
+ M src/ir/opt.rs
+ M src/lex/scanner.rs
+ M src/pipeline.rs
+?? .omo/evidence/task-18-adversarial-verify-2.txt
+?? .omo/evidence/task-18-adversarial-verify-3.txt
+?? .omo/evidence/task-18-adversarial-verify-4.txt
+?? .omo/evidence/task-18-adversarial-verify.txt
+?? .omo/evidence/task-18-gate-review.md
+?? .omo/evidence/task-37-adversarial-verify-2.txt
+?? .omo/evidence/task-37-adversarial-verify.txt
+?? .omo/evidence/task-38-adversarial-verify.txt
+?? .omo/evidence/task-39-adversarial-verify.txt
+?? .omo/evidence/task-40-adversarial-verify-2.txt
+?? .omo/evidence/task-40-adversarial-verify.txt
+?? .omo/evidence/task-41-adversarial-verify.txt
+?? .omo/evidence/task-55-dse-implementation.txt
+?? .omo/start-work/
+?? src/ir/dead_store_elim.rs
+
+## Changed/new files note
+git diff --name-only omits untracked files; task-owned untracked files are src/ir/dead_store_elim.rs and .omo/evidence/task-55-dse-implementation.txt. Pre-existing untracked evidence and .omo/start-work/ were left untouched.
+
+## LOC scoped exceptions
+- src/ir/dead_store_elim.rs is a new 400 pure-LOC module because it contains the full OCaml-mirror liveness transfer, known local-memory DSE, and required comments in one reviewable pass; it should be split into dataflow/rewrite/util submodules if future DSE work grows.
+- src/ir/copy_propagation/rewrite.rs is 304 pure LOC after adding read-only aggregate address propagation; it was already the centralized rewrite switch for every TACKY instruction, and splitting it mid-task would have increased risk to existing copy propagation.
+- src/codegen/codegen.rs and src/lex/scanner.rs were pre-existing oversized legacy files touched narrowly for direct global aggregate-copy lowering and unsigned literal width classification required by official gates.

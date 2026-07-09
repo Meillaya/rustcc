@@ -1,0 +1,59 @@
+Task 55 copy propagation rewrite split fix evidence
+Date: 2026-07-09
+
+Scope / changed files for this fix:
+- src/ir/copy_propagation.rs
+  - Added sibling module wiring: mod rewrite_support;
+- src/ir/copy_propagation/rewrite.rs
+  - Kept CFG rewrite orchestration and redundant-copy removal logic.
+  - Extracted source-rewrite/write-pointer support helpers without algorithm changes.
+- src/ir/copy_propagation/rewrite_support.rs
+  - New focused support module for write-pointer tracking and instruction source replacement, including Task 55 GetAddress aggregate-copy handling.
+- .omo/evidence/task-55-copy-prop-rewrite-split-fix.txt
+  - This evidence artifact.
+
+Pure LOC checks (command shape required by task):
+- Command: awk '!/^[[:space:]]*$/ && !/^[[:space:]]*(\/\/|#)/' src/ir/copy_propagation.rs | wc -l
+  Result: 74
+- Command: awk '!/^[[:space:]]*$/ && !/^[[:space:]]*(\/\/|#)/' src/ir/copy_propagation/rewrite.rs | wc -l
+  Result: 106
+- Command: awk '!/^[[:space:]]*$/ && !/^[[:space:]]*(\/\/|#)/' src/ir/copy_propagation/rewrite_support.rs | wc -l
+  Result: 203
+
+Verification commands and results:
+- Command: cargo fmt --all -- --check
+  Result: PASS (exit 0)
+- Command: cargo check --release
+  Result: PASS (exit 0): Finished `release` profile [optimized] target(s) in 0.01s
+- Command: cargo build --release
+  Result: PASS (exit 0): Finished `release` profile [optimized] target(s) in 2.55s
+- Command: cargo test --release
+  Result: PASS (exit 0): 10 passed; 0 failed; lib/doc tests 0 passed/0 failed
+- Command: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-dead-stores
+  Result: PASS (exit 0): Ran 27 tests in 0.584s OK
+- Command: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only
+  Result: PASS (exit 0): Ran 120 tests in 2.799s OK
+- Command: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --propagate-copies
+  Result: PASS (exit 0): Ran 42 tests in 1.028s OK
+- Command: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --eliminate-unreachable-code
+  Result: PASS (exit 0): Ran 15 tests in 0.337s OK
+- Command: ./tests/test_compiler ./target/release/rustcc --chapter 19 --latest-only --fold-constants
+  Result: PASS (exit 0): Ran 16 tests in 0.443s OK
+- Command: ./tests/test_compiler ./target/release/rustcc --chapter 18 --latest-only --union
+  Result: PASS (exit 0): Ran 286 tests in 5.195s OK
+  Note: preserved non-blocking assembler truncation warnings in two chapter_18 static initializer client .s files.
+- Command: git diff --check
+  Result: PASS (exit 0)
+
+LSP diagnostics:
+- Command: mcp__lsp.diagnostics /home/mei/projects/rustcc/src/ir/copy_propagation.rs
+  Result: PASS: No diagnostics found
+- Command: mcp__lsp.diagnostics /home/mei/projects/rustcc/src/ir/copy_propagation/rewrite.rs
+  Result: PASS: No diagnostics found
+- Command: mcp__lsp.diagnostics /home/mei/projects/rustcc/src/ir/copy_propagation/rewrite_support.rs
+  Result: PASS: No diagnostics found
+
+Summary:
+- Gate blocker B1 is addressed: src/ir/copy_propagation/rewrite.rs is now 106 pure LOC, and the new src/ir/copy_propagation/rewrite_support.rs is 203 pure LOC.
+- Chapter 19 DSE, default all-optimizations, copy-prop, UCE, fold-constants, and Chapter 18 union official gates all pass after the split.
+- No commit was made.

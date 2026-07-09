@@ -82,6 +82,7 @@ pub(super) fn same_type(src: &Val, dst: &str, type_env: &TypeEnv) -> bool {
         Val::Constant(value) => {
             matches!(dst_ty, OperandType::Int | OperandType::UInt)
                 || (*value == 0 && is_integer_scalar(dst_ty))
+                || (i32::try_from(*value).is_ok() && is_integer_scalar(dst_ty))
         }
         Val::ConstantDouble(_) => dst_ty == OperandType::Double,
     }
